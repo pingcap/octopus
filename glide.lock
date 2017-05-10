@@ -1,0 +1,10 @@
+hash: a7f49e8a3aa8bcec5772bd6e345f821076ee428d14b56f66cbb6fe65483454c1
+updated: 2017-05-09T11:58:10.080687923+08:00
+imports:
+- name: golang.org/x/net
+  version: 6acef71eb69611914f7a30939ea9f6e194c78172
+  repo: https://github.com/golang/net.git
+  vcs: git
+  subpackages:
+  - context
+testImports: []
