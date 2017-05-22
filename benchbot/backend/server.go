@@ -12,10 +12,10 @@ const penndingJobLimit int = 10
 type Server struct {
 	end          bool
 	wg           sync.WaitGroup
-	jobs         chan *TestJob
-	runningJob   *TestJob
-	historys     []*TestJob
-	historysByID map[string]*TestJob
+	jobs         chan *TestingJob
+	runningJob   *TestingJob
+	historys     []*TestingJob
+	historysByID map[string]*TestingJob
 }
 
 type SummaryInfo struct {
@@ -28,9 +28,9 @@ func NewServer() *Server {
 	svr := new(Server)
 	svr.end = false
 	svr.runningJob = nil
-	svr.jobs = make(chan *TestJob, penndingJobLimit)
-	svr.historys = make([]*TestJob, 0) // TODO ...
-	svr.historysByID = make(map[string]*TestJob)
+	svr.jobs = make(chan *TestingJob, penndingJobLimit)
+	svr.historys = make([]*TestingJob, 0) // TODO ...
+	svr.historysByID = make(map[string]*TestingJob)
 	svr.wg = sync.WaitGroup{}
 
 	go svr.mainloop()
@@ -77,7 +77,7 @@ func (svr *Server) mainloop() error {
 	return nil
 }
 
-func (svr *Server) LaunchTesting(job *TestJob) error {
+func (svr *Server) ApplyTesting(job *TestingJob) error {
 	var err error = nil
 	select {
 	case <-time.After(time.Second * 1):
@@ -91,34 +91,35 @@ func (svr *Server) LaunchTesting(job *TestJob) error {
 	return err
 }
 
-func (svr *Server) AbortTesting(jobId string) bool {
+func (svr *Server) AbortTesting(jobId string, note string) bool {
 	/*if svr.runningJob != nil && svr.runningJob.Id == jobId {
 		svr.runningJob.Abort("")
 		return true
 	}*/
 	if job, ok := svr.historysByID[jobId]; ok {
+		//fmt.Printf("found task -- %s \n", job.Status)
 		if job.Status == Pending || job.Status == Testing {
-			job.Abort("")
+			job.Abort(note)
 			return true
 		}
 	}
 	return false
 }
 
-func (svr *Server) GetJob(jobId string) *TestJob {
+func (svr *Server) GetJob(jobId string) *TestingJob {
 	if job, ok := svr.historysByID[jobId]; ok {
 		return job
 	}
 	return nil
 }
 
-func (svr *Server) GetHistoryJobs(lastN int) []*TestJob {
+func (svr *Server) GetHistoryJobs(lastN int) []*TestingJob {
 	size := len(svr.historys)
 	if lastN < size {
 		size = lastN
 	}
 
-	his := make([]*TestJob, 0)
+	his := make([]*TestingJob, 0)
 	for i := 0; i < size; i++ {
 		his = append(his, svr.historys[i])
 	}

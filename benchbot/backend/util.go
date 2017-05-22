@@ -1,20 +1,23 @@
 package backend
 
 import (
-	//"fmt"
-	//"bytes"
-	"encoding/json"
+	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"net/http"
+	"os/exec"
+	"path/filepath"
 )
 
+/*
 func ReadJSON(r io.ReadCloser, data interface{}) error {
 	defer r.Close()
 
@@ -28,6 +31,52 @@ func ReadJSON(r io.ReadCloser, data interface{}) error {
 	}
 
 	return nil
+}
+*/
+
+func ExecCmd(command string, output io.Writer) bool {
+	//	ps : Just return success or not ~
+	args := strings.Split(command, " ")
+	bin := args[0]
+	args = args[1:]
+
+	cmd := exec.Command(bin, args...)
+	data, e := cmd.CombinedOutput()
+	if output != nil {
+		output.Write(data)
+	}
+	if e != nil {
+		return (e.(*exec.ExitError)).Success()
+	}
+	return true
+}
+
+func Download(resourceUrl string, localPath string) (int64, error) {
+	//	local prepare
+	os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
+	f, err := os.Create(localPath)
+	if err != nil {
+		os.Remove(localPath)
+		return 0, err
+	}
+
+	// request http
+	resourceUrl = strings.ToLower(resourceUrl)
+	if !strings.HasPrefix(resourceUrl, "http://") {
+		resourceUrl = "http://" + resourceUrl
+	}
+
+	res, err := http.Get(resourceUrl)
+	if err != nil {
+		os.Remove(localPath)
+		return 0, err
+	}
+
+	//	local save
+	bytes, _ := io.Copy(f, res.Body)
+	fmt.Printf("download %d bytes\n", bytes)
+
+	return bytes, nil
 }
 
 func GetMD5String(s string) string {

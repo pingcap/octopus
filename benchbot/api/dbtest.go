@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	//"fmt"
 	//"bytes"
 	//"encoding/json"
 	//"io"
@@ -12,7 +12,7 @@ import (
 	"github.com/unrolled/render"
 	//"golang.org/x/net/context"
 	. "github.com/pingcap/octopus/benchbot/backend"
-	//. "github.com/pingcap/octopus/pkg/util"
+	"github.com/pingcap/octopus/pkg/util"
 )
 
 type TestingHandler struct {
@@ -29,7 +29,7 @@ func newTestingHandler(svr *Server, rdr *render.Render) *TestingHandler {
 	return hdl
 }
 
-func (hdl *TestingHandler) RunTesting(w http.ResponseWriter, r *http.Request) {
+func (hdl *TestingHandler) RunTest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	data, err := ioutil.ReadAll(r.Body)
@@ -38,10 +38,8 @@ func (hdl *TestingHandler) RunTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("%s\n", string(data))
-
-	job := NewTestJob()
-	if err = job.ParseFromJSON(data); err != nil {
+	job := NewTestingJob()
+	if err = job.ParseFromRequstJSON(data); err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "post data json incorrect : "+err.Error())
 		return
 	}
@@ -51,20 +49,20 @@ func (hdl *TestingHandler) RunTesting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hdl.svr.LaunchTesting(job)
+	hdl.svr.ApplyTesting(job)
 
 	resp := map[string]string{"job_id": job.Id}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
 }
 
-func (hdl *TestingHandler) RunReleaseTesting(w http.ResponseWriter, r *http.Request) {
+func (hdl *TestingHandler) RunReleaseTest(w http.ResponseWriter, r *http.Request) {
 	// TODO
 	hdl.rdr.JSON(w, http.StatusOK, nil)
 	return
 }
 
-func (hdl *TestingHandler) GetGlobalInfo(w http.ResponseWriter, r *http.Request) {
+func (hdl *TestingHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Request) {
 	var info SummaryInfo
 	hdl.svr.DumpInfo(&info)
 
@@ -83,7 +81,7 @@ func (hdl *TestingHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func (hdl *TestingHandler) QueryTestingJob(w http.ResponseWriter, r *http.Request) {
+func (hdl *TestingHandler) QueryTestJob(w http.ResponseWriter, r *http.Request) {
 	jobId := mux.Vars(r)["jobId"]
 	if len(jobId) == 0 {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
@@ -97,19 +95,45 @@ func (hdl *TestingHandler) QueryTestingJob(w http.ResponseWriter, r *http.Reques
 	return
 }
 
-func (hdl *TestingHandler) AbortTestingJob(w http.ResponseWriter, r *http.Request) {
+func (hdl *TestingHandler) AbortTestJob(w http.ResponseWriter, r *http.Request) {
 	jobId := mux.Vars(r)["jobId"]
 	if len(jobId) == 0 {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
 		return
 	}
 
-	success := hdl.svr.AbortTesting(jobId)
+	note := ""
+	params := make(map[string]string)
+	util.ReadJson(r.Body, &params)
+	if len(params) > 0 {
+		if v, ok := params["note"]; ok {
+			note = v
+		}
+	}
+
+	success := hdl.svr.AbortTesting(jobId, note)
 	if !success {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "cannot abort : "+jobId)
 		return
 	}
 
 	hdl.rdr.JSON(w, http.StatusOK, "ok")
+	return
+}
+
+func (hdl *TestingHandler) QueryTestJobResult(w http.ResponseWriter, r *http.Request) {
+	jobId := mux.Vars(r)["jobId"]
+	if len(jobId) == 0 {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
+		return
+	}
+
+	job := hdl.svr.GetJob(jobId)
+	if job == nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "job not found : "+jobId)
+		return
+	}
+
+	hdl.rdr.JSON(w, http.StatusOK, job.ExportResultInfo())
 	return
 }

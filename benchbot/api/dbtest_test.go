@@ -13,11 +13,15 @@ import (
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
-func initServer() *httptest.Server {
+func setup() *httptest.Server {
 	svr := NewServer()
 	router := CreateRouter(svr)
-	testServer := httptest.NewServer(router)
-	return testServer
+	return httptest.NewServer(router)
+}
+
+func teardown(s *httptest.Server) {
+	s.Close()
+	fmt.Printf("CLOSE\n")
 }
 
 func loadsJson(resp *http.Response) map[string]string {
@@ -36,8 +40,8 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 		"tidb": {"branch": "tidb/1", "commit_hash": "0x10", "url": "127.0.0.1:8808/test.tar.gz"},
 		"tikv": {"branch": "tidb/1", "commit_hash": "0x20", "url": "127.0.0.1:8808/test.tar.gz"},
 		"pd":   {"branch": "pd/1",   "commit_hash": "0x30", "url": "127.0.0.1:8808/test.tar.gz"}
-	}
-	`
+	}`
+
 	reader := strings.NewReader(reqJson)
 	request, err := http.NewRequest("POST", httpSvr.URL+"/test", reader)
 
@@ -57,12 +61,11 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 	return jobId, failure
 }
 
-/*
 func TestNewTask(t *testing.T) {
-	fmt.Printf("start testing.\n")
+	fmt.Printf("[TestNewTask]\n")
 
-	testServer := initServer()
-	defer testServer.Close()
+	testServer := setup()
+	defer teardown(testServer)
 
 	jobId, err := requestNewTesting(testServer)
 	if err != nil {
@@ -73,8 +76,10 @@ func TestNewTask(t *testing.T) {
 }
 
 func TestShowSummary(t *testing.T) {
-	testServer := initServer()
-	defer testServer.Close()
+	fmt.Printf("[TestShowSummary]\n")
+
+	testServer := setup()
+	defer teardown(testServer)
 
 	reader := strings.NewReader("")
 	request, err := http.NewRequest("GET", testServer.URL+"/info", reader)
@@ -93,8 +98,10 @@ func TestShowSummary(t *testing.T) {
 }
 
 func TestShowHistory(t *testing.T) {
-	testServer := initServer()
-	defer testServer.Close()
+	fmt.Printf("[TestShowHistory]\n")
+
+	testServer := setup()
+	defer teardown(testServer)
 
 	// prepare
 	requestNewTesting(testServer)
@@ -113,13 +120,15 @@ func TestShowHistory(t *testing.T) {
 		t.Errorf("Success expected: %d (%s) \n", resp.StatusCode, string(errMsg))
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("historys == %s\n", string(body))
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Printf("historys == %s\n", string(body))
 }
 
-func TestJobQuery(t *testing.T) {
-	testServer := initServer()
-	defer testServer.Close()
+func JobQuery(t *testing.T) {
+	fmt.Printf("[JobQuery]\n")
+
+	testServer := setup()
+	defer teardown(testServer)
 
 	// prepare
 	jobId, _ := requestNewTesting(testServer)
@@ -137,14 +146,19 @@ func TestJobQuery(t *testing.T) {
 		t.Errorf("Success expected: %d (%s) \n", resp.StatusCode, string(errMsg))
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("job == %s\n", string(body))
+	data := loadsJson(resp)
+	if data["job_id"] != jobId {
+		t.Errorf("NO !!")
+	}
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Printf("job == %s\n", string(body))
 }
-*/
 
 func TestAbortJob(t *testing.T) {
-	testServer := initServer()
-	defer testServer.Close()
+	fmt.Printf("[TestAbortJob]\n")
+
+	testServer := setup()
+	defer teardown(testServer)
 
 	// prepare
 	jobId, _ := requestNewTesting(testServer)
@@ -159,9 +173,9 @@ func TestAbortJob(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		errMsg, _ := ioutil.ReadAll(resp.Body)
-		t.Errorf("Success expected: %d (%s) \n", resp.StatusCode, string(errMsg))
+		t.Errorf("FAIL : %d (%s) \n", resp.StatusCode, string(errMsg))
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("abort == %s\n", string(body))
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Printf("abort == %s\n", string(body))
 }
