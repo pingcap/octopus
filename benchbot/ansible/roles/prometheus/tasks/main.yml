@@ -1,0 +1,59 @@
+---
+
+- name: create deploy directories
+  file: path={{ item }} state=directory mode=0755
+  with_items:
+  - "{{ prometheus_log_dir }}"
+  - "{{ prometheus_data_dir }}"
+  - "{{ deploy_dir }}/status/{{ role_name }}"
+
+- name: deploy prometheus binary
+  copy: src="{{ resources_dir }}/bin/prometheus" dest="{{ deploy_dir }}/bin/" mode=0755
+
+# FIXME: how to handle customized alert.rules & config file
+
+- name: get config file stat
+  stat: path={{ deploy_dir }}/conf/prometheus.yml
+  register: st_conf
+
+- name: get alert conf stat
+  stat: path={{ deploy_dir }}/conf/alert.rules
+  register: st_alert_conf
+
+- name: create configuration file if not exist
+  template: src=prometheus.yml.j2 dest={{ deploy_dir }}/conf/prometheus.yml mode=0644
+  vars:
+    hosts: "{{ groups['all'] | list }}"
+
+- name: copy alert rules file if not exist
+  copy: src=alert.rules dest="{{ deploy_dir }}/conf/alert.rules" mode=0644
+  when: not st_alert_conf.stat.exists
+  register: alert_rules_result
+
+- name: set alert rules label if alert.rules changes
+  replace: >
+    dest={{ deploy_dir }}/conf/alert.rules
+    regexp="ENV_LABELS_ENV"
+    replace="{{ cluster_name }}"
+  when: alert_rules_result.changed
+
+- name: create scripts
+  include_role:
+    name: scripts
+  vars:
+    this_role_name: prometheus
+
+- name: create run script
+  template:
+    src: "{{ item }}_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/{{ item }}_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+  with_items:
+    - run
+  vars:
+    role_status_dir: status/{{ role_name }}
+
+- name: prepare firewalld white list
+  set_fact:
+    firewalld_ports: "{{ [prometheus_port ~ '/tcp'] + firewalld_ports }}"

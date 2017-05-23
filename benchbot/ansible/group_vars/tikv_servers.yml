@@ -1,0 +1,11 @@
+---
+dummy:
+
+tikv_port: 50131
+
+tikv_data_dir: "{{ deploy_dir }}/data"
+
+# no limit
+# tikv_capacity: 50GB
+# or use specific size
+# tikv_capacity: "512GB"

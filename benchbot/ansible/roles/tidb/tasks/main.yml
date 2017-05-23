@@ -1,0 +1,67 @@
+---
+# tasks file for tidb
+
+- name: create deploy directories
+  file: path="{{ item }}" state=directory mode=0755
+  with_items:
+  - "{{ tidb_log_dir }}"
+  - "{{ deploy_dir }}/status/{{ role_name }}"
+
+- name: deploy binary
+  copy: src="{{ resources_dir }}/bin/tidb-server" dest="{{ deploy_dir }}/bin/" mode=0755 backup=yes
+  register: tidb_binary
+
+- name: backup binary file
+  command: mv "{{ tidb_binary.backup_file }}" "{{ backup_dir }}"
+  when: tidb_binary.changed and tidb_binary.backup_file is defined
+
+- name: create scripts
+  include_role:
+    name: scripts
+  vars:
+    this_role_name: tidb
+
+# config part
+
+- name: load customized config
+  include_vars: file={{ playbook_dir }}/conf/tidb.yml name=tidb_conf_custom
+
+- name: load default config
+  include_vars: file=default.yml name=tidb_conf_default
+
+- name: generate metrics config (1/2)
+  set_fact:
+    tidb_conf_generated:
+
+- name: generate metrics config (2/2)
+  set_fact:
+    tidb_conf_generated:
+      server:
+        lease: "{{ tidb_lease }}"
+  when: "tidb_lease is defined"
+
+- name: combine final config
+  set_fact:
+    tidb_conf: "{{ tidb_conf_generated | with_default_dicts(tidb_conf_custom, tidb_conf_default) }}"
+
+- debug: var=tidb_conf
+
+- name: create run script
+  template:
+    src: "{{ item }}_{{ role_name }}.sh.j2"
+    dest: "{{ deploy_dir }}/scripts/{{ item }}_{{ role_name }}.sh"
+    mode: "0755"
+    backup: yes
+  with_items:
+    - run
+  vars:
+    role_status_dir: status/{{ role_name }}
+  register: tidb_script
+
+- name: backup script file
+  command: mv "{{ tidb_script.backup_file }}" "{{ backup_dir }}"
+  when: tidb_script.changed and tidb_script.backup_file is defined
+
+- name: prepare firewalld white list
+  set_fact:
+    firewalld_ports: "{{ [tidb_port ~ '/tcp', tidb_status_port ~ '/tcp'] + firewalld_ports }}"
