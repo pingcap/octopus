@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"fmt"
+	//"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -31,6 +31,16 @@ func ReadJSON(r io.ReadCloser, data interface{}) error {
 	}
 
 	return nil
+}
+*/
+
+/*
+func GetCurrentDir() string {
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return strings.Replace(dir, "\\", "/", -1)
 }
 */
 
@@ -74,7 +84,7 @@ func Download(resourceUrl string, localPath string) (int64, error) {
 
 	//	local save
 	bytes, _ := io.Copy(f, res.Body)
-	fmt.Printf("download %d bytes\n", bytes)
+	//fmt.Printf("download %d bytes\n", bytes)
 
 	return bytes, nil
 }

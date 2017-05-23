@@ -1,0 +1,18 @@
+---
+
+
+pd_client_port: 2379
+pd_peer_port: 2380
+
+pd_name_prefix: pd
+
+pd_data_dir: "{{ deploy_dir }}/data.pd"
+
+pd_log_level: info
+pd_log_dir: "{{ deploy_dir }}/log"
+pd_log_filename: "pd.log"
+
+pd_metric_interval: "2s"
+
+
+pd_conf_dir: "{{ deploy_dir }}/conf"

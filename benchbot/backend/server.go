@@ -69,7 +69,7 @@ func (svr *Server) mainloop() error {
 		svr.wg.Add(1)
 		svr.runningJob = job
 		if err = job.Run(); err != nil {
-			fmt.Printf("[%s] job run failed : s !\n", job.Id, err.Error())
+			fmt.Printf("[%s] job run failed : %s !\n", job.Id, err.Error())
 		}
 		svr.runningJob = nil
 		svr.wg.Done()

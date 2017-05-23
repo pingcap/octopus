@@ -1,0 +1,11 @@
+---
+dummy:
+
+tidb_port: 4331
+tidb_status_port: 13231
+
+pump_port: 8231
+pump_data_dir: "{{ deploy_dir }}/data.pump"
+
+# pump binlog to pump sock
+pump_socket: "{{ status_dir }}/pump.sock"

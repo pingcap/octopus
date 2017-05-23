@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
@@ -20,8 +21,9 @@ func setup() *httptest.Server {
 }
 
 func teardown(s *httptest.Server) {
+	time.Sleep(time.Second * 10)
 	s.Close()
-	fmt.Printf("CLOSE\n")
+	//fmt.Printf("CLOSE\n")
 }
 
 func loadsJson(resp *http.Response) map[string]string {
@@ -37,9 +39,9 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 
 	reqJson := `{
 		"user": "pingcap", "note": "simple note msg", "upstream": "unit_test",
-		"tidb": {"branch": "tidb/1", "commit_hash": "0x10", "url": "127.0.0.1:8808/test.tar.gz"},
-		"tikv": {"branch": "tidb/1", "commit_hash": "0x20", "url": "127.0.0.1:8808/test.tar.gz"},
-		"pd":   {"branch": "pd/1",   "commit_hash": "0x30", "url": "127.0.0.1:8808/test.tar.gz"}
+		"tidb": {"branch": "tidb/1", "commit_hash": "0x10", "bin_url": "127.0.0.1:7777/test.tar.gz"},
+		"tikv": {"branch": "tidb/1", "commit_hash": "0x20", "bin_url": "127.0.0.1:7777/test.tar.gz"},
+		"pd":   {"branch": "pd/1",   "commit_hash": "0x30", "bin_url": "127.0.0.1:7777/test.tar.gz"}
 	}`
 
 	reader := strings.NewReader(reqJson)
@@ -82,7 +84,7 @@ func TestShowSummary(t *testing.T) {
 	defer teardown(testServer)
 
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/info", reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/status", reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -93,8 +95,8 @@ func TestShowSummary(t *testing.T) {
 		t.Errorf("Success expected: %d (%s) \n", resp.StatusCode, string(errMsg))
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("info == %s\n", string(body))
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Printf("info == %s\n", string(body))
 }
 
 func TestShowHistory(t *testing.T) {

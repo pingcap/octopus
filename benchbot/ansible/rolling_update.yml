@@ -1,0 +1,160 @@
+---
+# Copyright 2016 PingCAP, Inc.
+
+# The rolling update playbook of TiDB
+
+- name: check config locally
+  any_errors_fatal: true
+  hosts: localhost
+  tags:
+    - always
+  roles:
+    - check_config_static
+
+- name: gather all facts, and check dest
+  any_errors_fatal: true
+  hosts: all
+  any_errors_fatal: true
+  tags:
+    - always
+  roles:
+    - check_config_dynamic
+
+- name: rolling update NodeExporter
+  hosts: monitored_servers
+  any_errors_fatal: true
+  tags:
+    - node_exporter
+  roles:
+    - { role: node_exporter, tags: ["deploy"] }
+  post_tasks:
+    - name: stop NodeExporter
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./stop_node_exporter.sh
+
+    - name: wait NodeExporter down
+      tags:
+        - restart
+      wait_for: host={{ ansible_default_ipv4.address }} port={{ node_exporter_port }} state=stopped
+
+    - name: start NodeExporter
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./start_node_exporter.sh
+
+    - name: wait NodeExporter up
+      wait_for: |
+        host={{ ansible_default_ipv4.address }} port={{ node_exporter_port }} state=present
+        send='GET /metrics HTTP/1.0\r\n\r\n' search_regex='200 OK'
+
+
+- name: rolling update PD cluster
+  hosts: pd_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - pd
+  roles:
+    - { role: pd, tags: ["deploy"] }
+  post_tasks:
+    - name: stop PD
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./stop_pd.sh
+
+    - name: wait PD down
+      tags:
+        - restart
+      wait_for: host={{ ansible_default_ipv4.address }} port={{ pd_client_port }} state=stopped
+
+    - name: start PD
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./start_pd.sh
+
+    - name: wait PD up
+      wait_for: |
+        host={{ ansible_default_ipv4.address }} port={{ pd_client_port }} state=present
+        send='GET /pd/api/v1/members HTTP/1.0\r\n\r\n' search_regex='200 OK'
+
+
+- name: rolling update TiKV cluster
+  hosts: tikv_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - tikv
+  roles:
+    - { role: tikv, tags: ["deploy"] }
+  post_tasks:
+    - name: stop TiKV
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./stop_tikv.sh
+
+    - name: wait TiKV down (via Port)
+      tags:
+        - restart
+      wait_for: host={{ ansible_default_ipv4.address }} port={{ tikv_port }} state=stopped
+
+    - name: wait TiKV down (via PID)
+      tags:
+        - restart
+      wait_for_pid: pid_file={{ deploy_dir }}/status/tikv.pid timeout=300 state=absent
+
+    - name: start TiKV
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./start_tikv.sh
+
+    - name: wait TiKV up
+      tags:
+        - restart
+      wait_for_pid: |
+        pid_file={{ deploy_dir }}/status/tikv.pid timeout=300
+        thread_name_regex='endpoint' state=present
+
+
+- name: rolling update TiDB cluster
+  hosts: tidb_servers
+  any_errors_fatal: true
+  serial: 1
+  tags:
+    - tidb
+  roles:
+    - { role: pump, when: enable_binlog, tags: ["deploy"] }
+    - { role: tidb, tags: ["deploy"] }
+  post_tasks:
+    - name: stop TiDB
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./stop_tidb.sh
+
+    - name: wait TiDB down
+      tags:
+        - restart
+      wait_for: host={{ ansible_default_ipv4.address }} port={{ tidb_port }} state=stopped
+
+    - name: pump
+      shell: cd {{ deploy_dir }}/scripts && (./stop_{{ item }}.sh; ./start_{{ item }}.sh)
+      with_items:
+        - pump
+      when: enable_binlog
+
+    - name: wait pump up
+      wait_for: |
+        host={{ ansible_default_ipv4.address }} port={{ pump_port }} state=present
+      when: enable_binlog
+
+    - name: start TiDB
+      tags:
+        - restart
+      shell: cd {{ deploy_dir }}/scripts && ./start_tidb.sh
+
+    - name: wait TiDB up
+      tags:
+        - restart
+      wait_for: |
+        host={{ ansible_default_ipv4.address }} port={{ tidb_port }} state=present
+        search_regex='TiDB-1.0'

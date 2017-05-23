@@ -1,20 +1,26 @@
 package backend
 
 import (
-	//"errors"
-	"fmt"
-	//"io"
-	//"os"
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
+	"runtime"
 
-	//"net/http"
-	//"os/exec"
+	"path"
 	"path/filepath"
 )
 
-const downloadsDir string = "./bins/"
+var ansibleDir, downloadsDir, binsDir string
+
+func init() {
+	_, filename, _, _ := runtime.Caller(1)
+	pdir := path.Dir(filename)
+
+	ansibleDir = filepath.Join(path.Dir(pdir), "ansible")
+	downloadsDir = filepath.Join(ansibleDir, "downloads")
+	binsDir = filepath.Join(ansibleDir, "resources/bin")
+}
 
 type TiClusterConfig struct {
 	tidb *BinPackage
@@ -49,6 +55,7 @@ func (c *TiClusterByAnsible) fetchResources() error {
 	components := []*BinPackage{c.cfg.tidb, c.cfg.tikv, c.cfg.pd}
 	for _, pkg := range components {
 		saveto := filepath.Join(downloadsDir, pkg.Name) // TODO ... temp dir by date mark
+		// fmt.Printf("[%s] to down from -- %s\n", pkg.Name, pkg.Url)
 		if _, err := Download(pkg.Url, saveto); err != nil {
 			return err
 		}
@@ -59,7 +66,9 @@ func (c *TiClusterByAnsible) fetchResources() error {
 func (c *TiClusterByAnsible) boostrap() error {
 	buf := new(bytes.Buffer)
 
-	if ok := ExecCmd("ansible-playbook -i inventory.ini bootstrap.yml -k -K", buf); !ok {
+	//if ok := ExecCmd("ansible-playbook -i inventory.ini bootstrap.yml -k -K", buf); !ok {
+	cmd := fmt.Sprintf("sh %s bootstrap >> out.log 2&>1", filepath.Join(ansibleDir, "run.sh"))
+	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("start failed : %s\n", string(buf.Bytes())))
 	}
 	return nil
@@ -102,4 +111,8 @@ func (c *TiClusterByAnsible) Reset() error {
 
 func (c *TiClusterByAnsible) checkAvaiable() (bool, error) {
 	return true, nil
+}
+
+func (c *TiClusterByAnsible) Destory() error {
+	return nil
 }

@@ -1,0 +1,31 @@
+---
+# Variables here are applicable to all host groups
+
+####  normal user with sudo privilege
+#ansible_user: tidb
+
+#### root user deployment to a normal user
+#ansible_user: root
+#ansible_become: true
+#ansible_become_user: tidb
+
+# better set this in inventory file
+# deploy_dir: /home/{{ deploy_user }}/deploy
+
+status_dir: "{{ deploy_dir }}/status"
+backup_dir: "{{ deploy_dir }}/backup"
+
+# Local
+downloads_dir: "{{ playbook_dir }}/downloads"
+resources_dir: "{{ playbook_dir }}/resources"
+
+# Used by monitoring modules
+cluster_name: cqc-testing-cluster
+
+
+pd_client_port: 52331
+pd_peer_port: 52332
+tikv_port: 50131
+tidb_port: 4331
+tidb_status_port: 13231
+node_exporter_port: 9131

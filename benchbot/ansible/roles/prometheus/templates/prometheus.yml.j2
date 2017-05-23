@@ -1,0 +1,42 @@
+---
+global:
+  scrape_interval:     15s # By default, scrape targets every 15 seconds.
+  evaluation_interval: 15s # By default, scrape targets every 15 seconds.
+  # scrape_timeout is set to the global default (10s).
+  labels:
+    cluster: '{{ cluster_name }}'
+{% for item in prometheus_extra_labels %}
+    {{ item.label }}: "{{ item.value }}"
+{% endfor %}
+
+{% set pushgateway_host = hostvars[groups.monitoring_servers[0]].ansible_default_ipv4.address
+    if groups.get('monitoring_servers', []) else '' -%}
+{% set pushgateway_port = hostvars[groups.monitoring_servers[0]].pushgateway_port if pushgateway_host else '' -%}
+
+scrape_configs:
+{% if pushgateway_host %}
+  - job_name: 'overwritten-cluster'
+    scrape_interval: 3s
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+      - targets: ['{{ pushgateway_host }}:{{ pushgateway_port }}']
+{% endif %}
+
+
+  - job_name: "overwritten-nodes"
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+    - targets:
+{% set target_hosts = [] -%}
+{% for host in hosts -%}
+{% set ip = hostvars[host]['ansible_default_ipv4']['address'] or host -%}
+{% set node_port = hostvars[host]['node_exporter_port'] -%}
+{% if ip not in target_hosts %}
+      - '{{ ip }}:{{ node_port }}'
+{% set _ = target_hosts.append(ip) -%}
+{% endif -%}
+{% endfor -%}
+
+# Load and evaluate rules in this file every 'evaluation_interval' seconds.
+rule_files:
+  - 'alert.rules'

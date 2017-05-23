@@ -2,7 +2,7 @@ package backend
 
 import (
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"time"
 )
 
@@ -74,20 +74,46 @@ func (job *TestingJob) Valid() bool {
 
 func (job *TestingJob) Run() error {
 	job.Status = Testing
-	job.cheating()
-	job.close()
+	defer job.close()
+
+	// init cluster
+	tiCfg := &TiClusterConfig{
+		tidb: &job.Meta.TiDB,
+		tikv: &job.Meta.TiKV,
+		pd:   &job.Meta.Pd,
+	}
+	tiCluser := newTiClusterByAnsible(tiCfg)
+
+	ops := [](func() error){tiCluser.Prepare, tiCluser.Deploy}
+	// TODO ... merge pre operation into one
+	for _, op := range ops {
+		if err := op(); err != nil {
+			return err
+		}
+	}
+
+	// testing
+	if err := job.runTesting(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-const simulateTime = 10
-
-func (job *TestingJob) cheating() {
-	fmt.Printf("[%s] job is running !\n", job.Id)
-	for i := 0; i < simulateTime && job.Status == Testing; i++ {
-		fmt.Printf("[%s] case %d ...\n", job.Id, i+1)
-		time.Sleep(time.Second * 1)
-	}
+func (job *TestingJob) runTesting() error {
+	// TODO
+	return nil
 }
+
+// func (job *TestingJob) cheating() {
+// 	const simulateTime = 10
+//
+// 	fmt.Printf("[%s] job is running !\n", job.Id)
+// 	for i := 0; i < simulateTime && job.Status == Testing; i++ {
+// 		fmt.Printf("[%s] case %d ...\n", job.Id, i+1)
+// 		time.Sleep(time.Second * 1)
+// 	}
+// }
 
 func (job *TestingJob) Abort(note string) {
 	job.Status = Abort
@@ -96,7 +122,7 @@ func (job *TestingJob) Abort(note string) {
 
 func (job *TestingJob) close() {
 	job.Status = Finish
-	fmt.Printf("[%s] job end. !\n", job.Id)
+	// fmt.Printf("[%s] job end. !\n", job.Id)
 }
 
 func (job *TestingJob) ExportBasicInfo() map[string]interface{} {

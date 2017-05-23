@@ -6,4 +6,5 @@ type TiCulster interface {
 	Run() error
 	Stop() error
 	Reset() error
+	Destory() error
 }
