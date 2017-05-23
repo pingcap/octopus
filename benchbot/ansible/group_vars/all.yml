@@ -8,6 +8,7 @@
 #ansible_user: root
 #ansible_become: true
 #ansible_become_user: tidb
+ansible_sudo_pass : pingcap!@#
 
 # better set this in inventory file
 # deploy_dir: /home/{{ deploy_user }}/deploy

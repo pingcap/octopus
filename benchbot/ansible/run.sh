@@ -3,11 +3,11 @@ cd `dirname $0`
 
 case $op in
 "bootstrap")
-	ansible-playbook -vvvv -i inventory.ini bootstrap.yml -k -K
+	ansible-playbook -i inventory.ini bootstrap.yml
 	hr=$? 
 	;;
 "deploy")
-	ansible-playbook -i inventory.ini deploy.yml -k -K
+	ansible-playbook -i inventory.ini deploy.yml
 	hr=$?
 	;;
 "start")
@@ -19,11 +19,11 @@ case $op in
 	hr=$?
 	;;
 "reset")
-	ansible-playbook -i inventory.ini unsafe_cleanup.yml
+	ansible-playbook -i inventory.ini unsafe_cleanup_data.yml
 	hr=$?
 	;;
 "destory")
-	ansible-playbook -i inventory.ini unsafe_cleanup_data.yml
+	ansible-playbook -i inventory.ini unsafe_cleanup.yml
 	hr=$?
 	;;
 esac

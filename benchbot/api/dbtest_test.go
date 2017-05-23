@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
+	//"time"
 
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
@@ -21,7 +21,6 @@ func setup() *httptest.Server {
 }
 
 func teardown(s *httptest.Server) {
-	time.Sleep(time.Second * 10)
 	s.Close()
 	//fmt.Printf("CLOSE\n")
 }
@@ -39,9 +38,20 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 
 	reqJson := `{
 		"user": "pingcap", "note": "simple note msg", "upstream": "unit_test",
-		"tidb": {"branch": "tidb/1", "commit_hash": "0x10", "bin_url": "127.0.0.1:7777/test.tar.gz"},
-		"tikv": {"branch": "tidb/1", "commit_hash": "0x20", "bin_url": "127.0.0.1:7777/test.tar.gz"},
-		"pd":   {"branch": "pd/1",   "commit_hash": "0x30", "bin_url": "127.0.0.1:7777/test.tar.gz"}
+		"callback": "",
+	    "packages": [ 
+		   {"repo": "tidb", 
+		    "branch": "tidb/1", "githash": "0x10", "platform": "centos",
+		    "binaryurl": "127.0.0.1:7777/test.tar.gz"},
+
+		   {"repo": "tikv", 
+		    "branch": "tikv/1", "githash": "0x20", "platform": "centos",
+		    "binaryurl": "127.0.0.1:7777/test.tar.gz"},
+
+		   {"repo": "pd", 
+		    "branch": "pd/1", "githash": "0x30", "platform": "centos",
+		    "binaryurl": "127.0.0.1:7777/test.tar.gz"}
+		]
 	}`
 
 	reader := strings.NewReader(reqJson)
@@ -57,7 +67,7 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 		failure = errors.New("new testing failed : " + string(errMsg))
 	} else {
 		data := loadsJson(resp)
-		jobId = data["job_id"]
+		jobId = data["jobid"]
 	}
 
 	return jobId, failure

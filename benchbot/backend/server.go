@@ -98,7 +98,7 @@ func (svr *Server) AbortTesting(jobId string, note string) bool {
 	}*/
 	if job, ok := svr.historysByID[jobId]; ok {
 		//fmt.Printf("found task -- %s \n", job.Status)
-		if job.Status == Pending || job.Status == Testing {
+		if job.Status == Pending || job.Status == Deploying || job.Status == Running {
 			job.Abort(note)
 			return true
 		}

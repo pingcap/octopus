@@ -11,23 +11,21 @@
 > 
 ```js
 {
-	"meta" : {
-		"user" : "请求者标识",
-		"from" : "上游信息", // eg. slack / git PR / cron ...
-		"note" : "备注信息"
-	},
-	"tidb" : {
-		"branch" : "分支名称",
-		"commit_hash" : "Git 提交标识",
-		"bin_url" : "二进制包获取地址", // (可选) 若缺失，则按照默认拼接规则生成包url地址
-	},
-	"tikv" : {	
-		// ps : 同 tidb	
-	},
-	"pd" : {
-		// ps : 同 tidb	
-	},
+	"user" : "请求者标识",
+	"from" : "上游信息", // eg. slack / git PR / cron ...
+	"note" : "备注信息"
 	"callback" : "回调地址" // (可选) 任务结束状态回调通知
+	"packages" : [
+		{
+			"repo" : "名称", // tidb / tikv / pd
+			"branch" : "分支名称",
+			"githash" : "Git 提交标识",
+			"tag" : "",
+			"binaryurl" : "二进制包获取地址", // (可选) 若缺失，则按照默认拼接规则生成包url地址
+			"platform" : ""
+		}
+		// ....
+	]
 }
 ```
 
@@ -40,9 +38,7 @@
 > 
 ```js
 {
-	"job_id" : "成功生成成的任务id", // 字符串id, 若任务创建失败, 此处为空串
-	"job_status" : "任务状态", // 若任务创建失败, 此处为空串
-	"msg" : "其它信息",
+	"jobid" : "成功生成成的任务id", // 字符串id, 若任务创建失败, 此处为空串
 }
 ```
 

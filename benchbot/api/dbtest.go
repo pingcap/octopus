@@ -51,7 +51,7 @@ func (hdl *TestingHandler) RunTest(w http.ResponseWriter, r *http.Request) {
 
 	hdl.svr.ApplyTesting(job)
 
-	resp := map[string]string{"job_id": job.Id}
+	resp := map[string]string{"jobid": job.Id}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
 }

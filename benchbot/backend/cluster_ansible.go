@@ -1,15 +1,16 @@
 package backend
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
-	"runtime"
-
+	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 )
+
+const debug bool = true
 
 var ansibleDir, downloadsDir, binsDir string
 
@@ -20,6 +21,8 @@ func init() {
 	ansibleDir = filepath.Join(path.Dir(pdir), "ansible")
 	downloadsDir = filepath.Join(ansibleDir, "downloads")
 	binsDir = filepath.Join(ansibleDir, "resources/bin")
+	os.MkdirAll(downloadsDir, os.ModePerm)
+	os.MkdirAll(binsDir, os.ModePerm)
 }
 
 type TiClusterConfig struct {
@@ -54,58 +57,91 @@ func (c *TiClusterByAnsible) Prepare() (err error) {
 func (c *TiClusterByAnsible) fetchResources() error {
 	components := []*BinPackage{c.cfg.tidb, c.cfg.tikv, c.cfg.pd}
 	for _, pkg := range components {
-		saveto := filepath.Join(downloadsDir, pkg.Name) // TODO ... temp dir by date mark
-		// fmt.Printf("[%s] to down from -- %s\n", pkg.Name, pkg.Url)
+		saveto := filepath.Join(downloadsDir, pkg.Repo+".tar.gz")
+		// TODO ... temp dir by date mark
 		if _, err := Download(pkg.Url, saveto); err != nil {
 			return err
+		}
+
+		// ps : unarchive through sys command
+		cmd := fmt.Sprintf("tar -zxf %s -C %s", saveto, binsDir)
+		if ok := ExecCmd(cmd, nil); !ok {
+			return errors.New("unarchive failed : %s\n")
 		}
 	}
 	return nil
 }
 
 func (c *TiClusterByAnsible) boostrap() error {
+	fmt.Printf("[ansible] boostrap ...\n")
 	buf := new(bytes.Buffer)
+	if debug {
+		return nil
+	}
 
 	//if ok := ExecCmd("ansible-playbook -i inventory.ini bootstrap.yml -k -K", buf); !ok {
-	cmd := fmt.Sprintf("sh %s bootstrap >> out.log 2&>1", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s bootstrap", filepath.Join(ansibleDir, "run.sh"))
+	if ok := ExecCmd(cmd, buf); !ok {
+		return errors.New(fmt.Sprintf("boostrap failed : %s\n", string(buf.Bytes())))
+	}
+
+	return nil
+}
+
+func (c *TiClusterByAnsible) Deploy() error {
+	fmt.Printf("[ansible] deploy ...\n")
+	if debug {
+		return nil
+	}
+
+	cmd := fmt.Sprintf("sh %s deploy", filepath.Join(ansibleDir, "run.sh"))
+	buf := new(bytes.Buffer)
+	if ok := ExecCmd(cmd, buf); !ok {
+		return errors.New(fmt.Sprintf("deploy failed : %s\n", string(buf.Bytes())))
+	}
+	return nil
+}
+
+func (c *TiClusterByAnsible) Run() error {
+	fmt.Printf("[ansible] run ...\n")
+	if debug {
+		return nil
+	}
+
+	cmd := fmt.Sprintf("sh %s start", filepath.Join(ansibleDir, "run.sh"))
+	buf := new(bytes.Buffer)
+
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("start failed : %s\n", string(buf.Bytes())))
 	}
 	return nil
 }
 
-func (c *TiClusterByAnsible) Deploy() error {
-	//buf := bytes.NewBuffer(make([]byte, 0))
-	//w := bufio.NewWriter(buf)
-	buf := new(bytes.Buffer)
-
-	if ok := ExecCmd("ansible-playbook -i inventory.ini deploy.yml -k -K", buf); !ok {
-		return errors.New(fmt.Sprintf("start failed : %s\n", string(buf.Bytes())))
-	}
-	return nil
-}
-
-func (c *TiClusterByAnsible) Start() error {
-	buf := bytes.NewBuffer(make([]byte, 0))
-	w := bufio.NewWriter(buf)
-
-	if ok := ExecCmd("ansible-playbook -i inventory.ini start.yml", w); !ok {
-		return errors.New(fmt.Sprintf("start failed : %s\n", string(buf.Bytes())))
-	}
-	return nil
-}
-
 func (c *TiClusterByAnsible) Stop() error {
-	buf := bytes.NewBuffer(make([]byte, 0))
-	w := bufio.NewWriter(buf)
+	fmt.Printf("[ansible] stop ...\n")
+	if debug {
+		return nil
+	}
 
-	if ok := ExecCmd("ansible-playbook -i inventory.ini stop.yml", w); !ok {
-		return errors.New(fmt.Sprintf("start failed : %s\n", string(buf.Bytes())))
+	cmd := fmt.Sprintf("sh %s stop", filepath.Join(ansibleDir, "run.sh"))
+	buf := new(bytes.Buffer)
+	if ok := ExecCmd(cmd, buf); !ok {
+		return errors.New(fmt.Sprintf("stop failed : %s\n", string(buf.Bytes())))
 	}
 	return nil
 }
 
 func (c *TiClusterByAnsible) Reset() error {
+	fmt.Printf("[ansible] reset ...\n")
+	if debug {
+		return nil
+	}
+
+	cmd := fmt.Sprintf("sh %s reset", filepath.Join(ansibleDir, "run.sh"))
+	buf := new(bytes.Buffer)
+	if ok := ExecCmd(cmd, buf); !ok {
+		return errors.New(fmt.Sprintf("stop failed : %s\n", string(buf.Bytes())))
+	}
 	return nil
 }
 
@@ -114,5 +150,15 @@ func (c *TiClusterByAnsible) checkAvaiable() (bool, error) {
 }
 
 func (c *TiClusterByAnsible) Destory() error {
+	fmt.Printf("[ansible] destory ...\n")
+	if debug {
+		return nil
+	}
+
+	cmd := fmt.Sprintf("sh %s destory", filepath.Join(ansibleDir, "run.sh"))
+	buf := new(bytes.Buffer)
+	if ok := ExecCmd(cmd, buf); !ok {
+		return errors.New(fmt.Sprintf("destory failed : %s\n", string(buf.Bytes())))
+	}
 	return nil
 }

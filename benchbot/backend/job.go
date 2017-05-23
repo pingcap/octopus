@@ -2,38 +2,41 @@ package backend
 
 import (
 	"encoding/json"
-	//"fmt"
+	"errors"
+	"fmt"
 	"time"
 )
 
 type BinPackage struct {
-	Name       string `json:"-"`
+	Repo       string `json:"repo"`
 	Branch     string `json:"branch"`
 	Tag        string `json:"tag"`
-	CommitHash string `json:"commit_hash"`
-	Url        string `json:"bin_url"`
+	CommitHash string `json:"githash"`
+	Platform   string `json:"platform"`
+	Url        string `json:"binaryurl"`
 }
 
 type TestingMeta struct {
-	Creator      string     `json:"user"`
-	Note         string     `json:"note"`
-	Upstream     string     `json:"from"`
-	HttpCallback string     `json:"callback"`
-	TiDB         BinPackage `json:"tidb"`
-	TiKV         BinPackage `json:"tikv"`
-	Pd           BinPackage `json:"pd"`
+	Creator      string       `json:"user"`
+	Note         string       `json:"note"`
+	Upstream     string       `json:"from"`
+	HttpCallback string       `json:"callback"`
+	Packages     []BinPackage `json:"packages"`
+	TiDB         BinPackage   `json:"-"`
+	TiKV         BinPackage   `json:"-"`
+	Pd           BinPackage   `json:"-"`
 }
 
 type TestingResult struct {
-	TestCases int64
-	TimeCost  int64
-	Success   int
-	Fail      int
-	Log       string
+	TestCases int64  `json:"test_cases"`
+	TimeCost  int64  `json:"time_cost"`
+	Success   int    `json:"success"`
+	Fail      int    `json:"failure"`
+	Message   string `json:"msg"`
 }
 
 type TestingJob struct {
-	Id         string        `json:"job_id"`
+	Id         string        `json:"jobid"`
 	CreateTime string        `json:"createtime"`
 	Status     string        `json:"status"`
 	Meta       TestingMeta   `json:"meta"`
@@ -46,10 +49,6 @@ func NewTestingJob() *TestingJob {
 		Status:     Pending,
 		CreateTime: time.Now().Format("2006-01-02 15:04:05"),
 	}
-
-	job.Meta.TiDB.Name = "tidb"
-	job.Meta.TiKV.Name = "tikv"
-	job.Meta.Pd.Name = "pd"
 
 	return &job
 }
@@ -64,7 +63,27 @@ func (job *TestingJob) ParseFromRequstJSON(data []byte) error {
 		return err
 	}
 
+	for _, item := range job.Meta.Packages {
+		switch item.Repo {
+		case "tidb":
+			job.Meta.TiDB = item
+			break
+		case "tikv":
+			job.Meta.TiKV = item
+			break
+		case "pd":
+			job.Meta.Pd = item
+			break
+		default:
+			break
+		}
+	}
+
 	return nil
+}
+
+func (job *TestingJob) abortedError() error {
+	return errors.New(fmt.Sprintf("job-%s abort", job.Id))
 }
 
 func (job *TestingJob) Valid() bool {
@@ -73,8 +92,27 @@ func (job *TestingJob) Valid() bool {
 }
 
 func (job *TestingJob) Run() error {
-	job.Status = Testing
-	defer job.close()
+	defer func() {
+		job.Status = Finish
+	}()
+
+	tiCluster, err := job.initCluster()
+	if err != nil {
+		return err
+	}
+
+	if err := job.runTesting(tiCluster); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (job *TestingJob) initCluster() (TiCulster, error) {
+	if job.Status == Abort {
+		return nil, job.abortedError()
+	}
+	job.Status = Deploying
 
 	// init cluster
 	tiCfg := &TiClusterConfig{
@@ -82,26 +120,34 @@ func (job *TestingJob) Run() error {
 		tikv: &job.Meta.TiKV,
 		pd:   &job.Meta.Pd,
 	}
-	tiCluser := newTiClusterByAnsible(tiCfg)
+	tiCluster := newTiClusterByAnsible(tiCfg)
 
-	ops := [](func() error){tiCluser.Prepare, tiCluser.Deploy}
+	ops := [](func() error){tiCluster.Prepare, tiCluster.Deploy, tiCluster.Run}
 	// TODO ... merge pre operation into one
 	for _, op := range ops {
+		if job.Status == Abort {
+			return nil, job.abortedError()
+		}
+
 		if err := op(); err != nil {
-			return err
+			tiCluster.Destory()
+			return nil, err
 		}
 	}
 
-	// testing
-	if err := job.runTesting(); err != nil {
-		return err
-	}
-
-	return nil
+	return tiCluster, nil
 }
 
-func (job *TestingJob) runTesting() error {
-	// TODO
+func (job *TestingJob) runTesting(cluster TiCulster) error {
+	defer cluster.Destory()
+
+	job.Status = Running
+	// TODO ...
+
+	if job.Status == Abort {
+		return job.abortedError()
+	}
+
 	return nil
 }
 
@@ -116,8 +162,12 @@ func (job *TestingJob) runTesting() error {
 // }
 
 func (job *TestingJob) Abort(note string) {
+	/*
+		TODO ... status setting is not safe
+				 need to imporve it in smart way !!!
+	*/
 	job.Status = Abort
-	job.Result.Log = note
+	job.Result.Message = fmt.Sprintf("[abort] : %s\n", note)
 }
 
 func (job *TestingJob) close() {
