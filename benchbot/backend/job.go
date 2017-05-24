@@ -36,18 +36,20 @@ type BenchmarkResult struct {
 }
 
 type BenchmarkJob struct {
-	Id         string          `json:"jobid"`
+	ID         string          `json:"jobid"`
 	CreateTime string          `json:"createtime"`
 	Status     string          `json:"status"`
 	Meta       BenchmarkMeta   `json:"meta"`
 	Result     BenchmarkResult `json:"result"`
+	server     *Server
 }
 
-func NewBenchmarkJob() *BenchmarkJob {
+func NewBenchmarkJob(svr *Server) *BenchmarkJob {
 	job := BenchmarkJob{
-		Id:         GenUUID(),
+		ID:         GenUUID(),
 		Status:     Pending,
 		CreateTime: time.Now().Format("2006-01-02 15:04:05"),
+		server:     svr,
 	}
 
 	return &job
@@ -83,7 +85,7 @@ func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
 }
 
 func (job *BenchmarkJob) abortedError() error {
-	return errors.New(fmt.Sprintf("job-%s abort", job.Id))
+	return errors.New(fmt.Sprintf("job-%s abort", job.ID))
 }
 
 func (job *BenchmarkJob) Valid() bool {
@@ -96,33 +98,35 @@ func (job *BenchmarkJob) Run() error {
 		job.Status = Finished
 	}()
 
-	tiCluster, err := job.initCluster()
+	cluster, err := job.initCluster()
 	if err != nil {
 		return err
 	}
 
-	if err := job.runBenchmark(tiCluster); err != nil {
+	if err := job.runBenchmark(cluster); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (job *BenchmarkJob) initCluster() (TiCulster, error) {
+func (job *BenchmarkJob) initCluster() (Cluster, error) {
 	if job.Status == Aborted {
 		return nil, job.abortedError()
 	}
 	job.Status = Deploying
 
 	// init cluster
-	tiCfg := &TiClusterConfig{
+	cfg := &ClusterConfig{
 		tidb: &job.Meta.TiDB,
 		tikv: &job.Meta.TiKV,
 		pd:   &job.Meta.Pd,
 	}
-	tiCluster := newAnsibleCluster(tiCfg)
 
-	ops := [](func() error){tiCluster.Prepare, tiCluster.Deploy, tiCluster.Run}
+	clusterMgr := job.server.clusterMgr
+	cluster := clusterMgr.newAnsibleCluster(cfg)
+
+	ops := [](func() error){cluster.Prepare, cluster.Deploy, cluster.Run}
 	// TODO ... merge pre operation into one
 	for _, op := range ops {
 		if job.Status == Aborted {
@@ -130,15 +134,15 @@ func (job *BenchmarkJob) initCluster() (TiCulster, error) {
 		}
 
 		if err := op(); err != nil {
-			tiCluster.Destory()
+			cluster.Destory()
 			return nil, err
 		}
 	}
 
-	return tiCluster, nil
+	return cluster, nil
 }
 
-func (job *BenchmarkJob) runBenchmark(cluster TiCulster) error {
+func (job *BenchmarkJob) runBenchmark(cluster Cluster) error {
 	defer cluster.Destory()
 
 	job.Status = Running
@@ -154,9 +158,9 @@ func (job *BenchmarkJob) runBenchmark(cluster TiCulster) error {
 // func (job *BenchmarkJob) cheating() {
 // 	const simulateTime = 10
 //
-// 	fmt.Printf("[%s] job is running !\n", job.Id)
+// 	fmt.Printf("[%s] job is running !\n", job.ID)
 // 	for i := 0; i < simulateTime && job.Status == Testing; i++ {
-// 		fmt.Printf("[%s] case %d ...\n", job.Id, i+1)
+// 		fmt.Printf("[%s] case %d ...\n", job.ID, i+1)
 // 		time.Sleep(time.Second * 1)
 // 	}
 // }
@@ -170,12 +174,12 @@ func (job *BenchmarkJob) Abort(note string) {
 
 func (job *BenchmarkJob) close() {
 	job.Status = Finished
-	// fmt.Printf("[%s] job end. !\n", job.Id)
+	// fmt.Printf("[%s] job end. !\n", job.ID)
 }
 
 func (job *BenchmarkJob) ExportBasicInfo() map[string]interface{} {
 	data := make(map[string]interface{})
-	data["job_id"] = job.Id
+	data["job_id"] = job.ID
 	data["status"] = job.Status
 	data["createtime"] = job.CreateTime
 	data["meta"] = job.Meta
@@ -184,7 +188,7 @@ func (job *BenchmarkJob) ExportBasicInfo() map[string]interface{} {
 
 func (job *BenchmarkJob) ExportResultInfo() map[string]interface{} {
 	data := make(map[string]interface{})
-	data["job_id"] = job.Id
+	data["job_id"] = job.ID
 	data["res"] = job.Result
 	return data
 }

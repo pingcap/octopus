@@ -18,8 +18,8 @@ func CreateRouter(svr *Server) *mux.Router {
 	r.HandleFunc("/bench/plan", hdl.PlanBenchmark).Methods("POST")
 	r.HandleFunc("/bench/release/plan", hdl.PlanReleaseBenchmark).Methods("POST")
 	// benchmark job
-	r.HandleFunc("/bench/job/{jobId}", hdl.QueryBenchJob).Methods("GET")
-	r.HandleFunc("/bench/job/{jobId}", hdl.AbortBenchJob).Methods("DELETE")
+	r.HandleFunc("/bench/job/{jobid}", hdl.QueryBenchJob).Methods("GET")
+	r.HandleFunc("/bench/job/{jobid}", hdl.AbortBenchJob).Methods("DELETE")
 	// benchmark summary
 	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
 	r.HandleFunc("/bench/history", hdl.ShowHistory).Methods("GET")

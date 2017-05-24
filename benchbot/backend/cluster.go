@@ -1,6 +1,6 @@
 package backend
 
-type TiCulster interface {
+type Cluster interface {
 	Prepare() error
 	Deploy() error
 	Run() error

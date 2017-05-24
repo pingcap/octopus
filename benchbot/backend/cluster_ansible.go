@@ -5,41 +5,47 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
-	"runtime"
 )
 
 const debug bool = true
 
-var ansibleDir, downloadsDir, binsDir string
+// cluster offer
 
-func init() {
-	_, filename, _, _ := runtime.Caller(1)
-	pdir := path.Dir(filename)
-
-	ansibleDir = filepath.Join(path.Dir(pdir), "ansible")
-	downloadsDir = filepath.Join(ansibleDir, "downloads")
-	binsDir = filepath.Join(ansibleDir, "resources/bin")
-	os.MkdirAll(downloadsDir, os.ModePerm)
-	os.MkdirAll(binsDir, os.ModePerm)
+type ClusterManager struct {
+	cfg *ServerConfig
 }
 
-type TiClusterConfig struct {
+func newClusterManager(cfg *ServerConfig) *ClusterManager {
+	os.MkdirAll(cfg.AnsibleDownloadsDir, os.ModePerm)
+	os.MkdirAll(cfg.AnsibleBinsDir, os.ModePerm)
+
+	return &ClusterManager{cfg: cfg}
+}
+
+func (cmgr *ClusterManager) newAnsibleCluster(ccfg *ClusterConfig) *AnsibleCluster {
+	c := &AnsibleCluster{
+		ccfg:         ccfg,
+		ansibleDir:   cmgr.cfg.AnsibleDir,
+		downloadsDir: cmgr.cfg.AnsibleDownloadsDir,
+		binsDir:      cmgr.cfg.AnsibleBinsDir,
+	}
+	return c
+}
+
+// cluster real deployment by ansible
+
+type ClusterConfig struct {
 	tidb *BinPackage
 	tikv *BinPackage
 	pd   *BinPackage
 }
 
 type AnsibleCluster struct {
-	cfg *TiClusterConfig
-}
-
-func newAnsibleCluster(cfg *TiClusterConfig) *AnsibleCluster {
-	c := &AnsibleCluster{
-		cfg: cfg,
-	}
-	return c
+	ccfg         *ClusterConfig
+	ansibleDir   string
+	downloadsDir string
+	binsDir      string
 }
 
 func (c *AnsibleCluster) Prepare() (err error) {
@@ -55,16 +61,16 @@ func (c *AnsibleCluster) Prepare() (err error) {
 }
 
 func (c *AnsibleCluster) fetchResources() error {
-	components := []*BinPackage{c.cfg.tidb, c.cfg.tikv, c.cfg.pd}
+	components := []*BinPackage{c.ccfg.tidb, c.ccfg.tikv, c.ccfg.pd}
 	for _, pkg := range components {
-		saveto := filepath.Join(downloadsDir, pkg.Repo+".tar.gz")
+		saveto := filepath.Join(c.downloadsDir, pkg.Repo+".tar.gz")
 		// TODO ... temp dir by date mark
 		if _, err := Download(pkg.BinUrl, saveto); err != nil {
 			return err
 		}
 
 		// ps : unarchive through sys command
-		cmd := fmt.Sprintf("tar -zxf %s -C %s", saveto, binsDir)
+		cmd := fmt.Sprintf("tar -zxf %s -C %s", saveto, c.binsDir)
 		if ok := ExecCmd(cmd, nil); !ok {
 			return errors.New("unarchive failed : %s\n")
 		}
@@ -79,7 +85,7 @@ func (c *AnsibleCluster) boostrap() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s bootstrap", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s bootstrap", filepath.Join(c.ansibleDir, "run.sh"))
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("boostrap failed : %s\n", string(buf.Bytes())))
 	}
@@ -93,7 +99,7 @@ func (c *AnsibleCluster) Deploy() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s deploy", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s deploy", filepath.Join(c.ansibleDir, "run.sh"))
 	buf := new(bytes.Buffer)
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("deploy failed : %s\n", string(buf.Bytes())))
@@ -107,7 +113,7 @@ func (c *AnsibleCluster) Run() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s start", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s start", filepath.Join(c.ansibleDir, "run.sh"))
 	buf := new(bytes.Buffer)
 
 	if ok := ExecCmd(cmd, buf); !ok {
@@ -122,7 +128,7 @@ func (c *AnsibleCluster) Stop() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s stop", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s stop", filepath.Join(c.ansibleDir, "run.sh"))
 	buf := new(bytes.Buffer)
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("stop failed : %s\n", string(buf.Bytes())))
@@ -136,7 +142,7 @@ func (c *AnsibleCluster) Reset() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s reset", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s reset", filepath.Join(c.ansibleDir, "run.sh"))
 	buf := new(bytes.Buffer)
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("stop failed : %s\n", string(buf.Bytes())))
@@ -154,7 +160,7 @@ func (c *AnsibleCluster) Destory() error {
 		return nil
 	}
 
-	cmd := fmt.Sprintf("sh %s destory", filepath.Join(ansibleDir, "run.sh"))
+	cmd := fmt.Sprintf("sh %s destory", filepath.Join(c.ansibleDir, "run.sh"))
 	buf := new(bytes.Buffer)
 	if ok := ExecCmd(cmd, buf); !ok {
 		return errors.New(fmt.Sprintf("destory failed : %s\n", string(buf.Bytes())))

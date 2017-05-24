@@ -14,12 +14,14 @@ import (
 )
 
 var (
-	addr    string
-	version bool
+	addr      string
+	version   bool
+	storePath string
 )
 
 func parseArgs() {
 	flag.StringVar(&addr, "addr", ":20170", "listening address")
+	flag.StringVar(&storePath, "store", "./store", "path to presist data")
 	flag.BoolVar(&version, "V", false, "print version information and exit")
 	flag.BoolVar(&version, "version", false, "print version information and exit")
 
@@ -43,19 +45,24 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	svr := backend.NewServer()
-	go func() {
-		select {
-		case <-sig:
-			svr.Close()
-			os.Exit(0)
-		}
-	}()
+	// TODO .. load from toml file
+	cfg := &backend.ServerConfig{
+		StorePath:           storePath,
+		AnsibleDir:          "./ansible",
+		AnsibleDownloadsDir: "./ansible/downloads",
+		AnsibleBinsDir:      "./ansible/resources/bin",
+	}
 
+	svr := backend.NewServer(cfg)
 	r := api.CreateRouter(svr)
-	http.ListenAndServe(addr, r)
+	go func() {
+		http.ListenAndServe(addr, r)
+	}()
 
 	// Here just to force generating vendor
 	// we will remove it later.
 	context.Background()
+
+	<-sig
+	svr.Close()
 }

@@ -20,7 +20,14 @@ var _ = Suite(&testBenchSuite{})
 type testBenchSuite struct{}
 
 func setup() *httptest.Server {
-	svr := NewServer()
+	cfg := &ServerConfig{
+		StorePath:           "./store",
+		AnsibleDir:          "./ansible",
+		AnsibleDownloadsDir: "./ansible/downloads",
+		AnsibleBinsDir:      "./ansible/resources/bin",
+	} // TODO ... load from toml file
+
+	svr := NewServer(cfg)
 	router := CreateRouter(svr)
 	return httptest.NewServer(router)
 }
@@ -38,7 +45,7 @@ func loadsJson(resp *http.Response) map[string]string {
 
 func requestNewBenchmark(httpSvr *httptest.Server) (string, error) {
 	var failure error = nil
-	var jobId string = ""
+	var jobID string = ""
 
 	reqJson := `{
 		"user": "pingcap", "note": "simple note msg", "upstream": "unit_test", "callback": "",
@@ -65,10 +72,10 @@ func requestNewBenchmark(httpSvr *httptest.Server) (string, error) {
 		failure = errors.New("new benching plan failed : " + string(errMsg))
 	} else {
 		data := loadsJson(resp)
-		jobId = data["jobid"]
+		jobID = data["jobid"]
 	}
 
-	return jobId, failure
+	return jobID, failure
 }
 
 func TestNewTask(t *testing.T) {
@@ -77,11 +84,11 @@ func TestNewTask(t *testing.T) {
 	testServer := setup()
 	defer teardown(testServer)
 
-	jobId, err := requestNewBenchmark(testServer)
+	jobID, err := requestNewBenchmark(testServer)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 	}
-	if len(jobId) == 0 {
+	if len(jobID) == 0 {
 		t.Errorf("jobid empty !")
 	}
 }
@@ -136,11 +143,11 @@ func JobQuery(t *testing.T) {
 	defer teardown(testServer)
 
 	// prepare
-	jobId, _ := requestNewBenchmark(testServer)
+	jobID, _ := requestNewBenchmark(testServer)
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/bench/job/"+jobId, reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/bench/job/"+jobID, reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)
@@ -152,7 +159,7 @@ func JobQuery(t *testing.T) {
 	}
 
 	data := loadsJson(resp)
-	if data["job_id"] != jobId {
+	if data["job_id"] != jobID {
 		t.Errorf("NO !!")
 	}
 }
@@ -164,11 +171,11 @@ func TestAbortJob(t *testing.T) {
 	defer teardown(testServer)
 
 	// prepare
-	jobId, _ := requestNewBenchmark(testServer)
+	jobID, _ := requestNewBenchmark(testServer)
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("DELETE", testServer.URL+"/bench/job/"+jobId, reader)
+	request, err := http.NewRequest("DELETE", testServer.URL+"/bench/job/"+jobID, reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)

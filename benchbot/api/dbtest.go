@@ -33,7 +33,7 @@ func (hdl *BenchmarkHandler) PlanBenchmark(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	job := NewBenchmarkJob()
+	job := NewBenchmarkJob(hdl.svr)
 	if err = job.ParseFromRequstJSON(data); err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "post data json incorrect : "+err.Error())
 		return
@@ -46,7 +46,7 @@ func (hdl *BenchmarkHandler) PlanBenchmark(w http.ResponseWriter, r *http.Reques
 
 	hdl.svr.ApplyBenchmark(job)
 
-	resp := map[string]string{"jobid": job.Id}
+	resp := map[string]string{"jobid": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
 }
@@ -77,13 +77,13 @@ func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request)
 }
 
 func (hdl *BenchmarkHandler) QueryBenchJob(w http.ResponseWriter, r *http.Request) {
-	jobId := mux.Vars(r)["jobId"]
-	if len(jobId) == 0 {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
+	jobID := mux.Vars(r)["jobid"]
+	if len(jobID) == 0 {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "jobID required !")
 		return
 	}
 
-	if job := hdl.svr.GetJob(jobId); job != nil {
+	if job := hdl.svr.GetJob(jobID); job != nil {
 		hdl.rdr.JSON(w, http.StatusOK, job)
 	}
 
@@ -91,9 +91,9 @@ func (hdl *BenchmarkHandler) QueryBenchJob(w http.ResponseWriter, r *http.Reques
 }
 
 func (hdl *BenchmarkHandler) AbortBenchJob(w http.ResponseWriter, r *http.Request) {
-	jobId := mux.Vars(r)["jobId"]
-	if len(jobId) == 0 {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
+	jobID := mux.Vars(r)["jobid"]
+	if len(jobID) == 0 {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "jobID required !")
 		return
 	}
 
@@ -106,9 +106,9 @@ func (hdl *BenchmarkHandler) AbortBenchJob(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	success := hdl.svr.AbortBenchmark(jobId, note)
+	success := hdl.svr.AbortBenchmark(jobID, note)
 	if !success {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "cannot abort : "+jobId)
+		hdl.rdr.JSON(w, http.StatusBadRequest, "cannot abort : "+jobID)
 		return
 	}
 
@@ -117,15 +117,15 @@ func (hdl *BenchmarkHandler) AbortBenchJob(w http.ResponseWriter, r *http.Reques
 }
 
 func (hdl *BenchmarkHandler) QueryBenchResult(w http.ResponseWriter, r *http.Request) {
-	jobId := mux.Vars(r)["jobId"]
-	if len(jobId) == 0 {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
+	jobID := mux.Vars(r)["jobID"]
+	if len(jobID) == 0 {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "jobID required !")
 		return
 	}
 
-	job := hdl.svr.GetJob(jobId)
+	job := hdl.svr.GetJob(jobID)
 	if job == nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "job not found : "+jobId)
+		hdl.rdr.JSON(w, http.StatusBadRequest, "job not found : "+jobID)
 		return
 	}
 
