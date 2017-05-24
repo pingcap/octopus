@@ -34,7 +34,7 @@ func ReadJson(r io.ReadCloser, data interface{}) error {
 }
 
 func ExecCmd(command string, output io.Writer) bool {
-	//	ps : Just return success or not ~
+	// ps : Just return success or not ~
 	args := strings.Split(command, " ")
 	bin := args[0]
 	args = args[1:]
@@ -51,7 +51,7 @@ func ExecCmd(command string, output io.Writer) bool {
 }
 
 func Download(resourceUrl string, localPath string) (int64, error) {
-	//	local prepare
+	// local prepare
 	os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
 	f, err := os.Create(localPath)
 	if err != nil {
@@ -71,7 +71,7 @@ func Download(resourceUrl string, localPath string) (int64, error) {
 		return 0, err
 	}
 
-	//	local save
+	// local save
 	bytes, _ := io.Copy(f, res.Body)
 
 	return bytes, nil
