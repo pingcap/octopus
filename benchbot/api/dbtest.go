@@ -10,13 +10,13 @@ import (
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
-type TestingHandler struct {
+type BenchmarkHandler struct {
 	rdr *render.Render
 	svr *Server
 }
 
-func newTestingHandler(svr *Server, rdr *render.Render) *TestingHandler {
-	hdl := &TestingHandler{
+func newBenchmarkHandler(svr *Server, rdr *render.Render) *BenchmarkHandler {
+	hdl := &BenchmarkHandler{
 		rdr: rdr,
 		svr: svr,
 	}
@@ -24,7 +24,7 @@ func newTestingHandler(svr *Server, rdr *render.Render) *TestingHandler {
 	return hdl
 }
 
-func (hdl *TestingHandler) RunTest(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) PlanBenchmark(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	data, err := ioutil.ReadAll(r.Body)
@@ -33,7 +33,7 @@ func (hdl *TestingHandler) RunTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := NewTestingJob()
+	job := NewBenchmarkJob()
 	if err = job.ParseFromRequstJSON(data); err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "post data json incorrect : "+err.Error())
 		return
@@ -44,19 +44,20 @@ func (hdl *TestingHandler) RunTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hdl.svr.ApplyTesting(job)
+	hdl.svr.ApplyBenchmark(job)
 
 	resp := map[string]string{"jobid": job.Id}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
 }
 
-func (hdl *TestingHandler) RunReleaseTest(w http.ResponseWriter, r *http.Request) {
-	hdl.rdr.JSON(w, http.StatusOK, nil) // TODO ...
+func (hdl *BenchmarkHandler) PlanReleaseBenchmark(w http.ResponseWriter, r *http.Request) {
+	// TODO
+	hdl.rdr.JSON(w, http.StatusBadRequest, "not supported yet !")
 	return
 }
 
-func (hdl *TestingHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Request) {
 	var info SummaryInfo
 	hdl.svr.DumpInfo(&info)
 
@@ -69,13 +70,13 @@ func (hdl *TestingHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Reques
 	return
 }
 
-func (hdl *TestingHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
 	his := hdl.svr.GetHistoryJobs(10)
 	hdl.rdr.JSON(w, http.StatusOK, his)
 	return
 }
 
-func (hdl *TestingHandler) QueryTestJob(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) QueryBenchJob(w http.ResponseWriter, r *http.Request) {
 	jobId := mux.Vars(r)["jobId"]
 	if len(jobId) == 0 {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
@@ -89,7 +90,7 @@ func (hdl *TestingHandler) QueryTestJob(w http.ResponseWriter, r *http.Request) 
 	return
 }
 
-func (hdl *TestingHandler) AbortTestJob(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) AbortBenchJob(w http.ResponseWriter, r *http.Request) {
 	jobId := mux.Vars(r)["jobId"]
 	if len(jobId) == 0 {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")
@@ -105,7 +106,7 @@ func (hdl *TestingHandler) AbortTestJob(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	success := hdl.svr.AbortTesting(jobId, note)
+	success := hdl.svr.AbortBenchmark(jobId, note)
 	if !success {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "cannot abort : "+jobId)
 		return
@@ -115,7 +116,7 @@ func (hdl *TestingHandler) AbortTestJob(w http.ResponseWriter, r *http.Request) 
 	return
 }
 
-func (hdl *TestingHandler) QueryTestJobResult(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) QueryBenchResult(w http.ResponseWriter, r *http.Request) {
 	jobId := mux.Vars(r)["jobId"]
 	if len(jobId) == 0 {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "jobId required !")

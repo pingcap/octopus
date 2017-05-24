@@ -13,16 +13,16 @@ func CreateRouter(svr *Server) *mux.Router {
 	})
 
 	r := mux.NewRouter()
-	hdl := newTestingHandler(svr, rdr)
-	//	testing request
-	r.HandleFunc("/test", hdl.RunTest).Methods("POST")
-	r.HandleFunc("/test/release", hdl.RunReleaseTest).Methods("POST")
-	//	test job
-	r.HandleFunc("/job/{jobId}", hdl.QueryTestJob).Methods("GET")
-	r.HandleFunc("/job/{jobId}", hdl.AbortTestJob).Methods("DELETE")
-	//	global
-	r.HandleFunc("/status", hdl.GetGlobalStatus).Methods("GET")
-	r.HandleFunc("/history", hdl.ShowHistory).Methods("GET")
+	hdl := newBenchmarkHandler(svr, rdr)
+	// benchmark running request
+	r.HandleFunc("/bench/plan", hdl.PlanBenchmark).Methods("POST")
+	r.HandleFunc("/bench/release/plan", hdl.PlanReleaseBenchmark).Methods("POST")
+	// benchmark job
+	r.HandleFunc("/bench/job/{jobId}", hdl.QueryBenchJob).Methods("GET")
+	r.HandleFunc("/bench/job/{jobId}", hdl.AbortBenchJob).Methods("DELETE")
+	// benchmark summary
+	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
+	r.HandleFunc("/bench/history", hdl.ShowHistory).Methods("GET")
 
 	return r
 }

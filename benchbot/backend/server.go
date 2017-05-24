@@ -7,15 +7,17 @@ import (
 	"time"
 )
 
-const penndingJobLimit int = 10
+const (
+	penndingJobLimit int = 10
+)
 
 type Server struct {
 	end          bool
 	wg           sync.WaitGroup
-	jobs         chan *TestingJob
-	runningJob   *TestingJob
-	historys     []*TestingJob
-	historysByID map[string]*TestingJob
+	jobs         chan *BenchmarkJob
+	runningJob   *BenchmarkJob
+	historys     []*BenchmarkJob
+	historysByID map[string]*BenchmarkJob
 }
 
 type SummaryInfo struct {
@@ -28,9 +30,9 @@ func NewServer() *Server {
 	svr := new(Server)
 	svr.end = false
 	svr.runningJob = nil
-	svr.jobs = make(chan *TestingJob, penndingJobLimit)
-	svr.historys = make([]*TestingJob, 0) // TODO ...
-	svr.historysByID = make(map[string]*TestingJob)
+	svr.jobs = make(chan *BenchmarkJob, penndingJobLimit)
+	svr.historys = make([]*BenchmarkJob, 1024) // TODO ...
+	svr.historysByID = make(map[string]*BenchmarkJob)
 	svr.wg = sync.WaitGroup{}
 
 	go svr.mainloop()
@@ -75,7 +77,7 @@ func (svr *Server) mainloop() error {
 	return nil
 }
 
-func (svr *Server) ApplyTesting(job *TestingJob) error {
+func (svr *Server) ApplyBenchmark(job *BenchmarkJob) error {
 	var err error = nil
 	select {
 	case <-time.After(time.Second * 1):
@@ -89,7 +91,7 @@ func (svr *Server) ApplyTesting(job *TestingJob) error {
 	return err
 }
 
-func (svr *Server) AbortTesting(jobId string, note string) bool {
+func (svr *Server) AbortBenchmark(jobId string, note string) bool {
 	if job, ok := svr.historysByID[jobId]; ok {
 		if job.Status == Pending || job.Status == Deploying || job.Status == Running {
 			job.Abort(note)
@@ -99,20 +101,20 @@ func (svr *Server) AbortTesting(jobId string, note string) bool {
 	return false
 }
 
-func (svr *Server) GetJob(jobId string) *TestingJob {
+func (svr *Server) GetJob(jobId string) *BenchmarkJob {
 	if job, ok := svr.historysByID[jobId]; ok {
 		return job
 	}
 	return nil
 }
 
-func (svr *Server) GetHistoryJobs(lastN int) []*TestingJob {
+func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 	size := len(svr.historys)
 	if lastN < size {
 		size = lastN
 	}
 
-	his := make([]*TestingJob, 0)
+	his := make([]*BenchmarkJob, 0)
 	for i := 0; i < size; i++ {
 		his = append(his, svr.historys[i])
 	}

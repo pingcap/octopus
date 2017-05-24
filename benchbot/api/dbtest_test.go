@@ -11,8 +11,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	. "github.com/pingcap/check"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
+
+var _ = Suite(&testBenchSuite{})
+
+type testBenchSuite struct{}
 
 func setup() *httptest.Server {
 	svr := NewServer()
@@ -31,24 +36,24 @@ func loadsJson(resp *http.Response) map[string]string {
 	return data
 }
 
-func requestNewTesting(httpSvr *httptest.Server) (string, error) {
+func requestNewBenchmark(httpSvr *httptest.Server) (string, error) {
 	var failure error = nil
 	var jobId string = ""
 
 	reqJson := `{
 		"user": "pingcap", "note": "simple note msg", "upstream": "unit_test", "callback": "",
 	    "packages": [ 
-		   {"repo": "tidb", "branch": "tidb/1", "githash": "0x10", "platform": "centos",
-		    "binaryurl": "127.0.0.1:7777/test.tar.gz"},
-		   {"repo": "tikv", "branch": "tikv/1", "githash": "0x20", "platform": "centos",
-		    "binaryurl": "127.0.0.1:7777/test.tar.gz"},
-		   {"repo": "pd", "branch": "pd/1", "githash": "0x30", "platform": "centos",
-		    "binaryurl": "127.0.0.1:7777/test.tar.gz"}
+		   {"repo": "tidb", "branch": "tidb/1", "git_hash": "0x10", "platform": "centos",
+		    "binary_url": "127.0.0.1:7777/test.tar.gz"},
+		   {"repo": "tikv", "branch": "tikv/1", "git_hash": "0x20", "platform": "centos",
+		    "binary_url": "127.0.0.1:7777/test.tar.gz"},
+		   {"repo": "pd", "branch": "pd/1", "git_hash": "0x30", "platform": "centos",
+		    "binary_url": "127.0.0.1:7777/test.tar.gz"}
 		]
 	}`
 
 	reader := strings.NewReader(reqJson)
-	request, err := http.NewRequest("POST", httpSvr.URL+"/test", reader)
+	request, err := http.NewRequest("POST", httpSvr.URL+"/bench/plan", reader)
 
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -57,7 +62,7 @@ func requestNewTesting(httpSvr *httptest.Server) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		errMsg, _ := ioutil.ReadAll(resp.Body)
-		failure = errors.New("new testing failed : " + string(errMsg))
+		failure = errors.New("new benching plan failed : " + string(errMsg))
 	} else {
 		data := loadsJson(resp)
 		jobId = data["jobid"]
@@ -72,9 +77,12 @@ func TestNewTask(t *testing.T) {
 	testServer := setup()
 	defer teardown(testServer)
 
-	jobId, err := requestNewTesting(testServer)
+	jobId, err := requestNewBenchmark(testServer)
 	if err != nil {
 		t.Errorf("%s", err.Error())
+	}
+	if len(jobId) == 0 {
+		t.Errorf("jobid empty !")
 	}
 }
 
@@ -85,7 +93,7 @@ func TestShowSummary(t *testing.T) {
 	defer teardown(testServer)
 
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/status", reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/bench/status", reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -104,12 +112,12 @@ func TestShowHistory(t *testing.T) {
 	defer teardown(testServer)
 
 	// prepare
-	requestNewTesting(testServer)
-	requestNewTesting(testServer)
+	requestNewBenchmark(testServer)
+	requestNewBenchmark(testServer)
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/history", reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/bench/history", reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)
@@ -128,11 +136,11 @@ func JobQuery(t *testing.T) {
 	defer teardown(testServer)
 
 	// prepare
-	jobId, _ := requestNewTesting(testServer)
+	jobId, _ := requestNewBenchmark(testServer)
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/job/"+jobId, reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/bench/job/"+jobId, reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)
@@ -156,11 +164,11 @@ func TestAbortJob(t *testing.T) {
 	defer teardown(testServer)
 
 	// prepare
-	jobId, _ := requestNewTesting(testServer)
+	jobId, _ := requestNewBenchmark(testServer)
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("DELETE", testServer.URL+"/job/"+jobId, reader)
+	request, err := http.NewRequest("DELETE", testServer.URL+"/bench/job/"+jobId, reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)

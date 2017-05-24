@@ -31,18 +31,18 @@ type TiClusterConfig struct {
 	pd   *BinPackage
 }
 
-type TiClusterByAnsible struct {
+type AnsibleCluster struct {
 	cfg *TiClusterConfig
 }
 
-func newTiClusterByAnsible(cfg *TiClusterConfig) *TiClusterByAnsible {
-	c := &TiClusterByAnsible{
+func newAnsibleCluster(cfg *TiClusterConfig) *AnsibleCluster {
+	c := &AnsibleCluster{
 		cfg: cfg,
 	}
 	return c
 }
 
-func (c *TiClusterByAnsible) Prepare() (err error) {
+func (c *AnsibleCluster) Prepare() (err error) {
 	if err = c.fetchResources(); err != nil {
 		return
 	}
@@ -54,12 +54,12 @@ func (c *TiClusterByAnsible) Prepare() (err error) {
 	return
 }
 
-func (c *TiClusterByAnsible) fetchResources() error {
+func (c *AnsibleCluster) fetchResources() error {
 	components := []*BinPackage{c.cfg.tidb, c.cfg.tikv, c.cfg.pd}
 	for _, pkg := range components {
 		saveto := filepath.Join(downloadsDir, pkg.Repo+".tar.gz")
 		// TODO ... temp dir by date mark
-		if _, err := Download(pkg.Url, saveto); err != nil {
+		if _, err := Download(pkg.BinUrl, saveto); err != nil {
 			return err
 		}
 
@@ -72,7 +72,7 @@ func (c *TiClusterByAnsible) fetchResources() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) boostrap() error {
+func (c *AnsibleCluster) boostrap() error {
 	fmt.Printf("[ansible] boostrap ...\n")
 	buf := new(bytes.Buffer)
 	if debug {
@@ -87,7 +87,7 @@ func (c *TiClusterByAnsible) boostrap() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) Deploy() error {
+func (c *AnsibleCluster) Deploy() error {
 	fmt.Printf("[ansible] deploy ...\n")
 	if debug {
 		return nil
@@ -101,7 +101,7 @@ func (c *TiClusterByAnsible) Deploy() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) Run() error {
+func (c *AnsibleCluster) Run() error {
 	fmt.Printf("[ansible] run ...\n")
 	if debug {
 		return nil
@@ -116,7 +116,7 @@ func (c *TiClusterByAnsible) Run() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) Stop() error {
+func (c *AnsibleCluster) Stop() error {
 	fmt.Printf("[ansible] stop ...\n")
 	if debug {
 		return nil
@@ -130,7 +130,7 @@ func (c *TiClusterByAnsible) Stop() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) Reset() error {
+func (c *AnsibleCluster) Reset() error {
 	fmt.Printf("[ansible] reset ...\n")
 	if debug {
 		return nil
@@ -144,11 +144,11 @@ func (c *TiClusterByAnsible) Reset() error {
 	return nil
 }
 
-func (c *TiClusterByAnsible) checkAvaiable() (bool, error) {
+func (c *AnsibleCluster) checkAvaiable() (bool, error) {
 	return true, nil
 }
 
-func (c *TiClusterByAnsible) Destory() error {
+func (c *AnsibleCluster) Destory() error {
 	fmt.Printf("[ansible] destory ...\n")
 	if debug {
 		return nil

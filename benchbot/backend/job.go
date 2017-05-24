@@ -8,15 +8,15 @@ import (
 )
 
 type BinPackage struct {
-	Repo       string `json:"repo"`
-	Branch     string `json:"branch"`
-	Tag        string `json:"tag"`
-	CommitHash string `json:"githash"`
-	Platform   string `json:"platform"`
-	Url        string `json:"binaryurl"`
+	Repo     string `json:"repo"`
+	Branch   string `json:"branch"`
+	Tag      string `json:"tag"`
+	GitHash  string `json:"git_hash"`
+	Platform string `json:"platform"`
+	BinUrl   string `json:"binary_url"`
 }
 
-type TestingMeta struct {
+type BenchmarkMeta struct {
 	Creator      string       `json:"user"`
 	Note         string       `json:"note"`
 	Upstream     string       `json:"from"`
@@ -27,24 +27,24 @@ type TestingMeta struct {
 	Pd           BinPackage   `json:"-"`
 }
 
-type TestingResult struct {
-	TestCases int64  `json:"test_cases"`
-	TimeCost  int64  `json:"time_cost"`
-	Success   int    `json:"success"`
-	Fail      int    `json:"failure"`
-	Message   string `json:"msg"`
+type BenchmarkResult struct {
+	Cases    int64  `json:"cases"`
+	TimeCost int64  `json:"time_cost"`
+	Success  int    `json:"success"`
+	Fail     int    `json:"failure"`
+	Message  string `json:"msg"`
 }
 
-type TestingJob struct {
-	Id         string        `json:"jobid"`
-	CreateTime string        `json:"createtime"`
-	Status     string        `json:"status"`
-	Meta       TestingMeta   `json:"meta"`
-	Result     TestingResult `json:"result"`
+type BenchmarkJob struct {
+	Id         string          `json:"jobid"`
+	CreateTime string          `json:"createtime"`
+	Status     string          `json:"status"`
+	Meta       BenchmarkMeta   `json:"meta"`
+	Result     BenchmarkResult `json:"result"`
 }
 
-func NewTestingJob() *TestingJob {
-	job := TestingJob{
+func NewBenchmarkJob() *BenchmarkJob {
+	job := BenchmarkJob{
 		Id:         GenUUID(),
 		Status:     Pending,
 		CreateTime: time.Now().Format("2006-01-02 15:04:05"),
@@ -55,10 +55,10 @@ func NewTestingJob() *TestingJob {
 
 func (pkg BinPackage) valid() bool {
 	return (len(pkg.Branch) > 0 || len(pkg.Tag) > 0) &&
-		len(pkg.CommitHash) > 0
+		len(pkg.GitHash) > 0
 }
 
-func (job *TestingJob) ParseFromRequstJSON(data []byte) error {
+func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
 	if err := json.Unmarshal(data, &job.Meta); err != nil {
 		return err
 	}
@@ -82,18 +82,18 @@ func (job *TestingJob) ParseFromRequstJSON(data []byte) error {
 	return nil
 }
 
-func (job *TestingJob) abortedError() error {
+func (job *BenchmarkJob) abortedError() error {
 	return errors.New(fmt.Sprintf("job-%s abort", job.Id))
 }
 
-func (job *TestingJob) Valid() bool {
+func (job *BenchmarkJob) Valid() bool {
 	basic := len(job.Meta.Creator) > 0
 	return basic && job.Meta.TiDB.valid() && job.Meta.TiKV.valid() && job.Meta.Pd.valid()
 }
 
-func (job *TestingJob) Run() error {
+func (job *BenchmarkJob) Run() error {
 	defer func() {
-		job.Status = Finish
+		job.Status = Finished
 	}()
 
 	tiCluster, err := job.initCluster()
@@ -101,15 +101,15 @@ func (job *TestingJob) Run() error {
 		return err
 	}
 
-	if err := job.runTesting(tiCluster); err != nil {
+	if err := job.runBenchmark(tiCluster); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (job *TestingJob) initCluster() (TiCulster, error) {
-	if job.Status == Abort {
+func (job *BenchmarkJob) initCluster() (TiCulster, error) {
+	if job.Status == Aborted {
 		return nil, job.abortedError()
 	}
 	job.Status = Deploying
@@ -120,12 +120,12 @@ func (job *TestingJob) initCluster() (TiCulster, error) {
 		tikv: &job.Meta.TiKV,
 		pd:   &job.Meta.Pd,
 	}
-	tiCluster := newTiClusterByAnsible(tiCfg)
+	tiCluster := newAnsibleCluster(tiCfg)
 
 	ops := [](func() error){tiCluster.Prepare, tiCluster.Deploy, tiCluster.Run}
 	// TODO ... merge pre operation into one
 	for _, op := range ops {
-		if job.Status == Abort {
+		if job.Status == Aborted {
 			return nil, job.abortedError()
 		}
 
@@ -138,20 +138,20 @@ func (job *TestingJob) initCluster() (TiCulster, error) {
 	return tiCluster, nil
 }
 
-func (job *TestingJob) runTesting(cluster TiCulster) error {
+func (job *BenchmarkJob) runBenchmark(cluster TiCulster) error {
 	defer cluster.Destory()
 
 	job.Status = Running
 	// TODO ...
 
-	if job.Status == Abort {
+	if job.Status == Aborted {
 		return job.abortedError()
 	}
 
 	return nil
 }
 
-// func (job *TestingJob) cheating() {
+// func (job *BenchmarkJob) cheating() {
 // 	const simulateTime = 10
 //
 // 	fmt.Printf("[%s] job is running !\n", job.Id)
@@ -161,21 +161,19 @@ func (job *TestingJob) runTesting(cluster TiCulster) error {
 // 	}
 // }
 
-func (job *TestingJob) Abort(note string) {
-	/*
-		TODO ... status setting is not safe
-				 need to imporve it in smart way !!!
-	*/
-	job.Status = Abort
+func (job *BenchmarkJob) Abort(note string) {
+	// TODO :
+	// status setting is not safe, need to imporve it in smart way !!!
+	job.Status = Aborted
 	job.Result.Message = fmt.Sprintf("[abort] : %s\n", note)
 }
 
-func (job *TestingJob) close() {
-	job.Status = Finish
+func (job *BenchmarkJob) close() {
+	job.Status = Finished
 	// fmt.Printf("[%s] job end. !\n", job.Id)
 }
 
-func (job *TestingJob) ExportBasicInfo() map[string]interface{} {
+func (job *BenchmarkJob) ExportBasicInfo() map[string]interface{} {
 	data := make(map[string]interface{})
 	data["job_id"] = job.Id
 	data["status"] = job.Status
@@ -184,7 +182,7 @@ func (job *TestingJob) ExportBasicInfo() map[string]interface{} {
 	return data
 }
 
-func (job *TestingJob) ExportResultInfo() map[string]interface{} {
+func (job *BenchmarkJob) ExportResultInfo() map[string]interface{} {
 	data := make(map[string]interface{})
 	data["job_id"] = job.Id
 	data["res"] = job.Result
