@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 )
 
 const (
-	MsgJobIDInvalid = "Invalid job id"
+	InvalidMsgJobID = "Invalid job id"
 )
 
 type BenchmarkHandler struct {
@@ -39,7 +40,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 
 	job := NewBenchmarkJob(hdl.svr)
 	if err = job.ParseFromRequstJSON(data); err != nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "post data json incorrect : "+err.Error())
+		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrect : %s", err.Error()))
 		return
 	}
 
@@ -83,7 +84,7 @@ func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request)
 func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
 	jobID, err := Numeric(mux.Vars(r)["jobid"])
 	if err != nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, MsgJobIDInvalid)
+		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
 	}
 
@@ -97,7 +98,7 @@ func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
 func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 	jobID, err := Numeric(mux.Vars(r)["jobid"])
 	if err != nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, MsgJobIDInvalid)
+		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
 	}
 
@@ -112,7 +113,7 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 
 	success := hdl.svr.AbortBenchmark(jobID, note)
 	if !success {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "cannot abort : "+Repr(jobID))
+		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", Repr(jobID)))
 		return
 	}
 
@@ -123,13 +124,13 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request) {
 	jobID, err := Numeric(mux.Vars(r)["jobid"])
 	if err != nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, MsgJobIDInvalid)
+		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
 	}
 
 	job := hdl.svr.GetJob(jobID)
 	if job == nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, "job not found : "+Repr(jobID))
+		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("job not found : %s", Repr(jobID)))
 		return
 	}
 
