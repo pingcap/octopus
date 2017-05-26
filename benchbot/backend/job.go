@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -41,6 +42,8 @@ type BenchmarkResult struct {
 }
 
 type BenchmarkJob struct {
+	mux sync.Mutex
+
 	ID         int64           `json:"id"`
 	CreateTime string          `json:"created_time"`
 	Status     string          `json:"status"`
@@ -61,6 +64,9 @@ func (pkg BinPackage) valid() bool {
 }
 
 func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
+	job.mux.Lock()
+	defer job.mux.Unlock()
+
 	if err := json.Unmarshal(data, &job.Meta); err != nil {
 		return err
 	}
@@ -86,13 +92,18 @@ func (job *BenchmarkJob) abortedError() error {
 }
 
 func (job *BenchmarkJob) Valid() bool {
+	job.mux.Lock()
+	defer job.mux.Unlock()
+
 	basic := len(job.Meta.Creator) > 0
 	return basic && job.Meta.TiDB.valid() && job.Meta.TiKV.valid() && job.Meta.Pd.valid()
 }
 
 func (job *BenchmarkJob) Run() error {
 	defer func() {
+		job.mux.Lock()
 		job.Status = Finished
+		job.mux.Unlock()
 	}()
 
 	cluster, err := job.initCluster()
@@ -108,10 +119,12 @@ func (job *BenchmarkJob) Run() error {
 }
 
 func (job *BenchmarkJob) initCluster() (Cluster, error) {
+	job.mux.Lock()
 	if job.Status == Aborted {
 		return nil, job.abortedError()
 	}
 	job.Status = Deploying
+	job.mux.Unlock()
 
 	// TODO
 	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
@@ -125,10 +138,12 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 	}
 	defer cluster.Destory()
 
+	job.mux.Lock()
 	if job.Status == Aborted {
 		return job.abortedError()
 	}
 	job.Status = Running
+	job.mux.Unlock()
 
 	// TODO
 	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
@@ -136,13 +151,29 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 	return nil
 }
 
-func (job *BenchmarkJob) Abort(note string) {
+func (job *BenchmarkJob) Abort(note string) bool {
+	job.mux.Lock()
+	defer job.mux.Unlock()
+	if !(job.Status == Pending || job.Status == Deploying || job.Status == Running) {
+		return false
+	}
+
 	// TODO :
 	// status setting is not safe, need to imporve it in smart way !!!
 	job.Status = Aborted
 	job.Result.Message = fmt.Sprintf("[abort] : %s\n", note)
+	return true
+}
+
+func (job *BenchmarkJob) Stat() string {
+	job.mux.Lock()
+	defer job.mux.Unlock()
+	return job.Status
 }
 
 func (job *BenchmarkJob) close() {
+	job.mux.Lock()
+	defer job.mux.Unlock()
+
 	job.Status = Finished
 }

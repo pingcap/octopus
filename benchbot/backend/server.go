@@ -96,7 +96,7 @@ func (svr *Server) mainloop() {
 			}
 		}
 
-		if job == nil || job.Status != Pending {
+		if job == nil || job.Stat() != Pending {
 			continue
 		}
 
@@ -133,16 +133,19 @@ func (svr *Server) AddJob(job *BenchmarkJob) error {
 }
 
 func (svr *Server) AbortJob(jobID int64, note string) bool {
+	svr.mux.Lock()
+	defer svr.mux.Unlock()
+
 	if job, ok := svr.historysByID[jobID]; ok {
-		if job.Status == Pending || job.Status == Deploying || job.Status == Running {
-			job.Abort(note)
-			return true
-		}
+		return job.Abort(note)
 	}
 	return false
 }
 
 func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
+	svr.mux.Lock()
+	defer svr.mux.Unlock()
+
 	if job, ok := svr.historysByID[jobID]; ok {
 		return job
 	}
@@ -150,6 +153,9 @@ func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 }
 
 func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
+	svr.mux.Lock()
+	defer svr.mux.Unlock()
+
 	size := len(svr.historys)
 	if lastN == 0 {
 		lastN = defHistoryShowCount

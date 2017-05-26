@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	InvalidMsgJobID = "Invalid job id"
+	InvalidMsgJobID         = "Invalid job id"
+	defHistoryShowCount int = 10
 )
 
 type BenchmarkHandler struct {
@@ -72,7 +73,7 @@ func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Requ
 }
 
 func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
-	his := hdl.svr.GetHistoryJobs(10)
+	his := hdl.svr.GetHistoryJobs(defHistoryShowCount)
 	hdl.rdr.JSON(w, http.StatusOK, his)
 	return
 }
@@ -117,6 +118,7 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+/*
 func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request) {
 	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
@@ -133,3 +135,4 @@ func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request)
 	hdl.rdr.JSON(w, http.StatusOK, job.ExportResultInfo())
 	return
 }
+*/
