@@ -16,10 +16,9 @@ func CreateRouter(svr *Server) *mux.Router {
 	hdl := newBenchmarkHandler(svr, rdr)
 	// benchmark running request
 	r.HandleFunc("/bench/plan", hdl.Plan).Methods("POST")
-	r.HandleFunc("/bench/release/plan", hdl.PlanRelease).Methods("POST")
 	// benchmark job
-	r.HandleFunc("/bench/job/{jobid}", hdl.QueryJob).Methods("GET")
-	r.HandleFunc("/bench/job/{jobid}", hdl.AbortJob).Methods("DELETE")
+	r.HandleFunc("/bench/job/{id}", hdl.QueryJob).Methods("GET")
+	r.HandleFunc("/bench/job/{id}", hdl.AbortJob).Methods("DELETE")
 	// benchmark summary
 	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
 	r.HandleFunc("/bench/history", hdl.ShowHistory).Methods("GET")

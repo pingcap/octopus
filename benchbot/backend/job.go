@@ -42,19 +42,17 @@ type BenchmarkResult struct {
 
 type BenchmarkJob struct {
 	ID         int64           `json:"id"`
-	CreateTime string          `json:"createtime"`
+	CreateTime string          `json:"created_time"`
 	Status     string          `json:"status"`
 	Meta       BenchmarkMeta   `json:"meta"`
 	Result     BenchmarkResult `json:"result"`
-	server     *Server
 }
 
 func NewBenchmarkJob(svr *Server) *BenchmarkJob {
 	return &BenchmarkJob{
-		ID:         svr.uuidCenter.ApplyNext(BenchmarkJobUUID),
+		ID:         svr.uuidAllocator.Gen(BenchmarkJobUUID),
 		Status:     Pending,
 		CreateTime: time.Now().Format(TimeFormat),
-		server:     svr,
 	}
 }
 
@@ -71,15 +69,12 @@ func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
 		switch item.Repo {
 		case "tidb":
 			job.Meta.TiDB = item
-			break
 		case "tikv":
 			job.Meta.TiKV = item
-			break
 		case "pd":
 			job.Meta.Pd = item
-			break
 		default:
-			break
+			return errors.New(fmt.Sprint("unsupported item : ", item.Repo))
 		}
 	}
 
@@ -105,7 +100,7 @@ func (job *BenchmarkJob) Run() error {
 		return err
 	}
 
-	if err := job.runBenchmark(cluster); err != nil {
+	if err := job.run(cluster); err != nil {
 		return err
 	}
 
@@ -124,7 +119,7 @@ func (job *BenchmarkJob) initCluster() (Cluster, error) {
 	return nil, errors.New("cluster init failed.")
 }
 
-func (job *BenchmarkJob) runBenchmark(cluster Cluster) error {
+func (job *BenchmarkJob) run(cluster Cluster) error {
 	if cluster == nil || cluster.Valid() {
 		return errors.New("cluster init failed.")
 	}
@@ -150,20 +145,4 @@ func (job *BenchmarkJob) Abort(note string) {
 
 func (job *BenchmarkJob) close() {
 	job.Status = Finished
-}
-
-func (job *BenchmarkJob) ExportBasicInfo() map[string]interface{} {
-	data := make(map[string]interface{})
-	data["job_id"] = job.ID
-	data["status"] = job.Status
-	data["createtime"] = job.CreateTime
-	data["meta"] = job.Meta
-	return data
-}
-
-func (job *BenchmarkJob) ExportResultInfo() map[string]interface{} {
-	data := make(map[string]interface{})
-	data["job_id"] = job.ID
-	data["res"] = job.Result
-	return data
 }

@@ -2,11 +2,11 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
 	"encoding/json"
+	"golang.org/x/net/context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +37,8 @@ func setup() *httptest.Server {
 		AnsibleBinsDir:      "./ansible/resources/bin",
 	} // TODO ... load from toml file
 
-	svr := NewServer(cfg)
+	ctx, _ := context.WithCancel(context.Background())
+	svr := NewServer(cfg, ctx)
 	router := CreateRouter(svr)
 	return httptest.NewServer(router)
 }
@@ -90,8 +91,6 @@ func requestNewBenchmark(httpSvr *httptest.Server) (int64, error) {
 }
 
 func TestNewTask(t *testing.T) {
-	fmt.Printf("[TestNewTask]\n")
-
 	testServer := setup()
 	defer teardown(testServer)
 
@@ -103,8 +102,6 @@ func TestNewTask(t *testing.T) {
 }
 
 func TestShowSummary(t *testing.T) {
-	fmt.Printf("[TestShowSummary]\n")
-
 	testServer := setup()
 	defer teardown(testServer)
 
@@ -122,8 +119,6 @@ func TestShowSummary(t *testing.T) {
 }
 
 func TestShowHistory(t *testing.T) {
-	fmt.Printf("[TestShowHistory]\n")
-
 	testServer := setup()
 	defer teardown(testServer)
 
@@ -146,8 +141,6 @@ func TestShowHistory(t *testing.T) {
 }
 
 func JobQuery(t *testing.T) {
-	fmt.Printf("[JobQuery]\n")
-
 	testServer := setup()
 	defer teardown(testServer)
 
@@ -156,7 +149,7 @@ func JobQuery(t *testing.T) {
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("GET", testServer.URL+"/bench/job/"+Repr(jobID), reader)
+	request, err := http.NewRequest("GET", testServer.URL+"/bench/job/"+FormatInt64(jobID), reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)
@@ -175,8 +168,6 @@ func JobQuery(t *testing.T) {
 }
 
 func TestAbortJob(t *testing.T) {
-	fmt.Printf("[TestAbortJob]\n")
-
 	testServer := setup()
 	defer teardown(testServer)
 
@@ -185,7 +176,7 @@ func TestAbortJob(t *testing.T) {
 
 	// query
 	reader := strings.NewReader("")
-	request, err := http.NewRequest("DELETE", testServer.URL+"/bench/job/"+Repr(jobID), reader)
+	request, err := http.NewRequest("DELETE", testServer.URL+"/bench/job/"+FormatInt64(jobID), reader)
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Error(err)

@@ -4,18 +4,18 @@ import (
 	"sync"
 )
 
-type UUIDCenter struct {
+type UUIDAllocator struct {
 	uuids map[string]int64
 	mux   sync.Mutex
 }
 
-func NewUUIDCenter() *UUIDCenter {
-	return &UUIDCenter{
+func NewUUIDAllocator() *UUIDAllocator {
+	return &UUIDAllocator{
 		uuids: make(map[string]int64),
 	}
 }
 
-func (c *UUIDCenter) ApplyNext(name string) int64 {
+func (c *UUIDAllocator) Gen(name string) int64 {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 

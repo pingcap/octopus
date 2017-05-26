@@ -13,15 +13,15 @@ import (
 	"path/filepath"
 )
 
-func Numeric(val string) (int64, error) {
+func ParseInt64(val string) (int64, error) {
 	if num, err := strconv.ParseInt(string(val), 10, 64); err != nil {
-		return -0xFFFFFF, err
+		return 0, err
 	} else {
 		return num, nil
 	}
 }
 
-func Repr(n int64) string {
+func FormatInt64(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
 
@@ -58,6 +58,11 @@ func ExecCmd(command string, output io.Writer) bool {
 }
 
 func Download(resourceUrl string, localPath string) (int64, error) {
+	setup := func() {
+
+	}
+	setup()
+
 	// local prepare
 	os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
 	f, err := os.Create(localPath)
@@ -79,7 +84,8 @@ func Download(resourceUrl string, localPath string) (int64, error) {
 	}
 
 	// local save
-	bytes, _ := io.Copy(f, res.Body)
+	bytes, err := io.Copy(f, res.Body)
+	res.Body.Close()
 
-	return bytes, nil
+	return bytes, err
 }

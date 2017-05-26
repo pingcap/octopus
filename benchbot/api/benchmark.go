@@ -49,27 +49,23 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hdl.svr.ApplyBenchmark(job)
+	if err = hdl.svr.AddJob(job); err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, "job creating failed !")
+		return
+	}
 
 	resp := map[string]interface{}{"id": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
 }
 
-func (hdl *BenchmarkHandler) PlanRelease(w http.ResponseWriter, r *http.Request) {
-	// TODO
-	hdl.rdr.JSON(w, http.StatusBadRequest, "not supported yet !")
-	return
-}
-
 func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Request) {
-	var info SummaryInfo
-	hdl.svr.DumpInfo(&info)
+	summary := hdl.svr.DumpSummary()
 
 	resp := map[string]interface{}{
-		"running_count": info.RunningCount,
-		"pending_count": info.PendingCount,
-		"history_count": info.HistoryCount,
+		"running_count": summary.RunningCount,
+		"pending_count": summary.PendingCount,
+		"history_count": summary.HistoryCount,
 	}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 	return
@@ -82,7 +78,7 @@ func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request)
 }
 
 func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := Numeric(mux.Vars(r)["jobid"])
+	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
@@ -96,7 +92,7 @@ func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := Numeric(mux.Vars(r)["jobid"])
+	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
@@ -111,9 +107,9 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	success := hdl.svr.AbortBenchmark(jobID, note)
+	success := hdl.svr.AbortJob(jobID, note)
 	if !success {
-		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", Repr(jobID)))
+		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", FormatInt64(jobID)))
 		return
 	}
 
@@ -122,7 +118,7 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request) {
-	jobID, err := Numeric(mux.Vars(r)["jobid"])
+	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
@@ -130,7 +126,7 @@ func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request)
 
 	job := hdl.svr.GetJob(jobID)
 	if job == nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("job not found : %s", Repr(jobID)))
+		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("job not found : %s", FormatInt64(jobID)))
 		return
 	}
 

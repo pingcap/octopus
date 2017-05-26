@@ -2,19 +2,22 @@ package backend
 
 import (
 	"errors"
-	"fmt"
 	"sync"
-	"time"
+
+	"golang.org/x/net/context"
 )
 
 const (
-	penndingJobLimit int = 10
+	penndingJobLimit    int = 10
+	defHistoryShowCount int = 10
 )
 
 type Server struct {
-	end        bool
-	wg         sync.WaitGroup
-	uuidCenter *UUIDCenter
+	wg  sync.WaitGroup
+	mux sync.Mutex
+	ctx context.Context
+
+	uuidAllocator *UUIDAllocator
 
 	jobs         chan *BenchmarkJob
 	runningJob   *BenchmarkJob
@@ -22,17 +25,17 @@ type Server struct {
 	historysByID map[int64]*BenchmarkJob
 }
 
-type SummaryInfo struct {
+type Summary struct {
 	RunningCount int
 	PendingCount int
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig) *Server {
+func NewServer(cfg *ServerConfig, ctx context.Context) *Server {
 	svr := new(Server)
-	svr.end = false
 	svr.wg = sync.WaitGroup{}
-	svr.uuidCenter = NewUUIDCenter()
+	svr.ctx = ctx
+	svr.uuidAllocator = NewUUIDAllocator()
 
 	svr.runningJob = nil
 	svr.jobs = make(chan *BenchmarkJob, penndingJobLimit)
@@ -44,63 +47,92 @@ func NewServer(cfg *ServerConfig) *Server {
 	return svr
 }
 
+/*
 func (svr *Server) initLogger(logRoot string) error {
 	return nil
 }
+*/
 
 func (svr *Server) Close() {
+	svr.mux.Lock()
+	defer svr.mux.Unlock()
+
+	if svr.runningJob != nil {
+		svr.runningJob.Abort("close server")
+	}
 	close(svr.jobs)
+	svr.wg.Wait()
 }
 
-func (svr *Server) DumpInfo(info *SummaryInfo) {
-	info.PendingCount = len(svr.jobs)
-	info.HistoryCount = len(svr.historys)
-	info.RunningCount = 0
+func (svr *Server) DumpSummary() *Summary {
+	info := &Summary{
+		PendingCount: len(svr.jobs),
+		HistoryCount: len(svr.historys),
+		RunningCount: 0,
+	}
+
 	if svr.runningJob != nil {
 		info.RunningCount = 1
 	}
+
+	return info
 }
 
-func (svr *Server) mainloop() error {
+func (svr *Server) mainloop() {
+	svr.wg.Add(1)
+	defer svr.wg.Done()
+
 	var err error
-	for !svr.end {
-		job, ok := <-svr.jobs
-		if !ok {
-			break
+	var job *BenchmarkJob
+	var ok, end bool = false, false
+
+	for !end {
+		select {
+		case <-svr.ctx.Done():
+			end = true
+		case job, ok = <-svr.jobs:
+			if !ok {
+				job = nil
+			}
 		}
 
-		if job.Status != Pending {
+		if job == nil || job.Status != Pending {
 			continue
 		}
 
-		svr.wg.Add(1)
-		svr.runningJob = job
+		svr.setRunningJob(job)
 		if err = job.Run(); err != nil {
-			fmt.Printf("[%d] job run failed : %s !\n", job.ID, err.Error())
+			// fmt.Printf("[%d] job run failed : %s !\n", job.ID, err.Error())
 			// TODO ... replace by logger
 		}
-		svr.runningJob = nil
-		svr.wg.Done()
+		svr.setRunningJob(nil)
 	}
-	return nil
+	return
 }
 
-func (svr *Server) ApplyBenchmark(job *BenchmarkJob) error {
-	var err error = nil
+func (svr *Server) setRunningJob(job *BenchmarkJob) {
+	svr.mux.Lock()
+	svr.runningJob = job
+	svr.mux.Unlock()
+}
 
+func (svr *Server) AddJob(job *BenchmarkJob) error {
+	svr.mux.Lock()
+	defer svr.mux.Unlock()
+
+	var err error = nil
 	select {
-	case <-time.After(time.Second * 1):
-		err = errors.New("too many jobs waitting !")
-		break
 	case svr.jobs <- job:
 		svr.historys = append(svr.historys, job)
 		svr.historysByID[job.ID] = job
 		break
+	default:
+		return errors.New("too many jobs waitting !")
 	}
 	return err
 }
 
-func (svr *Server) AbortBenchmark(jobID int64, note string) bool {
+func (svr *Server) AbortJob(jobID int64, note string) bool {
 	if job, ok := svr.historysByID[jobID]; ok {
 		if job.Status == Pending || job.Status == Deploying || job.Status == Running {
 			job.Abort(note)
@@ -119,13 +151,16 @@ func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 
 func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 	size := len(svr.historys)
+	if lastN == 0 {
+		lastN = defHistoryShowCount
+	}
 	if lastN < size {
 		size = lastN
 	}
 
-	his := make([]*BenchmarkJob, 0)
+	his := make([]*BenchmarkJob, size)
 	for i := 0; i < size; i++ {
-		his = append(his, svr.historys[i])
+		his[i] = svr.historys[i]
 	}
 
 	return his

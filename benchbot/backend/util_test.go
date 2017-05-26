@@ -12,11 +12,11 @@ func TestTypeConvert(t *testing.T) {
 	var sz string = "1234"
 	var num int64 = 1234
 
-	if Repr(num) != sz {
+	if FormatInt64(num) != sz {
 		t.Error("repr failed !")
 	}
 
-	if n, err := Numeric(sz); err != nil || n != num {
+	if n, err := ParseInt64(sz); err != nil || n != num {
 		t.Error("numeric failed !")
 	}
 }
@@ -54,10 +54,10 @@ func TestSysCmdExecutor(t *testing.T) {
 }
 
 func TestHttpDownloader(t *testing.T) {
-	saveTo := "./logo.png"
+	saveTo := "./download-file"
 	defer os.Remove(saveTo)
 
-	if fsize, err := Download("http://www.baidu.com/img/bd_logo1.png", saveTo); err != nil {
+	if fsize, err := Download("http://download.pingcap.org/tidb-latest-linux-amd64.sha256", saveTo); err != nil {
 		t.Error("http download failed : ", err.Error())
 	} else if fsize <= 0 {
 		t.Error("http download failed : file empty !")

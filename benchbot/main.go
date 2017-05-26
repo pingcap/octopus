@@ -43,23 +43,16 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	// TODO .. load from toml file
-	cfg := &backend.ServerConfig{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &backend.ServerConfig{} // TODO .. load from toml file
 
-	svr := backend.NewServer(cfg)
+	svr := backend.NewServer(cfg, ctx)
 	r := api.CreateRouter(svr)
 	go func() {
 		http.ListenAndServe(addr, r)
 	}()
 
-	// Here just to force generating vendor
-	// we will remove it later.
-	context.Background()
-
 	<-sig
+	cancel()
 	svr.Close()
-
-	// Here just to force generating vendor
-	// we will remove it later.
-	context.Background()
 }
