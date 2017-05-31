@@ -8,21 +8,23 @@ import (
 )
 
 const (
-	penndingJobLimit    int = 10
-	defHistoryShowCount int = 10
+	penndingJobLimit        int = 10
+	defaultHistoryShowCount int = 10
 )
 
 type Server struct {
 	wg  sync.WaitGroup
-	mux sync.Mutex
-	ctx context.Context
+	mux sync.RWMutex
+
+	ctx             context.Context
+	suspendMainloop context.CancelFunc
 
 	uuidAllocator *UUIDAllocator
 
-	jobs         chan *BenchmarkJob
-	runningJob   *BenchmarkJob
-	historys     []*BenchmarkJob
-	historysByID map[int64]*BenchmarkJob
+	runningJob *BenchmarkJob
+	orders     chan *BenchmarkJob
+	jobs       []*BenchmarkJob
+	jobsByID   map[int64]*BenchmarkJob
 }
 
 type Summary struct {
@@ -31,17 +33,17 @@ type Summary struct {
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig, ctx context.Context) *Server {
+func NewServer(cfg *ServerConfig) *Server {
 	svr := new(Server)
-	svr.wg = sync.WaitGroup{}
-	svr.ctx = ctx
+	svr.ctx, svr.suspendMainloop = context.WithCancel(context.Background())
 	svr.uuidAllocator = NewUUIDAllocator()
 
 	svr.runningJob = nil
-	svr.jobs = make(chan *BenchmarkJob, penndingJobLimit)
-	svr.historys = make([]*BenchmarkJob, 0, 1024) // TODO ...
-	svr.historysByID = make(map[int64]*BenchmarkJob)
+	svr.orders = make(chan *BenchmarkJob, penndingJobLimit)
+	svr.jobs = make([]*BenchmarkJob, 0, 1024) // TODO ...
+	svr.jobsByID = make(map[int64]*BenchmarkJob)
 
+	svr.wg.Add(1)
 	go svr.mainloop()
 
 	return svr
@@ -57,18 +59,18 @@ func (svr *Server) Close() {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	if svr.runningJob != nil {
-		svr.runningJob.Abort("close server")
-	}
-	close(svr.jobs)
+	svr.suspendMainloop()
 	svr.wg.Wait()
 }
 
 func (svr *Server) DumpSummary() *Summary {
+	svr.mux.RLock()
+	defer svr.mux.RUnlock()
+
 	info := &Summary{
-		PendingCount: len(svr.jobs),
-		HistoryCount: len(svr.historys),
+		PendingCount: len(svr.orders),
 		RunningCount: 0,
+		HistoryCount: len(svr.jobs),
 	}
 
 	if svr.runningJob != nil {
@@ -79,25 +81,19 @@ func (svr *Server) DumpSummary() *Summary {
 }
 
 func (svr *Server) mainloop() {
-	svr.wg.Add(1)
 	defer svr.wg.Done()
 
 	var err error
 	var job *BenchmarkJob
-	var ok, end bool = false, false
 
-	for !end {
+	for {
 		select {
-		case <-svr.ctx.Done():
-			end = true
-		case job, ok = <-svr.jobs:
-			if !ok {
-				job = nil
+		case job, _ = <-svr.orders:
+			if job == nil {
+				continue
 			}
-		}
-
-		if job == nil || job.Stat() != Pending {
-			continue
+		case <-svr.ctx.Done():
+			return
 		}
 
 		svr.setRunningJob(job)
@@ -107,6 +103,7 @@ func (svr *Server) mainloop() {
 		}
 		svr.setRunningJob(nil)
 	}
+
 	return
 }
 
@@ -117,15 +114,12 @@ func (svr *Server) setRunningJob(job *BenchmarkJob) {
 }
 
 func (svr *Server) AddJob(job *BenchmarkJob) error {
-	svr.mux.Lock()
-	defer svr.mux.Unlock()
-
 	var err error = nil
 	select {
-	case svr.jobs <- job:
-		svr.historys = append(svr.historys, job)
-		svr.historysByID[job.ID] = job
-		break
+	case svr.orders <- job:
+		// nothing to do
+		svr.jobs = append(svr.jobs, job)
+		svr.jobsByID[job.ID] = job
 	default:
 		return errors.New("too many jobs waitting !")
 	}
@@ -136,29 +130,29 @@ func (svr *Server) AbortJob(jobID int64, note string) bool {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	if job, ok := svr.historysByID[jobID]; ok {
+	if job, ok := svr.jobsByID[jobID]; ok {
 		return job.Abort(note)
 	}
 	return false
 }
 
 func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
-	svr.mux.Lock()
-	defer svr.mux.Unlock()
+	svr.mux.RLock()
+	defer svr.mux.RUnlock()
 
-	if job, ok := svr.historysByID[jobID]; ok {
+	if job, ok := svr.jobsByID[jobID]; ok {
 		return job
 	}
 	return nil
 }
 
 func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
-	svr.mux.Lock()
-	defer svr.mux.Unlock()
+	svr.mux.RLock()
+	defer svr.mux.RUnlock()
 
-	size := len(svr.historys)
+	size := len(svr.jobs)
 	if lastN == 0 {
-		lastN = defHistoryShowCount
+		lastN = defaultHistoryShowCount
 	}
 	if lastN < size {
 		size = lastN
@@ -166,7 +160,7 @@ func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 
 	his := make([]*BenchmarkJob, size)
 	for i := 0; i < size; i++ {
-		his[i] = svr.historys[i]
+		his[i] = svr.jobs[i]
 	}
 
 	return his

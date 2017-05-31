@@ -74,6 +74,13 @@ func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Requ
 
 func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
 	his := hdl.svr.GetHistoryJobs(defHistoryShowCount)
+
+	// hisCount := len(objHis)
+	// strHis := make([]string, 0, hisCount)
+	// for i := 0; i < len(objHis); i++ {
+	// 	strHis = append(strHis, objHis[i].DumpToJson())
+	// }
+
 	hdl.rdr.JSON(w, http.StatusOK, his)
 	return
 }

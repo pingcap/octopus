@@ -42,7 +42,7 @@ type BenchmarkResult struct {
 }
 
 type BenchmarkJob struct {
-	mux sync.Mutex
+	mux sync.RWMutex
 
 	ID         int64           `json:"id"`
 	CreateTime string          `json:"created_time"`
@@ -87,13 +87,25 @@ func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
 	return nil
 }
 
+func (job *BenchmarkJob) DumpToJson() string {
+	job.mux.RLock()
+	defer job.mux.RUnlock()
+
+	data, err := json.Marshal(job)
+	if err != nil {
+		data = []byte{}
+	}
+
+	return string(data)
+}
+
 func (job *BenchmarkJob) abortedError() error {
 	return fmt.Errorf("job [%s] aborted", job.ID)
 }
 
 func (job *BenchmarkJob) Valid() bool {
-	job.mux.Lock()
-	defer job.mux.Unlock()
+	job.mux.RLock()
+	defer job.mux.RUnlock()
 
 	basic := len(job.Meta.Creator) > 0
 	return basic && job.Meta.TiDB.valid() && job.Meta.TiKV.valid() && job.Meta.Pd.valid()
@@ -119,15 +131,13 @@ func (job *BenchmarkJob) Run() error {
 }
 
 func (job *BenchmarkJob) initCluster() (Cluster, error) {
-	job.mux.Lock()
-	if job.Status == Aborted {
-		return nil, job.abortedError()
+	if err := job.updateStatus(Deploying); err != nil {
+		return nil, err
 	}
-	job.Status = Deploying
-	job.mux.Unlock()
 
-	// TODO
 	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
+
+	// TODO ... seperate whole progress into bunch of operations
 
 	return nil, errors.New("cluster init failed.")
 }
@@ -138,22 +148,33 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 	}
 	defer cluster.Destory()
 
+	if err := job.updateStatus(Running); err != nil {
+		return err
+	}
+
+	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
+
+	// TODO ... seperate whole progress into bunch of operations
+
+	return nil
+}
+
+func (job *BenchmarkJob) updateStatus(stat string) error {
 	job.mux.Lock()
+	defer job.mux.Unlock()
+
 	if job.Status == Aborted {
 		return job.abortedError()
 	}
-	job.Status = Running
-	job.mux.Unlock()
 
-	// TODO
-	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
-
+	job.Status = stat
 	return nil
 }
 
 func (job *BenchmarkJob) Abort(note string) bool {
 	job.mux.Lock()
 	defer job.mux.Unlock()
+
 	if !(job.Status == Pending || job.Status == Deploying || job.Status == Running) {
 		return false
 	}
@@ -166,14 +187,8 @@ func (job *BenchmarkJob) Abort(note string) bool {
 }
 
 func (job *BenchmarkJob) Stat() string {
-	job.mux.Lock()
-	defer job.mux.Unlock()
+	job.mux.RLock()
+	defer job.mux.RUnlock()
+
 	return job.Status
-}
-
-func (job *BenchmarkJob) close() {
-	job.mux.Lock()
-	defer job.mux.Unlock()
-
-	job.Status = Finished
 }

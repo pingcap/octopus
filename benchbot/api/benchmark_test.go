@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"encoding/json"
-	"golang.org/x/net/context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -37,8 +36,7 @@ func setup() *httptest.Server {
 		AnsibleBinsDir:      "./ansible/resources/bin",
 	} // TODO ... load from toml file
 
-	ctx, _ := context.WithCancel(context.Background())
-	svr := NewServer(cfg, ctx)
+	svr := NewServer(cfg)
 	router := CreateRouter(svr)
 	return httptest.NewServer(router)
 }

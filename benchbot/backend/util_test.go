@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jarcoal/httpmock"
 )
 
 func TestTypeConvert(t *testing.T) {
@@ -54,10 +56,18 @@ func TestSysCmdExecutor(t *testing.T) {
 }
 
 func TestHttpDownloader(t *testing.T) {
+	url := "http://personal.cqc.com/test.md"
 	saveTo := "./download-file"
-	defer os.Remove(saveTo)
+	httpmock.Activate()
+	defer func() {
+		httpmock.DeactivateAndReset()
+		os.Remove(saveTo)
+	}()
 
-	if fsize, err := Download("http://download.pingcap.org/tidb-latest-linux-amd64.sha256", saveTo); err != nil {
+	httpmock.RegisterResponder("GET", url,
+		httpmock.NewBytesResponder(200, []byte(`** Markdown Format **`)))
+
+	if fsize, err := Download(url, saveTo); err != nil {
 		t.Error("http download failed : ", err.Error())
 	} else if fsize <= 0 {
 		t.Error("http download failed : file empty !")

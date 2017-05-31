@@ -10,7 +10,6 @@ import (
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/pkg/util"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -43,16 +42,14 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	cfg := &backend.ServerConfig{} // TODO .. load from toml file
+	svr := backend.NewServer(cfg)
 
-	svr := backend.NewServer(cfg, ctx)
 	r := api.CreateRouter(svr)
 	go func() {
 		http.ListenAndServe(addr, r)
 	}()
 
 	<-sig
-	cancel()
 	svr.Close()
 }
