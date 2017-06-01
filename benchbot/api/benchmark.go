@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
+	log "github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
@@ -17,16 +18,14 @@ const (
 )
 
 type BenchmarkHandler struct {
-	rdr    *render.Render
-	svr    *Server
-	logger *Logger
+	rdr *render.Render
+	svr *Server
 }
 
 func newBenchmarkHandler(svr *Server, rdr *render.Render) *BenchmarkHandler {
 	hdl := &BenchmarkHandler{
-		rdr:    rdr,
-		svr:    svr,
-		logger: svr.Log,
+		rdr: rdr,
+		svr: svr,
 	}
 
 	return hdl
@@ -43,7 +42,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 
 	job := NewBenchmarkJob(hdl.svr)
 	if err = job.ParseFromRequstJSON(data); err != nil {
-		hdl.logger.LogE("invalid json data - %s", data)
+		log.Errorf("invalid json data - %s", data)
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrect : %s", err.Error()))
 		return
 	}
@@ -58,7 +57,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hdl.logger.Log("new bench job : id = %d / user = %s", job.ID, job.Meta.Creator)
+	log.Infof("new bench job : id = %d / user = %s", job.ID, job.Meta.Creator)
 
 	resp := map[string]interface{}{"id": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
@@ -127,7 +126,7 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hdl.logger.Log("bench job aborted : id = %d \n", jobID)
+	log.Infof("bench job aborted : id = %d \n", jobID)
 
 	hdl.rdr.JSON(w, http.StatusOK, "ok")
 	return

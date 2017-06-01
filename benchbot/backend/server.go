@@ -7,6 +7,7 @@ import (
 	"path"
 	"sync"
 
+	log "github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
 
@@ -20,7 +21,6 @@ type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
-	Log             *Logger
 	conf            *ServerConfig
 	ctx             context.Context
 	suspendMainloop context.CancelFunc
@@ -55,7 +55,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 
 	svr.wg.Add(1)
 	go svr.mainloop()
-	svr.Log.Log("Server running ...")
+	log.Info("Server running ...")
 
 	return svr, nil
 }
@@ -66,28 +66,17 @@ func (svr *Server) init() (err error) {
 		return
 	}
 
-	logFilePath := path.Join(svr.conf.Dir, logFileName)
-	svr.Log, err = NewLogger(logFilePath)
-	// err = svr.initLogger(logFilePath)
+	err = svr.initLogger()
 
 	return
 }
 
-/*
-func (svr *Server) initLogger(logFilePath string) error {
-	fileFlag := os.O_RDWR | os.O_CREATE | os.O_APPEND
-	file, err := os.OpenFile(logFilePath, fileFlag, 0666)
-	if err != nil {
-		return err
-	}
-
-	log.SetFormatter(&log.JSONFormatter{})
-	// log.SetLevel(log.WarnLevel)
-	log.SetOutput(file)
-
-	return nil
+func (svr *Server) initLogger() error {
+	logFilepath := path.Join(svr.conf.Dir, logFileName)
+	log.SetRotateByDay()
+	log.SetHighlighting(false)
+	return log.SetOutputByName(logFilepath)
 }
-*/
 
 func (svr *Server) Close() {
 	svr.mux.Lock()
@@ -95,7 +84,6 @@ func (svr *Server) Close() {
 
 	svr.suspendMainloop()
 	svr.wg.Wait()
-	svr.Log.Close()
 }
 
 func (svr *Server) DumpSummary() *Summary {
@@ -120,7 +108,6 @@ func (svr *Server) mainloop() {
 
 	var err error
 	var job *BenchmarkJob
-	var logger *Logger = svr.Log
 
 	for {
 		select {
@@ -134,7 +121,7 @@ func (svr *Server) mainloop() {
 
 		svr.setRunningJob(job)
 		if err = job.Run(); err != nil {
-			logger.LogE("job-[%s] run failed : %s !", job.ID, err.Error())
+			log.Errorf("job-[%d] run failed : %s !", job.ID, err.Error())
 		}
 		svr.setRunningJob(nil)
 	}

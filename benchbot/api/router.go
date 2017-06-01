@@ -6,13 +6,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
+	log "github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
 func httpRequestMiddleware(h http.Handler, svr *Server) http.Handler {
-	logger := svr.Log
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Log("HttpRequst - %s - %s - %s", r.RemoteAddr, r.Method, r.URL)
+		log.Infof("HttpRequst - %s - %s - %s", r.RemoteAddr, r.Method, r.URL)
 		h.ServeHTTP(w, r)
 	})
 }
