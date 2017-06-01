@@ -2,9 +2,14 @@ package main
 
 import (
 	"flag"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/pingcap/octopus/benchbot/api"
+	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/pkg/util"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -28,7 +33,23 @@ func main() {
 		return
 	}
 
-	// Here just to force generating vendor
-	// we will remove it later.
-	context.Background()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig,
+		os.Kill,
+		os.Interrupt,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	cfg := &backend.ServerConfig{} // TODO .. load from toml file
+	svr := backend.NewServer(cfg)
+
+	r := api.CreateRouter(svr)
+	go func() {
+		http.ListenAndServe(addr, r)
+	}()
+
+	<-sig
+	svr.Close()
 }
