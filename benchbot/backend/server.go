@@ -2,20 +2,26 @@ package backend
 
 import (
 	"errors"
+	//"fmt"
+	"os"
+	"path"
 	"sync"
 
 	"golang.org/x/net/context"
 )
 
 const (
-	penndingJobLimit        int = 10
-	defaultHistoryShowCount int = 10
+	penndingJobLimit        int    = 10
+	defaultHistoryShowCount int    = 10
+	logFileName             string = "server.log"
 )
 
 type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
+	Log             *Logger
+	conf            *ServerConfig
 	ctx             context.Context
 	suspendMainloop context.CancelFunc
 
@@ -33,8 +39,12 @@ type Summary struct {
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig) *Server {
-	svr := new(Server)
+func NewServer(cfg *ServerConfig) (*Server, error) {
+	svr := &Server{conf: cfg}
+	if err := svr.init(); err != nil {
+		return nil, err
+	}
+
 	svr.ctx, svr.suspendMainloop = context.WithCancel(context.Background())
 	svr.uuidAllocator = NewUUIDAllocator()
 
@@ -45,12 +55,36 @@ func NewServer(cfg *ServerConfig) *Server {
 
 	svr.wg.Add(1)
 	go svr.mainloop()
+	svr.Log.Log("Server running ...")
 
-	return svr
+	return svr, nil
+}
+
+func (svr *Server) init() (err error) {
+	err = os.MkdirAll(svr.conf.Dir, os.ModePerm)
+	if err != nil {
+		return
+	}
+
+	logFilePath := path.Join(svr.conf.Dir, logFileName)
+	svr.Log, err = NewLogger(logFilePath)
+	// err = svr.initLogger(logFilePath)
+
+	return
 }
 
 /*
-func (svr *Server) initLogger(logRoot string) error {
+func (svr *Server) initLogger(logFilePath string) error {
+	fileFlag := os.O_RDWR | os.O_CREATE | os.O_APPEND
+	file, err := os.OpenFile(logFilePath, fileFlag, 0666)
+	if err != nil {
+		return err
+	}
+
+	log.SetFormatter(&log.JSONFormatter{})
+	// log.SetLevel(log.WarnLevel)
+	log.SetOutput(file)
+
 	return nil
 }
 */
@@ -61,6 +95,7 @@ func (svr *Server) Close() {
 
 	svr.suspendMainloop()
 	svr.wg.Wait()
+	svr.Log.Close()
 }
 
 func (svr *Server) DumpSummary() *Summary {
@@ -85,6 +120,7 @@ func (svr *Server) mainloop() {
 
 	var err error
 	var job *BenchmarkJob
+	var logger *Logger = svr.Log
 
 	for {
 		select {
@@ -98,8 +134,7 @@ func (svr *Server) mainloop() {
 
 		svr.setRunningJob(job)
 		if err = job.Run(); err != nil {
-			// fmt.Printf("[%d] job run failed : %s !\n", job.ID, err.Error())
-			// TODO ... replace by logger
+			logger.LogE("job-[%s] run failed : %s !", job.ID, err.Error())
 		}
 		svr.setRunningJob(nil)
 	}

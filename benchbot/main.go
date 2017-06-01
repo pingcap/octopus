@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,16 +14,14 @@ import (
 )
 
 var (
-	addr    string
-	version bool
+	version    bool
+	configFile string
 )
 
 func parseArgs() {
-	flag.StringVar(&addr, "addr", ":20170", "listening address")
+	flag.StringVar(&configFile, "config", "./config.toml", "server configuration")
 	flag.BoolVar(&version, "V", false, "print version information and exit")
 	flag.BoolVar(&version, "version", false, "print version information and exit")
-
-	flag.Parse()
 }
 
 func main() {
@@ -33,6 +32,24 @@ func main() {
 		return
 	}
 
+	cfg, err := backend.ParseConfig(configFile)
+	if err != nil {
+		fmt.Printf("failed to load config (%s) : %s\n", configFile, err.Error())
+		os.Exit(1)
+	}
+
+	svr, err := backend.NewServer(cfg)
+	if err != nil {
+		fmt.Printf("server running failed : %s\n", err.Error())
+		os.Exit(1)
+	}
+
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Port)
+		r := api.CreateRouter(svr)
+		http.ListenAndServe(addr, r)
+	}()
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig,
 		os.Kill,
@@ -41,14 +58,6 @@ func main() {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
-
-	cfg := &backend.ServerConfig{} // TODO .. load from toml file
-	svr := backend.NewServer(cfg)
-
-	r := api.CreateRouter(svr)
-	go func() {
-		http.ListenAndServe(addr, r)
-	}()
 
 	<-sig
 	svr.Close()

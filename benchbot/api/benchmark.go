@@ -17,14 +17,16 @@ const (
 )
 
 type BenchmarkHandler struct {
-	rdr *render.Render
-	svr *Server
+	rdr    *render.Render
+	svr    *Server
+	logger *Logger
 }
 
 func newBenchmarkHandler(svr *Server, rdr *render.Render) *BenchmarkHandler {
 	hdl := &BenchmarkHandler{
-		rdr: rdr,
-		svr: svr,
+		rdr:    rdr,
+		svr:    svr,
+		logger: svr.Log,
 	}
 
 	return hdl
@@ -41,6 +43,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 
 	job := NewBenchmarkJob(hdl.svr)
 	if err = job.ParseFromRequstJSON(data); err != nil {
+		hdl.logger.LogE("invalid json data - %s", data)
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrect : %s", err.Error()))
 		return
 	}
@@ -55,8 +58,11 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hdl.logger.Log("new bench job : id = %d / user = %s", job.ID, job.Meta.Creator)
+
 	resp := map[string]interface{}{"id": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
+
 	return
 }
 
@@ -120,6 +126,8 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", FormatInt64(jobID)))
 		return
 	}
+
+	hdl.logger.Log("bench job aborted : id = %d \n", jobID)
 
 	hdl.rdr.JSON(w, http.StatusOK, "ok")
 	return

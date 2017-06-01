@@ -1,13 +1,23 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
-func CreateRouter(svr *Server) *mux.Router {
+func httpRequestMiddleware(h http.Handler, svr *Server) http.Handler {
+	logger := svr.Log
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Log("HttpRequst - %s - %s - %s", r.RemoteAddr, r.Method, r.URL)
+		h.ServeHTTP(w, r)
+	})
+}
+
+func CreateRouter(svr *Server) http.Handler {
 	rdr := render.New(render.Options{
 		IndentJSON: true,
 	})
@@ -23,5 +33,5 @@ func CreateRouter(svr *Server) *mux.Router {
 	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
 	r.HandleFunc("/bench/history", hdl.ShowHistory).Methods("GET")
 
-	return r
+	return httpRequestMiddleware(r, svr)
 }
