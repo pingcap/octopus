@@ -12,11 +12,20 @@ const (
 	defaultAnsibleDir = "./ansible"
 )
 
-type BenchConfig struct{}
+type ClusterDSN struct {
+	Host         string `toml:"host"`
+	Port         uint16 `toml:"port"`
+	DB           string `toml:"db"`
+	AuthUser     string `toml:"user"`
+	AuthPassword string `toml:"password"`
+}
 
 type AnsibleConfig struct {
-	Dir string `toml:"dir"`
+	Dir        string `toml:"dir"`
+	ClusterDSN `toml:"cluster"`
 }
+
+type BenchConfig struct{}
 
 type ServerConfig struct {
 	Port    int           `toml:"port"`
