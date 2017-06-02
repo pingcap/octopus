@@ -12,7 +12,7 @@ import (
 
 func httpRequestMiddleware(h http.Handler, svr *Server) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Infof("HttpRequst - %s - %s - %s", r.RemoteAddr, r.Method, r.URL)
+		log.Debugf("HttpRequst - %s - %s - %s", r.RemoteAddr, r.Method, r.URL)
 		h.ServeHTTP(w, r)
 	})
 }
