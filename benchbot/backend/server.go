@@ -2,9 +2,7 @@ package backend
 
 import (
 	"errors"
-	//"fmt"
 	"os"
-	"path"
 	"sync"
 
 	log "github.com/ngaut/log"
@@ -66,16 +64,7 @@ func (svr *Server) init() (err error) {
 		return
 	}
 
-	err = svr.initLogger()
-
 	return
-}
-
-func (svr *Server) initLogger() error {
-	logFilepath := path.Join(svr.conf.Dir, logFileName)
-	log.SetRotateByDay()
-	log.SetHighlighting(false)
-	return log.SetOutputByName(logFilepath)
 }
 
 func (svr *Server) Close() {

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"syscall"
 
+	log "github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/pkg/util"
@@ -18,10 +20,26 @@ var (
 	configFile string
 )
 
+const (
+	logFileName string = "server.log"
+)
+
 func parseArgs() {
 	flag.StringVar(&configFile, "config", "./config.toml", "server configuration")
 	flag.BoolVar(&version, "V", false, "print version information and exit")
 	flag.BoolVar(&version, "version", false, "print version information and exit")
+}
+
+func initLogger(cfg *backend.ServerConfig) error {
+	err := os.MkdirAll(cfg.Dir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	logFilepath := path.Join(cfg.Dir, logFileName)
+	log.SetRotateByDay()
+	log.SetHighlighting(false)
+	return log.SetOutputByName(logFilepath)
 }
 
 func main() {
@@ -38,8 +56,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	svr, err := backend.NewServer(cfg)
+	err = initLogger(cfg)
 	if err != nil {
+		fmt.Printf("logger init failed : %s\n", err.Error())
+		os.Exit(1)
+	}
+
+	var svr *backend.Server
+	if svr, err = backend.NewServer(cfg); err != nil {
 		fmt.Printf("server running failed : %s\n", err.Error())
 		os.Exit(1)
 	}
