@@ -2,7 +2,6 @@ package backend
 
 import (
 	"errors"
-	"os"
 	"sync"
 
 	log "github.com/ngaut/log"
@@ -19,9 +18,9 @@ type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
-	conf            *ServerConfig
-	ctx             context.Context
-	suspendMainloop context.CancelFunc
+	conf   *ServerConfig
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	uuidAllocator *UUIDAllocator
 
@@ -43,7 +42,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		return nil, err
 	}
 
-	svr.ctx, svr.suspendMainloop = context.WithCancel(context.Background())
+	svr.ctx, svr.cancel = context.WithCancel(context.Background())
 	svr.uuidAllocator = NewUUIDAllocator()
 
 	svr.runningJob = nil
@@ -59,11 +58,9 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 }
 
 func (svr *Server) init() (err error) {
-	err = os.MkdirAll(svr.conf.Dir, os.ModePerm)
-	if err != nil {
+	if err = initAnsibleEnv(svr.conf); err != nil {
 		return
 	}
-
 	return
 }
 
@@ -71,7 +68,7 @@ func (svr *Server) Close() {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	svr.suspendMainloop()
+	svr.cancel()
 	svr.wg.Wait()
 }
 

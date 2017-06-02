@@ -1,11 +1,15 @@
 package backend
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
+
+	"encoding/json"
+
+	log "github.com/ngaut/log"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -42,7 +46,9 @@ type BenchmarkResult struct {
 }
 
 type BenchmarkJob struct {
-	mux sync.RWMutex
+	mux    sync.RWMutex
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	ID         int64           `json:"id"`
 	CreateTime string          `json:"created_time"`
@@ -52,11 +58,15 @@ type BenchmarkJob struct {
 }
 
 func NewBenchmarkJob(svr *Server) *BenchmarkJob {
-	return &BenchmarkJob{
+	job := &BenchmarkJob{
 		ID:         svr.uuidAllocator.Gen(BenchmarkJobUUID),
 		Status:     Pending,
 		CreateTime: time.Now().Format(TimeFormat),
 	}
+
+	job.ctx, job.cancel = context.WithCancel(context.Background())
+
+	return job
 }
 
 func (pkg BinPackage) valid() bool {
@@ -130,23 +140,55 @@ func (job *BenchmarkJob) Run() error {
 	return nil
 }
 
-func (job *BenchmarkJob) initCluster() (Cluster, error) {
-	if err := job.updateStatus(Deploying); err != nil {
-		return nil, err
+func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
+	if err = job.updateStatus(Deploying); err != nil {
+		return
 	}
 
-	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
+	// init cluster
+	cluster = newAnsibleClusterInstance(
+		&ClusterMeta{tidb: &job.Meta.TiDB, tikv: &job.Meta.TiKV, pd: &job.Meta.Pd})
 
-	// TODO ... seperate whole progress into bunch of operations
+	ops := [](func() error){cluster.Prepare, cluster.Deploy, cluster.Run}
+	for step, op := range ops {
+		// TODO :
+		// so as to suspend operation imidate, call "kill -9" while op in another gorountine.
+		res := make(chan error)
+		go func() {
+			res <- op()
+		}()
 
-	return nil, errors.New("cluster init failed.")
+		select {
+		case err = <-res:
+			if err != nil {
+				log.Infof("job-[%d] cluster init (step=%d) failed : %s", job.ID, step, err.Error())
+			}
+		case <-job.ctx.Done():
+			log.Infof("job-[%d] receive aborted signal during cluster init.", job.ID)
+			<-res
+			err = job.abortedError()
+		}
+
+		close(res)
+		if err != nil {
+			cluster.Destory()
+			break
+		}
+	}
+
+	return
 }
 
 func (job *BenchmarkJob) run(cluster Cluster) error {
-	if cluster == nil || cluster.Valid() {
-		return errors.New("cluster init failed.")
+	defer func() {
+		if cluster != nil {
+			cluster.Destory()
+		}
+	}()
+
+	if cluster == nil || !cluster.Valid() {
+		return errors.New("cluster not valid.")
 	}
-	defer cluster.Destory()
 
 	if err := job.updateStatus(Running); err != nil {
 		return err
@@ -179,10 +221,13 @@ func (job *BenchmarkJob) Abort(note string) bool {
 		return false
 	}
 
+	job.cancel()
+
 	// TODO :
 	// status setting is not safe, need to imporve it in smart way !!!
 	job.Status = Aborted
 	job.Result.Message = fmt.Sprintf("[abort] : %s\n", note)
+
 	return true
 }
 

@@ -5,4 +5,11 @@ port = 20170
 [ansible]
 dir = "./ansible"
 
+[ansible.cluster]
+host = "127.0.0.1"
+port = 3306
+db = "test"
+user = "root"
+password = ""
+
 [bench]
