@@ -1,8 +1,70 @@
 package backend
 
+import (
+	"io/ioutil"
+
+	"github.com/BurntSushi/toml"
+)
+
+const (
+	defaultPort       = 20170
+	defaultDir        = "./"
+	defaultAnsibleDir = "./ansible"
+)
+
+type BenchConfig struct{}
+
+type AnsibleConfig struct {
+	Dir string `toml:"dir"`
+}
+
 type ServerConfig struct {
-	StorePath           string
-	AnsibleDir          string
-	AnsibleDownloadsDir string
-	AnsibleBinsDir      string
+	Port    int           `toml:"port"`
+	Dir     string        `toml:"dir"`
+	Ansible AnsibleConfig `toml:"ansible"`
+	Bench   BenchConfig   `toml:"bench"`
+}
+
+func ParseConfig(filePath string) (*ServerConfig, error) {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := new(ServerConfig)
+	if err = toml.Unmarshal(data, cfg); err != nil {
+		return nil, err
+	}
+
+	cfg.adjust()
+
+	return cfg, nil
+}
+
+func adjustStr(sz *string, defVal string) {
+	if len(*sz) == 0 {
+		*sz = defVal
+	}
+}
+
+func adjustInt(num *int, defVal int) {
+	if *num == 0 {
+		*num = defVal
+	}
+}
+
+func (svrCfg *ServerConfig) adjust() {
+	adjustInt(&svrCfg.Port, defaultPort)
+	adjustStr(&svrCfg.Dir, defaultDir)
+
+	svrCfg.Ansible.adjust()
+	svrCfg.Bench.adjust()
+}
+
+func (ansCfg AnsibleConfig) adjust() {
+	adjustStr(&ansCfg.Dir, defaultAnsibleDir)
+}
+
+func (bchCfg BenchConfig) adjust() {
+
 }

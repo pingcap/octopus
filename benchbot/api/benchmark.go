@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
+	log "github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
@@ -41,6 +42,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 
 	job := NewBenchmarkJob(hdl.svr)
 	if err = job.ParseFromRequstJSON(data); err != nil {
+		log.Errorf("invalid json data - %s", data)
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrect : %s", err.Error()))
 		return
 	}
@@ -55,8 +57,11 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Infof("new bench job : id = %d / user = %s", job.ID, job.Meta.Creator)
+
 	resp := map[string]interface{}{"id": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
+
 	return
 }
 
@@ -120,6 +125,8 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", FormatInt64(jobID)))
 		return
 	}
+
+	log.Infof("bench job aborted : id = %d \n", jobID)
 
 	hdl.rdr.JSON(w, http.StatusOK, "ok")
 	return

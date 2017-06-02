@@ -2,20 +2,24 @@ package backend
 
 import (
 	"errors"
+	"os"
 	"sync"
 
+	log "github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
 
 const (
-	penndingJobLimit        int = 10
-	defaultHistoryShowCount int = 10
+	penndingJobLimit        int    = 10
+	defaultHistoryShowCount int    = 10
+	logFileName             string = "server.log"
 )
 
 type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
+	conf            *ServerConfig
 	ctx             context.Context
 	suspendMainloop context.CancelFunc
 
@@ -33,8 +37,12 @@ type Summary struct {
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig) *Server {
-	svr := new(Server)
+func NewServer(cfg *ServerConfig) (*Server, error) {
+	svr := &Server{conf: cfg}
+	if err := svr.init(); err != nil {
+		return nil, err
+	}
+
 	svr.ctx, svr.suspendMainloop = context.WithCancel(context.Background())
 	svr.uuidAllocator = NewUUIDAllocator()
 
@@ -45,15 +53,19 @@ func NewServer(cfg *ServerConfig) *Server {
 
 	svr.wg.Add(1)
 	go svr.mainloop()
+	log.Info("Server running ...")
 
-	return svr
+	return svr, nil
 }
 
-/*
-func (svr *Server) initLogger(logRoot string) error {
-	return nil
+func (svr *Server) init() (err error) {
+	err = os.MkdirAll(svr.conf.Dir, os.ModePerm)
+	if err != nil {
+		return
+	}
+
+	return
 }
-*/
 
 func (svr *Server) Close() {
 	svr.mux.Lock()
@@ -98,8 +110,7 @@ func (svr *Server) mainloop() {
 
 		svr.setRunningJob(job)
 		if err = job.Run(); err != nil {
-			// fmt.Printf("[%d] job run failed : %s !\n", job.ID, err.Error())
-			// TODO ... replace by logger
+			log.Errorf("job-[%d] run failed : %s !", job.ID, err.Error())
 		}
 		svr.setRunningJob(nil)
 	}
