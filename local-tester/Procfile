@@ -1,0 +1,16 @@
+# Use goreman to run `go get github.com/mattn/goreman`
+
+pd: ./bin/pd-server --client-urls="http://127.0.0.1:12379" --peer-urls="http://127.0.0.1:12380" --data-dir=./var/default.pd --log-file ./var/pd.log
+
+tikv1: ./bin/tikv-server --pd 127.0.0.1:12379 -A 127.0.0.1:21161 --advertise-addr 127.0.0.1:11111 --data-dir ./var/store1 --log-file ./var/tikv1.log
+tikv2: ./bin/tikv-server --pd 127.0.0.1:12379 -A 127.0.0.1:21162 --advertise-addr 127.0.0.1:22222 --data-dir ./var/store2 --log-file ./var/tikv2.log
+tikv3: ./bin/tikv-server --pd 127.0.0.1:12379 -A 127.0.0.1:21163 --advertise-addr 127.0.0.1:33333 --data-dir ./var/store3 --log-file ./var/tikv3.log
+
+tidb: ./bin/tidb-server -P 4001 -status 10081 -path="127.0.0.1:12379" -store=tikv --log-file ./var/tidb.log --lease 60
+
+# tikv bridges
+bridge1: ./bin/bridge --reorder=false 127.0.0.1:11111 127.0.0.1:21161
+bridge2: ./bin/bridge --reorder=false 127.0.0.1:22222 127.0.0.1:21162
+bridge3: ./bin/bridge --reorder=false 127.0.0.1:33333 127.0.0.1:21163
+
+faults: ./faults.sh
