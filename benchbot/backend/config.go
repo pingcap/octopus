@@ -13,6 +13,7 @@ const (
 )
 
 type ClusterDSN struct {
+	Name         string `toml:"name"`
 	Host         string `toml:"host"`
 	Port         uint16 `toml:"port"`
 	DB           string `toml:"db"`
@@ -21,11 +22,13 @@ type ClusterDSN struct {
 }
 
 type AnsibleConfig struct {
-	Dir        string `toml:"dir"`
-	ClusterDSN `toml:"cluster"`
+	Dir      string       `toml:"dir"`
+	Clusters []ClusterDSN `toml:"clusters"`
 }
 
-type BenchConfig struct{}
+type BenchConfig struct {
+	Cases []string `toml:"port"`
+}
 
 type ServerConfig struct {
 	Port    int           `toml:"port"`

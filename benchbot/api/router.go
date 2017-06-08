@@ -6,7 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
