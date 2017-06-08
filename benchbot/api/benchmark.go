@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
@@ -120,9 +120,9 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	success := hdl.svr.AbortJob(jobID, note)
-	if !success {
-		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", FormatInt64(jobID)))
+	err = hdl.svr.AbortJob(jobID, note)
+	if err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

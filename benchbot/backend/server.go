@@ -2,9 +2,10 @@ package backend
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
 
@@ -38,11 +39,12 @@ type Summary struct {
 
 func NewServer(cfg *ServerConfig) (*Server, error) {
 	svr := &Server{conf: cfg}
+	svr.ctx, svr.cancel = context.WithCancel(context.Background())
+
 	if err := svr.init(); err != nil {
 		return nil, err
 	}
 
-	svr.ctx, svr.cancel = context.WithCancel(context.Background())
 	svr.uuidAllocator = NewUUIDAllocator()
 
 	svr.runningJob = nil
@@ -58,9 +60,18 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 }
 
 func (svr *Server) init() (err error) {
+	if svr.ctx == nil {
+		panic("conetext required !")
+	}
+
 	if err = initAnsibleEnv(svr.conf); err != nil {
 		return
 	}
+
+	if err = initClusterManager(svr.conf, svr.ctx); err != nil {
+		return
+	}
+
 	return
 }
 
@@ -134,14 +145,19 @@ func (svr *Server) AddJob(job *BenchmarkJob) error {
 	return err
 }
 
-func (svr *Server) AbortJob(jobID int64, note string) bool {
+func (svr *Server) AbortJob(jobID int64, note string) error {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	if job, ok := svr.jobsByID[jobID]; ok {
-		return job.Abort(note)
+	job, ok := svr.jobsByID[jobID]
+	if !ok {
+		return fmt.Errorf("job '%d' not found !", jobID)
 	}
-	return false
+
+	if err := job.Abort(note); err != nil {
+		log.Warnf(err.Error())
+	}
+	return nil
 }
 
 func (svr *Server) GetJob(jobID int64) *BenchmarkJob {

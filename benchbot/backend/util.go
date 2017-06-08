@@ -1,12 +1,12 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"database/sql"
 	"encoding/json"
@@ -16,10 +16,11 @@ import (
 	"path/filepath"
 
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/net/context"
 )
 
 const (
-	databaseAutoRetry int = 3
+	databaseAutoRetry int = 1
 )
 
 func ParseInt64(val string) (int64, error) {
@@ -49,30 +50,19 @@ func ReadJson(r io.ReadCloser, data interface{}) error {
 	return nil
 }
 
-func ExecCmd(command string, output io.Writer) bool {
+func ExecCmd(command string, ctx context.Context, output io.Writer) bool {
 	// ps : Just return success or not ~
 	args := strings.Split(command, " ")
 	bin := args[0]
 	args = args[1:]
 
-	cmd := exec.Command(bin, args...)
-	data, e := cmd.CombinedOutput()
-	if output != nil {
-		output.Write(data)
+	var cmd *exec.Cmd
+	if ctx == nil {
+		cmd = exec.Command(bin, args...)
+	} else {
+		cmd = exec.CommandContext(ctx, bin, args...)
 	}
-	if e != nil {
-		return (e.(*exec.ExitError)).Success()
-	}
-	return true
-}
 
-func ExecCmdAsync(command string, output io.Writer) bool {
-	// ps : Just return success or not ~
-	args := strings.Split(command, " ")
-	bin := args[0]
-	args = args[1:]
-
-	cmd := exec.Command(bin, args...)
 	data, e := cmd.CombinedOutput()
 	if output != nil {
 		output.Write(data)
@@ -84,11 +74,6 @@ func ExecCmdAsync(command string, output io.Writer) bool {
 }
 
 func Download(resourceUrl string, localPath string) (int64, error) {
-	setup := func() {
-
-	}
-	setup()
-
 	// local prepare
 	os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
 	f, err := os.Create(localPath)
@@ -117,18 +102,29 @@ func Download(resourceUrl string, localPath string) (int64, error) {
 }
 
 func ConnectDB(user, psw, host string, port uint16, dbName string) (db *sql.DB, err error) {
-	for i := 0; i < databaseAutoRetry; i++ {
-		db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@(%s:%d)/%s", user, psw, host, port, dbName))
-		if err == nil {
-			var res int
-			err = db.QueryRow("select 1").Scan(&res)
-			if err == nil && res == 1 {
-				return
-			}
-			db.Close()
-		}
-		time.Sleep(1 * time.Second)
+	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@(%s:%d)/%s", user, psw, host, port, dbName))
+	if err == nil {
+		err = CheckConnection(db)
+	}
+
+	if err != nil && db != nil {
+		db.Close()
+		db = nil
 	}
 
 	return
+}
+
+func CheckConnection(db *sql.DB) error {
+	if db == nil {
+		return errors.New("no db connection")
+	}
+
+	var res int
+	err := db.QueryRow("select 1").Scan(&res)
+	if err == nil && res != 1 {
+		err = errors.New("invalid db connection with incorrect data response")
+	}
+
+	return err
 }

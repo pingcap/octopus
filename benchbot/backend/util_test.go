@@ -45,7 +45,7 @@ func TestJsonReader(t *testing.T) {
 func TestSysCmdExecutor(t *testing.T) {
 	buf := bytes.NewBuffer(make([]byte, 0))
 
-	if ok := ExecCmd("echo hello", buf); !ok {
+	if ok := ExecCmd("echo hello", nil, buf); !ok {
 		t.Error("exe command failed !")
 	}
 

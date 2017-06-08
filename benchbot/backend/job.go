@@ -1,14 +1,16 @@
 package backend
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"sync"
 	"time"
 
-	"encoding/json"
-
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
 
@@ -38,11 +40,11 @@ type BenchmarkMeta struct {
 }
 
 type BenchmarkResult struct {
-	Cases    int64  `json:"cases"`
-	TimeCost int64  `json:"time_cost"`
-	Success  int    `json:"success"`
-	Fail     int    `json:"failure"`
-	Message  string `json:"msg"`
+	Cases int64 `json:"cases"`
+	// TimeCost int64  `json:"time_cost"`
+	// Success  int    `json:"success"`
+	// Fail     int    `json:"failure"`
+	Message string `json:"msg"`
 }
 
 type BenchmarkJob struct {
@@ -121,23 +123,48 @@ func (job *BenchmarkJob) Valid() bool {
 	return basic && job.Meta.TiDB.valid() && job.Meta.TiKV.valid() && job.Meta.Pd.valid()
 }
 
-func (job *BenchmarkJob) Run() error {
+func (job *BenchmarkJob) Run() (err error) {
+	var cluster Cluster
+	defer func() {
+		success := (err == nil)
+		if cluster != nil {
+			cluster.Destory()
+		}
+		job.onJobDone(success)
+	}()
+
+	cluster, err = job.initCluster()
+	if err != nil {
+		return
+	}
+
+	if err = job.run(cluster); err != nil {
+		return
+	}
+
+	return
+}
+
+func (job *BenchmarkJob) onJobDone(success bool) {
 	defer func() {
 		job.mux.Lock()
 		job.Status = Finished
 		job.mux.Unlock()
 	}()
 
-	cluster, err := job.initCluster()
-	if err != nil {
-		return err
+	callbackUrl := job.Meta.HttpCallback
+	if len(callbackUrl) > 0 {
+		// TODO ... timeout limitaion
+		data, _ := json.Marshal(map[string]interface{}{"id": job.ID})
+		resp, err := http.Post(callbackUrl, "application/json", bytes.NewReader(data))
+		if err != nil {
+			log.Errorf("[job-%d] cause error on callback (%s) : %s", job.ID, callbackUrl, err.Error())
+		} else {
+			respData, _ := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			log.Infof("[job-%d] on done callback : %s", job.ID, string(respData))
+		}
 	}
-
-	if err := job.run(cluster); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
@@ -145,9 +172,19 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 		return
 	}
 
-	// init cluster
-	cluster = newAnsibleClusterInstance(
-		&ClusterMeta{tidb: &job.Meta.TiDB, tikv: &job.Meta.TiKV, pd: &job.Meta.Pd})
+	cluster = clusterManager.applyAnsibleCluster(&job.Meta.TiDB, &job.Meta.TiKV, &job.Meta.Pd)
+	defer func() {
+		if err != nil && cluster != nil {
+			cluster.Destory()
+			cluster.Close()
+		}
+	}()
+
+	if cluster == nil {
+		// TODO ... retry ?
+		err = errors.New("not any availble cluster to run")
+		return
+	}
 
 	ops := [](func() error){cluster.Prepare, cluster.Deploy, cluster.Run}
 	for step, op := range ops {
@@ -171,7 +208,6 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 
 		close(res)
 		if err != nil {
-			cluster.Destory()
 			break
 		}
 	}
@@ -180,14 +216,9 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 }
 
 func (job *BenchmarkJob) run(cluster Cluster) error {
-	defer func() {
-		if cluster != nil {
-			cluster.Destory()
-		}
-	}()
-
-	if cluster == nil || !cluster.Valid() {
-		return errors.New("cluster not valid.")
+	if err := cluster.Ping(); err != nil {
+		log.Errorf("cluster failed to access : %s", err.Error())
+		return err
 	}
 
 	if err := job.updateStatus(Running); err != nil {
@@ -195,8 +226,6 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 	}
 
 	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
-
-	// TODO ... seperate whole progress into bunch of operations
 
 	return nil
 }
@@ -213,12 +242,12 @@ func (job *BenchmarkJob) updateStatus(stat string) error {
 	return nil
 }
 
-func (job *BenchmarkJob) Abort(note string) bool {
+func (job *BenchmarkJob) Abort(note string) error {
 	job.mux.Lock()
 	defer job.mux.Unlock()
 
 	if !(job.Status == Pending || job.Status == Deploying || job.Status == Running) {
-		return false
+		return fmt.Errorf("[job-%d] can't aborted with status = '%s'", job.ID, job.Status)
 	}
 
 	job.cancel()
@@ -228,7 +257,7 @@ func (job *BenchmarkJob) Abort(note string) bool {
 	job.Status = Aborted
 	job.Result.Message = fmt.Sprintf("[abort] : %s\n", note)
 
-	return true
+	return nil
 }
 
 func (job *BenchmarkJob) Stat() string {
