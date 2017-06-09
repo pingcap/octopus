@@ -129,6 +129,7 @@ func (job *BenchmarkJob) Run() (err error) {
 		success := (err == nil)
 		if cluster != nil {
 			cluster.Destory()
+			cluster.Close()
 		}
 		job.onJobDone(success)
 	}()

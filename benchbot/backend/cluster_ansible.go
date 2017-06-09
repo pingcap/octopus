@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ngaut/log"
@@ -15,18 +16,23 @@ import (
 )
 
 var (
-	ansibleOperationScript string = ""
+	packagesDir            string = ""
 	ansibleResoucesDir     string = ""
 	ansibleDowloadsDir     string = ""
+	ansibleOperationScript string = ""
 
 	clusterDetectMaxtTimes int = 60
 )
 
 func initAnsibleEnv(cfg *ServerConfig) error {
-	ansibleOperationScript = filepath.Join(cfg.Ansible.Dir, "operation.sh")
+	packagesDir = filepath.Join(cfg.Dir, "packages")
 	ansibleResoucesDir = filepath.Join(cfg.Ansible.Dir, "resources")
 	ansibleDowloadsDir = filepath.Join(cfg.Ansible.Dir, "downloads")
+	ansibleOperationScript = filepath.Join(cfg.Ansible.Dir, "operation.sh")
 
+	if err := os.MkdirAll(packagesDir, os.ModePerm); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(ansibleResoucesDir, os.ModePerm); err != nil {
 		return err
 	}
@@ -61,31 +67,92 @@ func (c *AnsibleCluster) Prepare() (err error) {
 	return
 }
 
+func checkGitVersion(binFile string, mustGitHash string) error {
+	if !FileExists(binFile) {
+		return fmt.Errorf("bin file not exists : %s", binFile)
+	}
+
+	buf := new(bytes.Buffer)
+	if ok := ExecCmd(binFile+" -V", nil, buf); !ok {
+		return fmt.Errorf("load bin version failed : ", string(buf.Bytes()))
+	}
+
+	output := string(buf.Bytes())
+	// TODO : use reg to search
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "Git Commit Hash:") {
+			continue
+		}
+
+		if parts := strings.Split(line, " "); len(parts) > 1 {
+			binGitHash := parts[len(parts)-1]
+			if strings.ToLower(binGitHash) != strings.ToLower(mustGitHash) {
+				return fmt.Errorf("Git Hash not match : %s != %s", binGitHash, mustGitHash)
+			} else {
+				return nil
+			}
+		}
+		break
+	}
+
+	return fmt.Errorf("Git Hash not found : output = (%s)", output)
+}
+
 func (c *AnsibleCluster) fetchResources() error {
 	log.Info("[Ansible] fetching resources ...")
-	tempDir, err := ioutil.TempDir("", "ansible-downs")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempDir)
 
 	packages := []*BinPackage{c.meta.tidb, c.meta.tikv, c.meta.pd}
 	for _, pkg := range packages {
-		log.Infof("[Ansible] download - %s", pkg.BinUrl)
-		saveto := filepath.Join(ansibleDowloadsDir, pkg.Repo+".tar.gz")
-		// TODO ... temp dir by date mark
-		if _, err := Download(pkg.BinUrl, saveto); err != nil {
-			return err
+		log.Infof("[Ansible] download pkg = %s", pkg.BinUrl)
+
+		// TODO : add expired & auto clean
+		pkgDir := filepath.Join(packagesDir, fmt.Sprintf("%s_%s", pkg.Repo, pkg.GitHash))
+		pkgBinFile := filepath.Join(pkgDir, "bin", pkg.Repo+"-server")
+
+		var localCached bool = FileExists(pkgBinFile)
+		if !localCached {
+			if err := os.MkdirAll(pkgDir, os.ModePerm); err != nil {
+				return err
+			}
+
+			if err := c.downloadPackage(pkg, pkgDir); err != nil {
+				return err
+			}
+
+			if err := checkGitVersion(pkgBinFile, pkg.GitHash); err != nil {
+				log.Errorf("%s - %s", pkg.Repo, err.Error())
+				os.Remove(pkgBinFile)
+			}
 		}
 
-		// ps : unarchive through sys command
-		cmd := fmt.Sprintf("tar -zxf %s -C %s", saveto, tempDir)
-		if ok := ExecCmd(cmd, c.ctx, nil); !ok {
-			return fmt.Errorf("unarchive failed : %s", pkg.BinUrl)
-		}
+		// move bin files to ansbile specified dir for deploying
+		bins := filepath.Join(pkgDir, "bin")
+		cmd := fmt.Sprintf("cp -r %s %s", bins, ansibleResoucesDir)
+		ExecCmd(cmd, c.ctx, nil)
 	}
 
-	ExecCmd(fmt.Sprintf("cp -r %s/* %s/", tempDir, ansibleResoucesDir), c.ctx, nil)
+	return nil
+}
+
+func (c *AnsibleCluster) downloadPackage(pkg *BinPackage, saveDir string) error {
+	tempDir, err := ioutil.TempDir("", "ansible-pkg-temp")
+	defer os.RemoveAll(tempDir)
+	if err != nil {
+		return err
+	}
+
+	// TODO : check SHA1 checksum
+	tarFile := filepath.Join(tempDir, pkg.Repo+".tar.gz")
+	if _, err := Download(pkg.BinUrl, tarFile); err != nil {
+		return err
+	}
+
+	// unarchive
+	cmd := fmt.Sprintf("tar -zxf %s -C %s", tarFile, saveDir)
+	if ok := ExecCmd(cmd, c.ctx, nil); !ok {
+		return fmt.Errorf("unarchive failed : %s", pkg.BinUrl)
+	}
 
 	return nil
 }

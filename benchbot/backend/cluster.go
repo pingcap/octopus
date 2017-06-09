@@ -127,7 +127,7 @@ func (cmgr *ClusterManager) applyAnsibleCluster(pd *BinPackage, tikv *BinPackage
 			continue
 		}
 
-		c.free = true
+		c.free = false
 		c.meta.tidb = tidb
 		c.meta.tikv = tikv
 		c.meta.pd = pd
