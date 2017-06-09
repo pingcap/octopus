@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/ngaut/log"
@@ -62,6 +63,10 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 func (svr *Server) init() (err error) {
 	if svr.ctx == nil {
 		panic("conetext required !")
+	}
+
+	if err = os.MkdirAll(svr.conf.Dir, os.ModePerm); err != nil {
+		return err
 	}
 
 	if err = initAnsibleEnv(svr.conf); err != nil {
