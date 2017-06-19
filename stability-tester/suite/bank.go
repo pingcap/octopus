@@ -216,7 +216,7 @@ func (c *BankCase) verify(db *sql.DB, index string) {
 	err = tx.QueryRow(query).Scan(&total)
 	if err != nil {
 		bankVerifyFailedCounter.Inc()
-		//log.Errorf("[%s] select sum err %v", c, err)
+		log.Errorf("[%s] select sum error %v", c, err)
 		return
 	}
 	var tso uint64 = 0

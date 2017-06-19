@@ -102,6 +102,10 @@ func (n *LantencyNemesis) Execute(ctx context.Context, targets []cluster.Node) (
 	return nil
 }
 
+func (n *LantencyNemesis) GetSelector() Selector {
+	return OneTarget
+}
+
 // String implements fmt.Stringer interface.
 func (n *LantencyNemesis) String() string {
 	return LantencyNemesisName

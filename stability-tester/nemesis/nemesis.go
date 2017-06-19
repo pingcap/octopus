@@ -32,8 +32,8 @@ var (
 	nemesesMu sync.RWMutex
 	nemeses   = make(map[string]Factory)
 
-	// For now, ranges is read only once the program was initialized, just same as nemeses above.
-	ranges = make(map[string]Range)
+	// For now, selectors is read only once the program was initialized, just same as nemeses above.
+	selectors = make(map[string]Selector)
 )
 
 // RegisterNemesis registers a Nemesis.
@@ -50,6 +50,8 @@ type Nemesis interface {
 	// Execute executes the nemesis on the targets.
 	Execute(ctx context.Context, targets []cluster.Node) error
 
+	// GetSelector return a selector.
+	GetSelector() Selector
 	// String implements fmt.Stringer interface.
 	String() string
 }
@@ -77,10 +79,10 @@ func RunNemeses(ctx context.Context, ncfg *config.NemesesConfig, c *cluster.Clus
 	nemesesMu.RUnlock()
 
 	log.Infof("running all nemeses: %v", ncfg)
-	scheduler(ctx, c, allNemeses, ncfg.Ranges, ncfg.Targets, ncfg.Wait)
+	scheduler(ctx, c, allNemeses, ncfg.Targets, ncfg.Wait)
 }
 
-func scheduler(ctx context.Context, c *cluster.Cluster, ns []Nemesis, rangesKey []string, targets *config.Targets, duration config.Duration) {
+func scheduler(ctx context.Context, c *cluster.Cluster, ns []Nemesis, targets *config.Targets, duration config.Duration) {
 	ticker := time.NewTicker(duration.Duration)
 	for {
 		select {
@@ -93,8 +95,8 @@ func scheduler(ctx context.Context, c *cluster.Cluster, ns []Nemesis, rangesKey 
 			n := ns[rand.Intn(len(ns))]
 
 			// Choose a set of targets.
-			strategy := rangesKey[rand.Intn(len(rangesKey))]
-			nodes := ranges[strategy](c, targets)
+			selector := n.GetSelector()
+			nodes := selector(c, targets)
 
 			log.Infof("nemesis %s starts on nodes %s", n, nodesName(nodes))
 
