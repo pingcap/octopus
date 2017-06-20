@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/octopus/stability-tester/cluster"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/mvcc_suite"
 	"github.com/pingcap/octopus/stability-tester/nemesis"
 	"github.com/pingcap/octopus/stability-tester/suite"
+	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"golang.org/x/net/context"
@@ -106,7 +106,7 @@ func main() {
 	// Create the TiKV storage and run MVCC cases
 	if len(cfg.PD) > 0 {
 		tidb.RegisterStore("tikv", tikv.Driver{})
-		store, err = tidb.NewStore(fmt.Sprintf("tikv://%s", cfg.PD))
+		store, err = tidb.NewStore(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PD))
 		if err != nil {
 			log.Fatal(err)
 		}

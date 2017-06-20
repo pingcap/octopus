@@ -27,6 +27,10 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
+var (
+	defaultVerifyTimeout = 20 * time.Minute
+)
+
 // BackCase is for concurrent balance transfer.
 type BankCase struct {
 	mu          sync.RWMutex
@@ -134,7 +138,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 
 func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 	c.verify(db, index)
-
+	start := time.Now()
 	go func(index string) {
 		ticker := time.NewTicker(c.cfg.Interval.Duration)
 		defer ticker.Stop()
@@ -142,7 +146,20 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 		for {
 			select {
 			case <-ticker.C:
-				c.verify(db, index)
+				err := c.verify(db, index)
+				if err != nil {
+					if time.Now().Sub(start) > defaultVerifyTimeout {
+						c.mu.Lock()
+						c.stop = true
+						log.Info("stop bank execute")
+						c.mu.Unlock()
+						c.wg.Wait()
+						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
+					}
+				} else {
+					start = time.Now()
+					log.Infof("[%s] verify success in %s", c, start)
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -154,7 +171,8 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 func (c *BankCase) Execute(db *sql.DB, index int) error {
 	c.mu.RLock()
 	if c.stop {
-		return errors.New("bank stopped")
+		// too many log print in here if return error
+		return nil
 	}
 	c.mu.RUnlock()
 	c.wg.Add(1)
@@ -199,7 +217,7 @@ func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	return true
 }
 
-func (c *BankCase) verify(db *sql.DB, index string) {
+func (c *BankCase) verify(db *sql.DB, index string) error {
 	var total int
 
 	start := time.Now()
@@ -207,7 +225,7 @@ func (c *BankCase) verify(db *sql.DB, index string) {
 	tx, err := db.Begin()
 	if err != nil {
 		bankVerifyFailedCounter.Inc()
-		return
+		return errors.Trace(err)
 	}
 
 	defer tx.Rollback()
@@ -217,12 +235,13 @@ func (c *BankCase) verify(db *sql.DB, index string) {
 	if err != nil {
 		bankVerifyFailedCounter.Inc()
 		log.Errorf("[%s] select sum error %v", c, err)
-		return
+		return errors.Trace(err)
 	}
 	var tso uint64 = 0
-	if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err == nil {
-		log.Infof("select sum(balance) to verify use tso %d", tso)
+	if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
+		return errors.Trace(err)
 	}
+	log.Infof("select sum(balance) to verify use tso %d", tso)
 	tx.Commit()
 	bankVerifyDuration.Observe(time.Since(start).Seconds())
 
@@ -235,6 +254,8 @@ func (c *BankCase) verify(db *sql.DB, index string) {
 		c.wg.Wait()
 		log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
 	}
+
+	return nil
 }
 
 func (c *BankCase) moveMoney(db *sql.DB) {
@@ -261,7 +282,7 @@ func (c *BankCase) moveMoney(db *sql.DB) {
 
 	if err != nil {
 		bankTxnFailedCounter.Inc()
-		log.Errorf("[%s] move money err %v", c, err)
+		// log.Errorf("[%s] move money err %v", c, err)
 		return
 	}
 	bankTxnDuration.Observe(time.Since(start).Seconds())
