@@ -282,7 +282,6 @@ func (c *BankCase) moveMoney(db *sql.DB) {
 
 	if err != nil {
 		bankTxnFailedCounter.Inc()
-		// log.Errorf("[%s] move money err %v", c, err)
 		return
 	}
 	bankTxnDuration.Observe(time.Since(start).Seconds())
