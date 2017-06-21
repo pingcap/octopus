@@ -30,7 +30,7 @@ import (
 
 const (
 	initialBalance  = 1000
-	insertBatchSize = 1000
+	insertBatchSize = 100
 	maxTransfer     = 100
 	systemAccountID = 0
 )
@@ -62,7 +62,7 @@ func (c *Bank2Case) Initialize(ctx context.Context, db *sql.DB) error {
 CREATE TABLE IF NOT EXISTS bank2_accounts (
   id INT,
   balance INT NOT NULL,
-  name STRING,
+  name VARCHAR(32),
   PRIMARY KEY (id),
   UNIQUE INDEX byName (name)
 );
@@ -71,13 +71,13 @@ CREATE TABLE IF NOT EXISTS bank2_transaction (
   id INT,
   booking_date TIMESTAMP DEFAULT NOW(),
   txn_date TIMESTAMP DEFAULT NOW(),
-  txn_ref STRING,
+  txn_ref VARCHAR(32),
   PRIMARY KEY (id),
   UNIQUE INDEX byTxnRef (txn_ref)
 );
 
 CREATE TABLE IF NOT EXISTS bank2_transaction_leg (
-  id BYTES DEFAULT uuid_v4(),
+  id INT AUTO_INCREMENT,
   account_id INT,
   amount INT NOT NULL,
   running_balance INT NOT NULL,
@@ -85,9 +85,9 @@ CREATE TABLE IF NOT EXISTS bank2_transaction_leg (
   PRIMARY KEY (id)
 );
 
-TRUNCATE TABLE account;
-TRUNCATE TABLE transaction;
-TRUNCATE TABLE transaction_leg;
+TRUNCATE TABLE bank2_accounts;
+TRUNCATE TABLE bank2_transaction;
+TRUNCATE TABLE bank2_transaction_leg;
 	`)
 	if err != nil {
 		return errors.Trace(err)
@@ -109,7 +109,7 @@ TRUNCATE TABLE transaction_leg;
 					args = append(args, fmt.Sprintf(`(%d, %d, "account %d")`, i, initialBalance, i))
 				}
 
-				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance) VALUES %s", strings.Join(args, ","))
+				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES %s", strings.Join(args, ","))
 				err := runWithRetry(ctx, 100, 3*time.Second, func() error {
 					_, err := db.Exec(query)
 					return err
@@ -126,7 +126,7 @@ TRUNCATE TABLE transaction_leg;
 	for first = 1; first <= c.cfg.NumAccounts; first = end {
 		end = first + insertBatchSize
 		if end > c.cfg.NumAccounts {
-			end = c.cfg.NumAccounts
+			end = c.cfg.NumAccounts + 1
 		}
 		ch <- Job{
 			first: first,
@@ -281,9 +281,9 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 		return nil
 	}
 
-	insertTxn := `INSERT INTO bank2_transaction (id, txn_ref) VALUES ($1, $2)`
-	insertTxnLeg := `INSERT INTO bank2_transaction_leg (account_id, amount, runnint_balance, txn_id) VALUES ($1, $2, $3, $4)`
-	updateAcct := `UPDATE bank2_accounts SET balance = $1 WHERE id = $2`
+	insertTxn := `INSERT INTO bank2_transaction (id, txn_ref) VALUES (?, ?)`
+	insertTxnLeg := `INSERT INTO bank2_transaction_leg (account_id, amount, running_balance, txn_id) VALUES (?, ?, ?, ?)`
+	updateAcct := `UPDATE bank2_accounts SET balance = ? WHERE id = ?`
 	txnID := atomic.AddInt32(&c.txnID, 1)
 	if _, err := tx.Exec(insertTxn, txnID, fmt.Sprintf("txn %d", txnID)); err != nil {
 		tx.Rollback()
@@ -307,7 +307,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 	}
 
 	err = tx.Commit()
-	log.Infof("[bank2] %d(%d) transfer %d to %d(%d) err: %s", from, fromBalance, amount, to, toBalance, err)
+	log.Infof("[bank2] %d(%d) transfer %d to %d(%d) err: %v", from, fromBalance, amount, to, toBalance, err)
 	return nil
 }
 
