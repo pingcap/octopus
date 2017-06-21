@@ -44,16 +44,15 @@ CREATE TABLE IF NOT EXISTS ledger_accounts (
   posting_group_id BIGINT NOT NULL,
   amount BIGINT,
   balance BIGINT,
-  currency VARCHAR,
+  currency VARCHAR(32),
   created TIMESTAMP,
   value_date TIMESTAMP,
-  account_id VARCHAR,
-  transaction_id VARCHAR,
-  scheme VARCHAR,
+  account_id VARCHAR(32),
+  transaction_id VARCHAR(32),
+  scheme VARCHAR(32),
   PRIMARY KEY (account_id, posting_group_id),
-  INDEX transaction_id,
-  INDEX posting_group_id,
-  UNIQUE (account_id, causality_id) STORING(balance)
+  INDEX (transaction_id),
+  INDEX (posting_group_id)
 );
 `
 
@@ -97,6 +96,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 	}
 
 	if err = c.doPosting(tx, req); err != nil {
+		log.Errorf("[ledger] doPosting error: %v", err)
 		return errors.Trace(err)
 	}
 
@@ -104,8 +104,8 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 }
 
 func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, err error) {
-	err = tx.QueryRow(`SELECT causality_id, balance FROM accounts `+
-		`WHERE account_id = $1 ORDER BY causality_id DESC LIMIT 1`, accountID).
+	err = tx.QueryRow(`SELECT causality_id, balance FROM ledger_accounts `+
+		`WHERE account_id = ? ORDER BY causality_id DESC LIMIT 1`, accountID).
 		Scan(&lastCID, &lastBalance)
 
 	if err == sql.ErrNoRows {
@@ -137,8 +137,8 @@ func (c *LedgerCase) doPosting(tx *sql.Tx, req postingRequest) error {
 		balA = -req.Amount
 		balB = req.Amount
 	}
-	_, err := tx.Exec(`
-INSERT INTO accounts (
+	query := fmt.Sprintf(`
+INSERT INTO ledger_accounts (
   posting_group_id,
   amount,
   account_id,
@@ -146,21 +146,27 @@ INSERT INTO accounts (
   balance
 )
 VALUES (
-  $1,	-- posting_group_id
-  $2, 	-- amount
-  $3, 	-- account_id (A)
-  $4, 	-- causality_id
-  $5+CAST($2 AS BIGINT) -- (new) balance (Postgres needs the cast)
+  %[1]v,	-- posting_group_id
+  %[2]v, 	-- amount
+  "%[3]v", 	-- account_id (A)
+  %[4]v, 	-- causality_id
+  %[5]v+%[2]v	-- (new) balance
 ), (
-  $1,   -- posting_group_id
- -$2,   -- amount
-  $6,   -- account_id (B)
-  $7,   -- causality_id
-  $8-$2 -- (new) balance
+  %[1]v,   -- posting_group_id
+ -%[2]v,   -- amount
+  "%[6]v", -- account_id (B)
+  %[7]v,   -- causality_id
+  %[8]v-%[2]v -- (new) balance
 )`, req.Group, req.Amount,
 		req.AccountA, cidA+1, balA,
 		req.AccountB, cidB+1, balB)
-	return err
+	if _, err := tx.Exec(query); err != nil {
+		return errors.Trace(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (c *LedgerCase) String() string {
