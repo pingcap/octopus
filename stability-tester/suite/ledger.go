@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -118,6 +119,7 @@ func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, er
 }
 
 func (c *LedgerCase) doPosting(tx *sql.Tx, req postingRequest) error {
+	start := time.Now()
 	var cidA, balA, cidB, balB int64
 	if c.cfg.RunBalance {
 		var err error
@@ -166,6 +168,8 @@ VALUES (
 	if err := tx.Commit(); err != nil {
 		return errors.Trace(err)
 	}
+
+	ledgerTxnDuration.Observe(time.Since(start).Seconds())
 	return nil
 }
 

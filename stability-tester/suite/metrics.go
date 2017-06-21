@@ -35,23 +35,6 @@ var (
 			Help:      "Counter of failed bank verification.",
 		})
 
-	bank2VerifyDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: "tidb_test",
-			Subsystem: "stability",
-			Name:      "bank2_verify_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of bank verification.",
-			Buckets:   largeScaleBuckets,
-		})
-
-	bank2VerifyFailedCounter = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Namespace: "tidb_test",
-			Subsystem: "stability",
-			Name:      "bank2_verify_failed_total",
-			Help:      "Counter of failed bank verification.",
-		})
-
 	bankTxnDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "tidb_test",
@@ -66,6 +49,32 @@ var (
 			Subsystem: "stability",
 			Name:      "bank_txn_total",
 			Help:      "Counter of failed bank transcation.",
+		})
+
+	bank2VerifyDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "bank2_verify_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of bank2 verification.",
+			Buckets:   largeScaleBuckets,
+		})
+
+	bank2VerifyFailedCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "bank2_verify_failed_total",
+			Help:      "Counter of failed bank2 verification.",
+		})
+
+	ledgerTxnDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "ledger_txn_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of ledger txn.",
+			Buckets:   largeScaleBuckets,
 		})
 
 	blockBatchWriteDuration = prometheus.NewHistogram(
@@ -123,6 +132,9 @@ func init() {
 	prometheus.MustRegister(bankVerifyFailedCounter)
 	prometheus.MustRegister(bankTxnDuration)
 	prometheus.MustRegister(bankTxnFailedCounter)
+	prometheus.MustRegister(bank2VerifyDuration)
+	prometheus.MustRegister(bank2VerifyFailedCounter)
+	prometheus.MustRegister(ledgerTxnDuration)
 	prometheus.MustRegister(blockBatchWriteDuration)
 	prometheus.MustRegister(blockWriteFailedCounter)
 	prometheus.MustRegister(smallWriteDuration)
