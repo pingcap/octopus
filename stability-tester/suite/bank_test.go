@@ -55,6 +55,6 @@ func (s *testBankSuite) TestTransfer(c *C) {
 		c.Assert(err, IsNil)
 	}
 
-	bankCase.verify(s.db)
+	bankCase.verify(s.db, "")
 	cancel()
 }

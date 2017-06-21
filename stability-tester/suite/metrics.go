@@ -35,6 +35,23 @@ var (
 			Help:      "Counter of failed bank verification.",
 		})
 
+	bank2VerifyDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "bank2_verify_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of bank verification.",
+			Buckets:   largeScaleBuckets,
+		})
+
+	bank2VerifyFailedCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "bank2_verify_failed_total",
+			Help:      "Counter of failed bank verification.",
+		})
+
 	bankTxnDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "tidb_test",
