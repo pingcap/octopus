@@ -38,7 +38,7 @@ type BankCase struct {
 	cfg         *config.BankCaseConfig
 	concurrency int
 	wg          sync.WaitGroup
-	stopped     atomic.Value
+	stopped     int32
 }
 
 // NewBankCase returns the BankCase.
@@ -47,7 +47,6 @@ func NewBankCase(cfg *config.Config) Case {
 		cfg:         &cfg.Suite.Bank,
 		concurrency: cfg.Suite.Concurrency,
 	}
-	b.stopped.Store(false)
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
 	}
@@ -151,7 +150,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 				err := c.verify(db, index)
 				if err != nil {
 					if time.Now().Sub(start) > defaultVerifyTimeout {
-						c.stopped.Store(true)
+						atomic.StoreInt32(&c.stopped, 1)
 						log.Info("stop bank execute")
 						c.wg.Wait()
 						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
@@ -169,8 +168,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 
 // Execute implements Case Execute interface.
 func (c *BankCase) Execute(db *sql.DB, index int) error {
-	isStopped := c.stopped.Load().(bool)
-	if isStopped {
+	if atomic.LoadInt32(&c.stopped) != 0 {
 		// too many log print in here if return error
 		return nil
 	}
@@ -247,7 +245,7 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	check := c.cfg.NumAccounts * 1000
 	if total != check {
 		log.Errorf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
-		c.stopped.Store(true)
+		atomic.StoreInt32(&c.stopped, 1)
 		c.wg.Wait()
 		log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
 	}
