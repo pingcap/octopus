@@ -43,7 +43,7 @@ contention = "low"
 
 [suite.ledger]
 num_accounts = 10
-run_balance = false
+interval = "2s"
 
 [suite.crud]
 user_count = 1000

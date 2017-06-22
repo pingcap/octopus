@@ -39,11 +39,10 @@ const (
 // in the form of a transaction record and two transaction "legs" per database
 // transaction.
 type Bank2Case struct {
-	mu          sync.RWMutex
 	cfg         *config.Bank2CaseConfig
 	concurrency int
 	wg          sync.WaitGroup
-	stop        bool
+	stop        int32
 	txnID       int32
 }
 
@@ -190,9 +189,7 @@ func (c *Bank2Case) verify(db *sql.DB) {
 	expectTotal := (int64(c.cfg.NumAccounts) * initialBalance) * 2
 	if total != expectTotal {
 		log.Errorf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
-		c.mu.Lock()
-		c.stop = true
-		c.mu.Unlock()
+		atomic.StoreInt32(&c.stop, 1)
 		c.wg.Wait()
 		log.Fatalf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
 	}
@@ -200,11 +197,9 @@ func (c *Bank2Case) verify(db *sql.DB) {
 
 // Execute implements Case Execute interface.
 func (c *Bank2Case) Execute(db *sql.DB, index int) error {
-	c.mu.RLock()
-	if c.stop {
+	if atomic.LoadInt32(&c.stop) != 0 {
 		return errors.New("bank2 stopped")
 	}
-	c.mu.RUnlock()
 	c.wg.Add(1)
 	c.moveMoney(db)
 	c.wg.Done()

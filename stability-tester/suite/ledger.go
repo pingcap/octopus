@@ -18,6 +18,8 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -28,7 +30,9 @@ import (
 // LedgerCase simulates a complete record of financial transactions over the
 // life of a bank (or other company).
 type LedgerCase struct {
-	cfg *config.LedgerConfig
+	cfg  *config.LedgerConfig
+	wg   sync.WaitGroup
+	stop int32
 }
 
 // NewLedgerCase returns the case for test.
@@ -62,6 +66,7 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := db.Exec(stmtCreate); err != nil {
 		log.Fatal(err)
 	}
+	c.startVerify(ctx, db)
 	return nil
 }
 
@@ -76,6 +81,13 @@ type postingRequest struct {
 
 // Execute implements Case Execute interface.
 func (c *LedgerCase) Execute(db *sql.DB, index int) error {
+	if atomic.LoadInt32(&c.stop) != 0 {
+		return errors.New("ledger stopped")
+	}
+
+	c.wg.Add(1)
+	defer c.wg.Done()
+
 	req := postingRequest{
 		Group:    rand.Int63(),
 		AccountA: fmt.Sprintf("acc%d", rand.Int63n(int64(c.cfg.NumAccounts))),
@@ -106,7 +118,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 
 func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, err error) {
 	err = tx.QueryRow(`SELECT causality_id, balance FROM ledger_accounts `+
-		`WHERE account_id = ? ORDER BY causality_id DESC LIMIT 1`, accountID).
+		`WHERE account_id = ? ORDER BY causality_id DESC LIMIT 1 FOR UPDATE`, accountID).
 		Scan(&lastCID, &lastBalance)
 
 	if err == sql.ErrNoRows {
@@ -121,23 +133,14 @@ func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, er
 func (c *LedgerCase) doPosting(tx *sql.Tx, req postingRequest) error {
 	start := time.Now()
 	var cidA, balA, cidB, balB int64
-	if c.cfg.RunBalance {
-		var err error
-		cidA, balA, err = getLast(tx, req.AccountA)
-		if err != nil {
-			return err
-		}
-		cidB, balB, err = getLast(tx, req.AccountB)
-		if err != nil {
-			return err
-		}
-	} else {
-		// For Cockroach, unique_rowid() would be the better choice.
-		cidA, cidB = rand.Int63(), rand.Int63()
-		// Want the running balance to always be zero in this case without
-		// special-casing below.
-		balA = -req.Amount
-		balB = req.Amount
+	var err error
+	cidA, balA, err = getLast(tx, req.AccountA)
+	if err != nil {
+		return err
+	}
+	cidB, balB, err = getLast(tx, req.AccountB)
+	if err != nil {
+		return err
 	}
 	query := fmt.Sprintf(`
 INSERT INTO ledger_accounts (
@@ -170,6 +173,49 @@ VALUES (
 	}
 
 	ledgerTxnDuration.Observe(time.Since(start).Seconds())
+	return nil
+}
+
+func (c *LedgerCase) startVerify(ctx context.Context, db *sql.DB) {
+	go func() {
+		for {
+			select {
+			case <-time.After(c.cfg.Interval.Duration):
+				c.verify(db)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (c *LedgerCase) verify(db *sql.DB) error {
+	start := time.Now()
+	tx, err := db.Begin()
+	if err != nil {
+		ledgerVerifyFailedCounter.Inc()
+		return errors.Trace(err)
+	}
+
+	var total int64
+	err = tx.QueryRow(`
+select sum(balance) total from
+  (select account_id, max(cid) max_cid from ledger_accounts group by account_id) last
+  join ledger_accounts
+    on last.account_id = ledger_accounts.account_id and last.max_cid = ledger_accounts.cid`).Scan(&total)
+	if err != nil {
+		ledgerVerifyFailedCounter.Inc()
+		return errors.Trace(err)
+	}
+
+	ledgerVerifyDuration.Observe(time.Since(start).Seconds())
+	if total != 0 {
+		log.Errorf("[ledger] check total balance got %v", total)
+		atomic.StoreInt32(&c.stop, 1)
+		c.wg.Wait()
+		log.Fatalf("[ledger] check total balance got %v", total)
+	}
+
 	return nil
 }
 

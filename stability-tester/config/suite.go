@@ -47,8 +47,8 @@ type Bank2CaseConfig struct {
 
 // LedgerConfig is for ledger test case.
 type LedgerConfig struct {
-	NumAccounts int  `toml:"num_accounts"`
-	RunBalance  bool `toml:"run_balance"`
+	NumAccounts int      `toml:"num_accounts"`
+	Interval    Duration `toml:"interval"`
 }
 
 // CRUDCaseConfig is for CRUD test case.
