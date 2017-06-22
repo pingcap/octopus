@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -37,7 +38,7 @@ type BankCase struct {
 	cfg         *config.BankCaseConfig
 	concurrency int
 	wg          sync.WaitGroup
-	stop        bool
+	stopped     atomic.Value
 }
 
 // NewBankCase returns the BankCase.
@@ -46,6 +47,7 @@ func NewBankCase(cfg *config.Config) Case {
 		cfg:         &cfg.Suite.Bank,
 		concurrency: cfg.Suite.Concurrency,
 	}
+	b.stopped.Store(false)
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
 	}
@@ -149,10 +151,8 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 				err := c.verify(db, index)
 				if err != nil {
 					if time.Now().Sub(start) > defaultVerifyTimeout {
-						c.mu.Lock()
-						c.stop = true
+						c.stopped.Store(true)
 						log.Info("stop bank execute")
-						c.mu.Unlock()
 						c.wg.Wait()
 						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
 					}
@@ -169,12 +169,11 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 
 // Execute implements Case Execute interface.
 func (c *BankCase) Execute(db *sql.DB, index int) error {
-	c.mu.RLock()
-	if c.stop {
+	isStopped := c.stopped.Load().(bool)
+	if isStopped {
 		// too many log print in here if return error
 		return nil
 	}
-	c.mu.RUnlock()
 	c.wg.Add(1)
 	c.moveMoney(db)
 	c.wg.Done()
@@ -248,9 +247,7 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	check := c.cfg.NumAccounts * 1000
 	if total != check {
 		log.Errorf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
-		c.mu.Lock()
-		c.stop = true
-		c.mu.Unlock()
+		c.stopped.Store(true)
 		c.wg.Wait()
 		log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
 	}
