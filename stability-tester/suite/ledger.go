@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS ledger_accounts (
   INDEX (transaction_id),
   INDEX (posting_group_id)
 );
+TRUNCATE TABLE ledger_accounts;
 `
 
 // Initialize creates the table for ledger test.
@@ -71,11 +72,9 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 }
 
 type postingRequest struct {
-	Group              int64
-	AccountA, AccountB string
-	Amount             int64 // deposited on AccountA, removed from AccountB
-	Currency           string
-
+	Group               int64
+	AccountA, AccountB  string
+	Amount              int    // deposited on AccountA, removed from AccountB
 	Transaction, Scheme string // opaque
 }
 
@@ -92,8 +91,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 		Group:    rand.Int63(),
 		AccountA: fmt.Sprintf("acc%d", rand.Int63n(int64(c.cfg.NumAccounts))),
 		AccountB: fmt.Sprintf("acc%d", rand.Int63n(int64(c.cfg.NumAccounts))),
-		Amount:   1,
-		Currency: "USD",
+		Amount:   rand.Intn(maxTransfer),
 	}
 
 	if req.AccountA == req.AccountB {
@@ -117,8 +115,8 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 }
 
 func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, err error) {
-	err = tx.QueryRow(`SELECT causality_id, balance FROM ledger_accounts `+
-		`WHERE account_id = ? ORDER BY causality_id DESC LIMIT 1 FOR UPDATE`, accountID).
+	err = tx.QueryRow(fmt.Sprintf(`SELECT causality_id, balance FROM ledger_accounts
+		WHERE account_id = "%v" ORDER BY causality_id DESC LIMIT 1 FOR UPDATE`, accountID)).
 		Scan(&lastCID, &lastBalance)
 
 	if err == sql.ErrNoRows {
@@ -177,6 +175,8 @@ VALUES (
 }
 
 func (c *LedgerCase) startVerify(ctx context.Context, db *sql.DB) {
+	c.verify(db)
+
 	go func() {
 		for {
 			select {
@@ -200,9 +200,9 @@ func (c *LedgerCase) verify(db *sql.DB) error {
 	var total int64
 	err = tx.QueryRow(`
 select sum(balance) total from
-  (select account_id, max(cid) max_cid from ledger_accounts group by account_id) last
+  (select account_id, max(causality_id) max_causality_id from ledger_accounts group by account_id) last
   join ledger_accounts
-    on last.account_id = ledger_accounts.account_id and last.max_cid = ledger_accounts.cid`).Scan(&total)
+    on last.account_id = ledger_accounts.account_id and last.max_causality_id = ledger_accounts.causality_id`).Scan(&total)
 	if err != nil {
 		ledgerVerifyFailedCounter.Inc()
 		return errors.Trace(err)
@@ -216,6 +216,7 @@ select sum(balance) total from
 		log.Fatalf("[ledger] check total balance got %v", total)
 	}
 
+	log.Infof("verify ok, cost time: %v", time.Since(start))
 	return nil
 }
 
