@@ -29,10 +29,11 @@ import (
 )
 
 const (
-	initialBalance  = 1000
-	insertBatchSize = 100
-	maxTransfer     = 100
-	systemAccountID = 0
+	initialBalance    = 1000
+	insertBatchSize   = 100
+	insertConcurrency = 100
+	maxTransfer       = 100
+	systemAccountID   = 0
 )
 
 // Bank2Case transfers money between accounts, creating new ledger transactions
@@ -93,18 +94,18 @@ TRUNCATE TABLE bank2_transaction_leg;
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(c.concurrency)
+	wg.Add(insertConcurrency)
 	type Job struct {
-		first, end int
+		begin, end int
 	}
 	ch := make(chan Job)
-	for i := 0; i < c.concurrency; i++ {
+	for i := 0; i < insertConcurrency; i++ {
 		go func() {
 			defer wg.Done()
 			for job := range ch {
 				start := time.Now()
 				args := make([]string, 0, insertBatchSize)
-				for i := job.first; i < job.end; i++ {
+				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%d, %d, "account %d")`, i, initialBalance, i))
 				}
 
@@ -116,19 +117,19 @@ TRUNCATE TABLE bank2_transaction_leg;
 				if err != nil {
 					log.Fatalf("exec %s err %s", query, err)
 				}
-				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.first, time.Since(start))
+				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
 			}
 		}()
 	}
 
-	var first, end int
-	for first = 1; first <= c.cfg.NumAccounts; first = end {
-		end = first + insertBatchSize
+	var begin, end int
+	for begin = 1; begin <= c.cfg.NumAccounts; begin = end {
+		end = begin + insertBatchSize
 		if end > c.cfg.NumAccounts {
 			end = c.cfg.NumAccounts + 1
 		}
 		ch <- Job{
-			first: first,
+			begin: begin,
 			end:   end,
 		}
 	}

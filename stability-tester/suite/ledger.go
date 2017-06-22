@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,6 +68,50 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := db.Exec(stmtCreate); err != nil {
 		log.Fatal(err)
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(insertConcurrency)
+	type Job struct {
+		begin, end int
+	}
+	ch := make(chan Job)
+	for i := 0; i < insertConcurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for job := range ch {
+				start := time.Now()
+				args := make([]string, 0, insertBatchSize)
+				for i := job.begin; i < job.end; i++ {
+					args = append(args, fmt.Sprintf(`(%v, 0, "acc%v", 0, 0)`, rand.Int63(), i))
+				}
+
+				query := fmt.Sprintf(`INSERT INTO ledger_accounts (posting_group_id, amount,account_id, causality_id, balance) VALUES %s`, strings.Join(args, ","))
+				err := runWithRetry(ctx, 100, 3*time.Second, func() error {
+					_, err := db.Exec(query)
+					return err
+				})
+				if err != nil {
+					log.Fatalf("exec %s err %s", query, err)
+				}
+				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
+			}
+		}()
+	}
+
+	var begin, end int
+	for begin = 1; begin <= c.cfg.NumAccounts; begin = end {
+		end = begin + insertBatchSize
+		if end > c.cfg.NumAccounts {
+			end = c.cfg.NumAccounts + 1
+		}
+		ch <- Job{
+			begin: begin,
+			end:   end,
+		}
+	}
+	close(ch)
+	wg.Wait()
+
 	c.startVerify(ctx, db)
 	return nil
 }
@@ -89,8 +134,8 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 
 	req := postingRequest{
 		Group:    rand.Int63(),
-		AccountA: fmt.Sprintf("acc%d", rand.Int63n(int64(c.cfg.NumAccounts))),
-		AccountB: fmt.Sprintf("acc%d", rand.Int63n(int64(c.cfg.NumAccounts))),
+		AccountA: fmt.Sprintf("acc%d", rand.Intn(c.cfg.NumAccounts)+1),
+		AccountB: fmt.Sprintf("acc%d", rand.Intn(c.cfg.NumAccounts)+1),
 		Amount:   rand.Intn(maxTransfer),
 	}
 
@@ -118,13 +163,6 @@ func getLast(tx *sql.Tx, accountID string) (lastCID int64, lastBalance int64, er
 	err = tx.QueryRow(fmt.Sprintf(`SELECT causality_id, balance FROM ledger_accounts
 		WHERE account_id = "%v" ORDER BY causality_id DESC LIMIT 1 FOR UPDATE`, accountID)).
 		Scan(&lastCID, &lastBalance)
-
-	if err == sql.ErrNoRows {
-		err = nil
-		// Paranoia about unspecified semantics.
-		lastBalance = 0
-		lastCID = 0
-	}
 	return
 }
 
@@ -145,7 +183,7 @@ INSERT INTO ledger_accounts (
   posting_group_id,
   amount,
   account_id,
-  causality_id, -- strictly increasing in absolute time. Only used for running balance.
+  causality_id,
   balance
 )
 VALUES (
