@@ -149,6 +149,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 			case <-ticker.C:
 				err := c.verify(db, index)
 				if err != nil {
+					log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
 					if time.Now().Sub(start) > defaultVerifyTimeout {
 						atomic.StoreInt32(&c.stopped, 1)
 						log.Info("stop bank execute")
@@ -157,7 +158,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 					}
 				} else {
 					start = time.Now()
-					log.Infof("[%s] verify success in %s", c, start)
+					log.Infof("[%s] verify success in %s", c, time.Now())
 				}
 			case <-ctx.Done():
 				return
