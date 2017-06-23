@@ -15,6 +15,7 @@ package nemesis
 
 import (
 	"context"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -25,6 +26,8 @@ const (
 	// RollingKillNemesisName is the name of RollingKillNemesis.
 	RollingKillNemesisName = "rolling_kill"
 )
+
+var defaultInterval = 10 * time.Second
 
 // RollingKillNemesis kill a service based on strategies, waits some time and then starts again.
 type RollingKillNemesis struct {
@@ -54,6 +57,7 @@ func (n *RollingKillNemesis) Execute(ctx context.Context, targets []cluster.Node
 			return errors.Trace(err)
 		}
 		log.Infof("RollingKillNemesis kills service %s", name)
+		time.Sleep(defaultInterval)
 
 		// Start
 		err = retryOnError(func() error {
