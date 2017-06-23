@@ -102,6 +102,7 @@ func (n *LantencyNemesis) Execute(ctx context.Context, targets []cluster.Node) (
 	return nil
 }
 
+// GetSelector implements Nemesis GetSelector interface.
 func (n *LantencyNemesis) GetSelector() Selector {
 	return OneTarget
 }

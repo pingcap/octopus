@@ -68,6 +68,7 @@ func (n *RollingKillNemesis) Execute(ctx context.Context, targets []cluster.Node
 	return nil
 }
 
+// GetSelector implements Nemesis GetSelector interface.
 func (n *RollingKillNemesis) GetSelector() Selector {
 	return AllTarget
 }

@@ -87,6 +87,7 @@ func (n *KillNemesis) Execute(ctx context.Context, targets []cluster.Node) (err 
 	return nil
 }
 
+// GetSelector implements Nemesis GetSelector interface.
 func (n *KillNemesis) GetSelector() Selector {
 	if len(n.Strategies) == 0 {
 		return OneTarget
