@@ -28,13 +28,22 @@ range = 5
 """
 
 [suite]
-names = ["bank", "crud", "block_writer","log"]
+names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
 concurrency = 10000
 
 [suite.bank]
 num_accounts = 100000000
 interval = "2s"
 table_num = 1
+
+[suite.bank2]
+num_accounts = 100000000
+interval = "2s"
+contention = "low"
+
+[suite.ledger]
+num_accounts = 10
+interval = "2s"
 
 [suite.crud]
 user_count = 1000

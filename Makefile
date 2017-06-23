@@ -17,6 +17,7 @@ all: build check test
 
 build:
 	$(GOBUILD) -o bin/tidb-benchbot benchbot/main.go
+	$(GOBUILD) -o bin/stability-tester stability-tester/*.go
 
 test:
 	$(GOTEST) --race $(PACKAGES)

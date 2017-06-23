@@ -22,6 +22,8 @@ type SuiteConfig struct {
 	// Concurrency is the concurrency to run all cases.
 	Concurrency int                   `toml:"concurrency"`
 	Bank        BankCaseConfig        `toml:"bank"`
+	Bank2       Bank2CaseConfig       `toml:"bank2"`
+	Ledger      LedgerConfig          `toml:"ledger"`
 	CRUD        CRUDCaseConfig        `toml:"crud"`
 	Log         LogCaseConfig         `toml:"log"`
 	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
@@ -33,6 +35,20 @@ type BankCaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
+}
+
+// Bank2CaseConfig is for bank2 test case.
+type Bank2CaseConfig struct {
+	// NumAccounts is total accounts
+	NumAccounts int      `toml:"num_accounts"`
+	Interval    Duration `toml:"interval"`
+	Contention  string   `toml:"contention"`
+}
+
+// LedgerConfig is for ledger test case.
+type LedgerConfig struct {
+	NumAccounts int      `toml:"num_accounts"`
+	Interval    Duration `toml:"interval"`
 }
 
 // CRUDCaseConfig is for CRUD test case.

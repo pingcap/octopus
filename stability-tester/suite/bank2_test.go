@@ -1,4 +1,4 @@
-// Copyright 2016 PingCAP, Inc.
+// Copyright 2017 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,37 +24,40 @@ import (
 
 var _ = Suite(&testBankSuite{})
 
-type testBankSuite struct {
+type testBank2Suite struct {
 	db *sql.DB
 }
 
-func (s *testBankSuite) SetUpSuite(c *C) {
+func (s *testBank2Suite) SetUpSuite(c *C) {
 	s.db = openTestDB(c)
 }
 
-func (s *testBankSuite) TearDownSuite(c *C) {
+func (s *testBank2Suite) TearDownSuite(c *C) {
 	s.db.Close()
 }
 
-func (s *testBankSuite) TestTransfer(c *C) {
-	bankCase := &BankCase{
-		cfg: &config.BankCaseConfig{
-			NumAccounts: 100,
-			Interval:    config.Duration{2 * time.Second},
-			TableNum:    3,
+func (s *testBank2Suite) TestTransfer(c *C) {
+	caseConf := config.Bank2CaseConfig{
+		NumAccounts: 100,
+		Interval: config.Duration{
+			Duration: 2 * time.Second,
 		},
-		concurrency: 10,
+		Contention: "low",
 	}
-
+	suiteConf := config.SuiteConfig{
+		Concurrency: 10,
+		Bank2:       caseConf,
+	}
+	conf := config.Config{
+		Suite: suiteConf,
+	}
+	bank2Case := NewBank2Case(&conf).(*Bank2Case)
 	ctx, cancel := context.WithCancel(context.Background())
-
-	bankCase.Initialize(ctx, s.db)
-
+	bank2Case.Initialize(ctx, s.db)
 	for i := 0; i < 10; i++ {
-		err := bankCase.Execute(s.db, i)
+		err := bank2Case.Execute(s.db, i)
 		c.Assert(err, IsNil)
 	}
-
-	bankCase.verify(s.db, "")
+	bank2Case.verify(s.db)
 	cancel()
 }
