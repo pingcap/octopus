@@ -15,6 +15,7 @@ package nemesis
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -33,7 +34,8 @@ const (
 type KillNemesis struct {
 	// WaitTime is the wait time to restart the server again
 	// after killing the service, if not set, ignore this nemesis.
-	WaitTime config.Duration `toml:"wait"`
+	WaitTime   config.Duration `toml:"wait"`
+	Strategies []string        `toml:"strategy"`
 }
 
 // killFactory returns a KillNemesis, kills services in the nodeNames randomly.
@@ -83,6 +85,19 @@ func (n *KillNemesis) Execute(ctx context.Context, targets []cluster.Node) (err 
 	}
 
 	return nil
+}
+
+// GetSelector implements Nemesis GetSelector interface.
+func (n *KillNemesis) GetSelector() Selector {
+	if len(n.Strategies) == 0 {
+		return OneTarget
+	}
+	s := n.Strategies[rand.Intn(len(n.Strategies))]
+	selector, ok := selectors[s]
+	if !ok {
+		return OneTarget
+	}
+	return selector
 }
 
 // String implements fmt.Stringer interface.

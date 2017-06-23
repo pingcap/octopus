@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
-// Range picks a set of nodes.
-type Range func(*cluster.Cluster, *config.Targets) []cluster.Node
+// Selector picks a set of nodes.
+type Selector func(*cluster.Cluster, *config.Targets) []cluster.Node
 
 func flatTargets(targets *config.Targets) []string {
 	var all []string
@@ -49,8 +49,23 @@ func OneTarget(c *cluster.Cluster, targets *config.Targets) []cluster.Node {
 	return []cluster.Node{t}
 }
 
-// TODO: add more Ranges
+func AllTarget(c *cluster.Cluster, targets *config.Targets) []cluster.Node {
+	all := flatTargets(targets)
+	var res []cluster.Node
+	for _, name := range all {
+		t, err := c.GetNode(name)
+		if err != nil {
+			log.Warning(err)
+			continue
+		}
+		res = append(res, t)
+	}
+	return res
+}
+
+// TODO: add more Selector
 
 func init() {
-	ranges["one"] = OneTarget
+	selectors["one"] = OneTarget
+	selectors["all"] = AllTarget
 }
