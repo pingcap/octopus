@@ -53,6 +53,12 @@ func ParseConfig(filePath string) (*ServerConfig, error) {
 	return cfg, nil
 }
 
+func NewServerConfig() *ServerConfig {
+	cfg := new(ServerConfig)
+	cfg.adjust()
+	return cfg
+}
+
 func adjustStr(sz *string, defVal string) {
 	if len(*sz) == 0 {
 		*sz = defVal

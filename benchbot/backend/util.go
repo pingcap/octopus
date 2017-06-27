@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"database/sql"
+	"encoding/gob"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -48,6 +50,28 @@ func ReadJson(r io.ReadCloser, data interface{}) error {
 	}
 
 	return nil
+}
+
+func DumpJSON(obj interface{}, format bool) (string, error) {
+	if data, err := json.Marshal(obj); err != nil {
+		return "", err
+	} else {
+		if format {
+			var out bytes.Buffer
+			json.Indent(&out, data, "", "\t")
+			return string(out.Bytes()), nil
+		} else {
+			return string(data), nil
+		}
+	}
+}
+
+func DeepCopy(dst, src interface{}) error {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(src); err != nil {
+		return err
+	}
+	return gob.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(dst)
 }
 
 func ExecCmd(command string, ctx context.Context, output io.Writer) bool {

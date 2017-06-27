@@ -29,7 +29,7 @@ func (job *Job) parseFromJson(resp *http.Response) error {
 }
 
 func setup() *httptest.Server {
-	cfg := new(ServerConfig)
+	cfg := NewServerConfig()
 	cfg.Ansible.Clusters = make([]ClusterDSN, 0) // ps : not any cluster, just testing api.
 
 	svr, _ := NewServer(cfg)
