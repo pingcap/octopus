@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/suite"
 	"golang.org/x/net/context"
 )
 
@@ -29,22 +30,20 @@ type BinPackage struct {
 }
 
 type BenchmarkMeta struct {
-	Creator      string       `json:"user"`
-	Note         string       `json:"note"`
-	Upstream     string       `json:"from"`
-	HttpCallback string       `json:"callback"`
-	Packages     []BinPackage `json:"packages"`
-	TiDB         BinPackage   `json:"-"`
-	TiKV         BinPackage   `json:"-"`
-	Pd           BinPackage   `json:"-"`
+	Creator      string        `json:"user"`
+	Note         string        `json:"note"`
+	Upstream     string        `json:"from"`
+	HttpCallback string        `json:"callback"`
+	Packages     []*BinPackage `json:"packages"`
+	TiDB         *BinPackage   `json:"-"`
+	TiKV         *BinPackage   `json:"-"`
+	Pd           *BinPackage   `json:"-"`
 }
 
 type BenchmarkResult struct {
-	Cases int64 `json:"cases"`
-	// TimeCost int64  `json:"time_cost"`
-	// Success  int    `json:"success"`
-	// Fail     int    `json:"failure"`
-	Message string `json:"msg"`
+	Cases   int           `json:"cases"`
+	Details []*CaseResult `json:"details"`
+	Message string        `json:"msg"`
 }
 
 type BenchmarkJob struct {
@@ -52,27 +51,66 @@ type BenchmarkJob struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	ID         int64           `json:"id"`
-	CreateTime string          `json:"created_time"`
-	Status     string          `json:"status"`
-	Meta       BenchmarkMeta   `json:"meta"`
-	Result     BenchmarkResult `json:"result"`
+	ID         int64            `json:"id"`
+	CreateTime string           `json:"created_time"`
+	Status     string           `json:"status"`
+	Meta       *BenchmarkMeta   `json:"meta"`
+	Result     *BenchmarkResult `json:"result"`
 }
 
-func NewBenchmarkJob(svr *Server) *BenchmarkJob {
+func NewBenchmarkMeta() *BenchmarkMeta {
+	return &BenchmarkMeta{
+		Packages: make([]*BinPackage, 0),
+	}
+}
+
+func NewBenchmarkResult() *BenchmarkResult {
+	return &BenchmarkResult{
+		Details: make([]*CaseResult, 0),
+	}
+}
+
+func NewBenchmarkMetaFromJSON(data []byte) (*BenchmarkMeta, error) {
+	meta := new(BenchmarkMeta)
+	if err := json.Unmarshal(data, meta); err != nil {
+		return nil, err
+	}
+
+	for _, item := range meta.Packages {
+		switch item.Repo {
+		case "tidb":
+			meta.TiDB = item
+		case "tikv":
+			meta.TiKV = item
+		case "pd":
+			meta.Pd = item
+		default:
+			// return errors.New(fmt.Sprint("unsupported item : ", item.Repo))
+		}
+	}
+	return meta, nil
+}
+
+func (meta *BenchmarkMeta) Valid() bool {
+	return len(meta.Creator) > 0 && meta.TiDB.valid() && meta.TiKV.valid() && meta.Pd.valid()
+}
+
+func (pkg *BinPackage) valid() bool {
+	return (len(pkg.Branch) > 0 || len(pkg.Tag) > 0) && len(pkg.GitHash) > 0
+}
+
+func NewBenchmarkJob() *BenchmarkJob {
 	job := &BenchmarkJob{
-		ID:         svr.uuidAllocator.Gen(BenchmarkJobUUID),
+		ID:         -1,
 		Status:     Pending,
 		CreateTime: time.Now().Format(TimeFormat),
+		Meta:       NewBenchmarkMeta(),
+		Result:     NewBenchmarkResult(),
 	}
 
 	job.ctx, job.cancel = context.WithCancel(context.Background())
 
 	return job
-}
-
-func (pkg BinPackage) valid() bool {
-	return (len(pkg.Branch) > 0 || len(pkg.Tag) > 0) && len(pkg.GitHash) > 0
 }
 
 func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
@@ -113,14 +151,6 @@ func (job *BenchmarkJob) DumpToJson() string {
 
 func (job *BenchmarkJob) abortedError() error {
 	return fmt.Errorf("job [%s] aborted", job.ID)
-}
-
-func (job *BenchmarkJob) Valid() bool {
-	job.mux.RLock()
-	defer job.mux.RUnlock()
-
-	basic := len(job.Meta.Creator) > 0
-	return basic && job.Meta.TiDB.valid() && job.Meta.TiKV.valid() && job.Meta.Pd.valid()
 }
 
 func (job *BenchmarkJob) Run() (err error) {
@@ -173,7 +203,7 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 		return
 	}
 
-	cluster = clusterManager.applyAnsibleCluster(&job.Meta.TiDB, &job.Meta.TiKV, &job.Meta.Pd)
+	cluster = clusterManager.applyAnsibleCluster(job.Meta.TiDB, job.Meta.TiKV, job.Meta.Pd)
 	defer func() {
 		if err != nil && cluster != nil {
 			cluster.Destory()
@@ -217,16 +247,15 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 }
 
 func (job *BenchmarkJob) run(cluster Cluster) error {
-	if err := cluster.Ping(); err != nil {
-		log.Errorf("cluster failed to access : %s", err.Error())
-		return err
-	}
-
 	if err := job.updateStatus(Running); err != nil {
 		return err
 	}
 
-	time.Sleep(time.Millisecond * 100) // ps ; just pretend to do something
+	log.Infof("[job-%d] start running bench ...", job.ID)
+
+	time.Sleep(time.Millisecond * 500) // ps : pretend to run cases
+
+	log.Infof("[job-%d] bench finish !", job.ID)
 
 	return nil
 }

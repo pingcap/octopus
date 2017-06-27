@@ -182,6 +182,7 @@ func (c *AnsibleCluster) Run() error {
 	if ok := c.operate("start", buf); !ok {
 		return fmt.Errorf("start failed : %s\n", string(buf.Bytes()))
 	}
+
 	return nil
 }
 
@@ -191,6 +192,12 @@ func (c *AnsibleCluster) Stop() error {
 	if ok := c.operate("stop", buf); !ok {
 		return fmt.Errorf("stop failed : %s\n", string(buf.Bytes()))
 	}
+
+	if c.db != nil {
+		c.db.Close()
+		c.db = nil
+	}
+
 	return nil
 }
 
@@ -205,10 +212,10 @@ func (c *AnsibleCluster) Reset() error {
 
 func (c *AnsibleCluster) Destory() error {
 	c.Stop()
-	return c.free()
+	return c.destory()
 }
 
-func (c *AnsibleCluster) free() error {
+func (c *AnsibleCluster) destory() error {
 	log.Info("[Ansible] destorying ...")
 	buf := new(bytes.Buffer)
 	if ok := c.operate("destory", buf); !ok {

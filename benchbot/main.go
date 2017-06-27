@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"runtime"
 	"syscall"
 
 	log "github.com/ngaut/log"
@@ -50,6 +51,8 @@ func main() {
 		return
 	}
 
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	cfg, err := backend.ParseConfig(configFile)
 	if err != nil {
 		fmt.Printf("failed to load config (%s) : %s\n", configFile, err.Error())
@@ -85,4 +88,5 @@ func main() {
 
 	<-sig
 	svr.Close()
+	log.Info("Exit.")
 }
