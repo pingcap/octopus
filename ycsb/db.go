@@ -40,8 +40,9 @@ func SetupDatabase(dbURL string) (Database, error) {
 	case "tikv", "txn":
 		// url is tikv://pd_addr
 		return setupTxnKV(seps[1])
-	// case "raw":
-	// 	// url is raw://pd_addr
+	case "raw":
+		// url is raw://pd_addr
+		return setupRawKV(seps[1])
 	default:
 		return nil, fmt.Errorf("unsupported database: %s", seps[0])
 	}
