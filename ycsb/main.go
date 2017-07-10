@@ -33,29 +33,28 @@
 package main
 
 import (
-	"bytes"
-	"database/sql"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"log"
 	"math"
 	"math/rand"
-	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"net/http"
+	_ "net/http/pprof"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/ngaut/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // SQL statements
@@ -78,7 +77,6 @@ var duration = flag.Duration("duration", 0,
 	"The duration to run. If 0, run forever.")
 var writeDuration = flag.Duration("write-duration", 0,
 	"The duration to perform writes. If 0, write forever.")
-var verbose = flag.Bool("v", false, "Print *verbose debug output")
 var drop = flag.Bool("drop", true,
 	"Drop the existing table and recreate it to start from scratch")
 var rateLimit = flag.Uint64("rate-limit", 0,
@@ -90,19 +88,17 @@ var initialLoad = flag.Uint64("initial-load", 10000,
 var maxWrites = flag.Uint64("max-writes", 7*24*3600*1500,
 	"Maximum number of writes to perform before halting. This is required for accurately generating keys that are uniformly distributed across the keyspace.")
 
-var splits = flag.Int("splits", 0, "Number of splits to perform before starting normal operations")
+var logFile = flag.String("log-file", "", "log file")
+var logLevel = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
+
+var statusAddr = flag.String("status", ":10081", "Ycsb status listening address")
+var pushAddr = flag.String("push", "", "Prometheus push address")
 
 var readOnly int32
 
-type database interface {
-	readRow(key uint64) (bool, error)
-	insertRow(key uint64, fields []string) error
-	clone() database
-}
-
 // ycsbWorker independently issues reads, writes, and scans against the database.
 type ycsbWorker struct {
-	db database
+	db Database
 	// An RNG used to generate random keys
 	zipfR *ZipfGenerator
 	// An RNG used to generate random strings for the values
@@ -138,7 +134,7 @@ const (
 	scanOp
 )
 
-func newYcsbWorker(db database, zipfR *ZipfGenerator, workloadFlag string) *ycsbWorker {
+func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsbWorker {
 	source := rand.NewSource(int64(time.Now().UnixNano()))
 	var readFreq, writeFreq, scanFreq float32
 
@@ -159,13 +155,13 @@ func newYcsbWorker(db database, zipfR *ZipfGenerator, workloadFlag string) *ycsb
 	case "D", "d":
 		readFreq = 0.95
 		writeFreq = 0.95
-		panic("Workload D not implemented yet")
+		log.Fatal("Workload D not implemented yet")
 		// TODO: workload D (read latest) requires modifying the RNG to
 		// skew to the latest keys, so not done yet.
 	case "E", "e":
 		scanFreq = 0.95
 		writeFreq = 0.05
-		panic("Workload E (scans) not implemented yet")
+		log.Fatal("Workload E (scans) not implemented yet")
 	case "F", "f":
 		writeFreq = 1.0
 	}
@@ -187,7 +183,7 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 	binary.PutUvarint(yw.hashBuf[:], key)
 	yw.hashFunc.Reset()
 	if _, err := yw.hashFunc.Write(yw.hashBuf[:]); err != nil {
-		panic(err)
+		log.Fatalf("generate hash key failed %v", err)
 	}
 	// The Go sql driver interface does not support having the high-bit set in
 	// uint64 values!
@@ -201,18 +197,12 @@ func (yw *ycsbWorker) nextReadKey() uint64 {
 	var hashedKey uint64
 	key := yw.zipfR.Uint64()
 	hashedKey = yw.hashKey(key)
-	if *verbose {
-		fmt.Printf("reader: %d -> %d\n", key, hashedKey)
-	}
 	return hashedKey
 }
 
 func (yw *ycsbWorker) nextWriteKey() uint64 {
 	key := yw.zipfR.IMaxHead()
 	hashedKey := yw.hashKey(key)
-	if *verbose {
-		fmt.Printf("writer: %d -> %d\n", key, hashedKey)
-	}
 	return hashedKey
 }
 
@@ -223,12 +213,8 @@ func (yw *ycsbWorker) runLoader(n uint64, numWorkers int, thisWorkerNum int, wg 
 	for i := uint64(thisWorkerNum + zipfIMin); i < n; i += uint64(numWorkers) {
 		hashedKey := yw.hashKey(i)
 		if err := yw.insertRow(hashedKey, false); err != nil {
-			if *verbose {
-				fmt.Printf("error loading row %d: %s\n", i, err)
-			}
+			log.Fatalf("error loading row %d: %s", i, err)
 			atomic.AddUint64(&globalStats[writeErrors], 1)
-		} else if *verbose {
-			fmt.Printf("loaded %d -> %d\n", i, hashedKey)
 		}
 	}
 }
@@ -286,7 +272,7 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 	for i := 0; i < len(fields); i++ {
 		fields[i] = yw.randString(fieldLength)
 	}
-	if err := yw.db.insertRow(key, fields); err != nil {
+	if err := yw.db.InsertRow(key, fields); err != nil {
 		return err
 	}
 
@@ -300,7 +286,7 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 }
 
 func (yw *ycsbWorker) readRow() error {
-	empty, err := yw.db.readRow(yw.nextReadKey())
+	empty, err := yw.db.ReadRow(yw.nextReadKey())
 	if err != nil {
 		return err
 	}
@@ -332,129 +318,6 @@ func (yw *ycsbWorker) chooseOp() operation {
 	return readOp
 }
 
-type tidb struct {
-	db *sql.DB
-}
-
-func (c *tidb) readRow(key uint64) (bool, error) {
-	res, err := c.db.Query(fmt.Sprintf("SELECT * FROM ycsb.usertable WHERE ycsb_key=%d", key))
-	if err != nil {
-		return false, err
-	}
-	var rowsFound int
-	for res.Next() {
-		rowsFound++
-	}
-	if *verbose {
-		fmt.Printf("reader found %d rows for key %d\n", rowsFound, key)
-	}
-	if err := res.Close(); err != nil {
-		return false, err
-	}
-	return rowsFound == 0, nil
-}
-
-func (c *tidb) insertRow(key uint64, fields []string) error {
-	// TODO(arjun): Consider using a prepared statement here.
-	var buf bytes.Buffer
-	buf.WriteString("INSERT INTO ycsb.usertable VALUES (")
-	fmt.Fprintf(&buf, "%d", key)
-	for _, s := range fields {
-		fmt.Fprintf(&buf, ", '%s'", s)
-	}
-	buf.WriteString(")")
-	_, err := c.db.Exec(buf.String())
-	return err
-}
-
-func (c *tidb) clone() database {
-	return c
-}
-
-func setupTiDB(parsedURL *url.URL) (database, error) {
-	// Open connection to server and create a database.
-	url := strings.TrimLeft(parsedURL.String(), "tidb://")
-	fmt.Println(url)
-	db, err := sql.Open("mysql", url)
-	if err != nil {
-		return nil, err
-	}
-
-	// Allow a maximum of concurrency+1 connections to the database.
-	db.SetMaxOpenConns(*concurrency + 1)
-	db.SetMaxIdleConns(*concurrency + 1)
-
-	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS ycsb"); err != nil {
-		if *verbose {
-			fmt.Printf("Failed to create the database, attempting to continue... %s\n",
-				err)
-		}
-	}
-
-	if *drop {
-		if *verbose {
-			fmt.Println("Dropping the table")
-		}
-		if _, err := db.Exec("DROP TABLE IF EXISTS ycsb.usertable"); err != nil {
-			if *verbose {
-				fmt.Printf("Failed to drop the table: %s\n", err)
-			}
-			return nil, err
-		}
-	}
-
-	// Create the initial table for storing blocks.
-	createStmt := `
-CREATE TABLE IF NOT EXISTS ycsb.usertable (
-    ycsb_key BIGINT PRIMARY KEY NOT NULL,
-    FIELD1 TEXT,
-    FIELD2 TEXT,
-    FIELD3 TEXT,
-    FIELD4 TEXT,
-    FIELD5 TEXT,
-    FIELD6 TEXT,
-    FIELD7 TEXT,
-    FIELD8 TEXT,
-    FIELD9 TEXT,
-    FIELD10 TEXT
-)`
-	if _, err := db.Exec(createStmt); err != nil {
-		return nil, err
-	}
-
-	if *splits > 0 {
-		// NB: We only need ycsbWorker.hashKey, so passing nil for the database and
-		// ZipfGenerator is ok.
-		w := newYcsbWorker(nil, nil, *workload)
-		for i := 0; i < *splits; i++ {
-			key := w.hashKey(uint64(i))
-			if _, err := db.Exec(`ALTER TABLE ycsb.usertable SPLIT AT VALUES ($1)`, key); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
-	return &tidb{db: db}, nil
-}
-
-// setupDatabase performs initial setup for the example, creating a database
-// with a single table. If the desired table already exists on the cluster, the
-// existing table will be dropped if the -drop flag was specified.
-func setupDatabase(dbURL string) (database, error) {
-	parsedURL, err := url.Parse(dbURL)
-	if err != nil {
-		return nil, err
-	}
-
-	switch parsedURL.Scheme {
-	case "tidb", "mysql":
-		parsedURL.Scheme = "tidb"
-		return setupTiDB(parsedURL)
-	default:
-		return nil, fmt.Errorf("unsupported database: %s", parsedURL.Scheme)
-	}
-}
-
 var usage = func() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s <db URL>\n\n", os.Args[0])
@@ -471,9 +334,22 @@ func snapshotStats() (s [statsLength]uint64) {
 func main() {
 	flag.Usage = usage
 	flag.Parse()
-	if *verbose {
-		fmt.Fprintf(os.Stdout, "Starting YCSB load generator\n")
+
+	log.SetHighlighting(false)
+	if len(*logFile) > 0 {
+		log.SetOutputByName(*logFile)
+		log.SetRotateByHour()
 	}
+	log.SetLevelByString(*logLevel)
+
+	go func() {
+		http.ListenAndServe(*statusAddr, nil)
+		http.Handle("/metrics", prometheus.Handler())
+	}()
+
+	PushMetrics(*pushAddr)
+
+	log.Info("Starting YCSB load generator")
 
 	dbURL := "tidb://root@tcp(127.0.0.1:4000)/"
 	if flag.NArg() == 1 {
@@ -485,27 +361,26 @@ func main() {
 			concurrency)
 	}
 
-	db, err := setupDatabase(dbURL)
+	db, err := SetupDatabase(dbURL)
 
 	if err != nil {
 		log.Fatalf("Setting up database failed: %s", err)
 	}
-	if *verbose {
-		fmt.Printf("Database setup complete. Loading...\n")
-	}
+
+	log.Info("Database setup complete. Loading...")
 
 	lastNow := time.Now()
 	var lastOpsCount uint64
 	var lastStats [statsLength]uint64
 
-	zipfR, err := NewZipfGenerator(zipfIMin, *initialLoad, zipfS, *verbose)
+	zipfR, err := NewZipfGenerator(zipfIMin, *initialLoad, zipfS)
 	if err != nil {
 		panic(err)
 	}
 
 	workers := make([]*ycsbWorker, *concurrency)
 	for i := range workers {
-		workers[i] = newYcsbWorker(db.clone(), zipfR, *workload)
+		workers[i] = newYcsbWorker(db.Clone(), zipfR, *workload)
 	}
 
 	loadStart := time.Now()
@@ -518,10 +393,8 @@ func main() {
 		go workers[i].runLoader(*initialLoad, n, i, &wg)
 	}
 	wg.Wait()
-	if *verbose {
-		fmt.Printf("Loading complete, total time elapsed: %s\n",
-			time.Since(loadStart))
-	}
+	log.Infof("Loading complete, total time elapsed: %s",
+		time.Since(loadStart))
 
 	wg = sync.WaitGroup{}
 	errCh := make(chan error)
@@ -565,8 +438,8 @@ func main() {
 			numErr++
 			if !*tolerateErrors {
 				log.Fatal(err)
-			} else if *verbose {
-				log.Print(err)
+			} else {
+				log.Error(err)
 			}
 			continue
 
@@ -580,6 +453,16 @@ func main() {
 			if i%20 == 0 {
 				fmt.Printf("elapsed______ops/sec__reads/empty/errors___writes/errors____scans/errors\n")
 			}
+
+			cmdCounter.WithLabelValues("read").Add(float64(stats[nonEmptyReads] - lastStats[nonEmptyReads]))
+			cmdCounter.WithLabelValues("empty_read").Add(float64(stats[emptyReads] - lastStats[emptyReads]))
+			cmdCounter.WithLabelValues("write").Add(float64(stats[writes] - lastStats[writes]))
+			cmdCounter.WithLabelValues("scan").Add(float64(stats[scans] - lastStats[scans]))
+
+			cmdErrorCounter.WithLabelValues("read").Add(float64(stats[readErrors] - lastStats[readErrors]))
+			cmdErrorCounter.WithLabelValues("write").Add(float64(stats[writeErrors] - lastStats[writeErrors]))
+			cmdErrorCounter.WithLabelValues("scan").Add(float64(stats[scanErrors] - lastStats[scanErrors]))
+
 			fmt.Printf("%7s %12.1f %19s %15s %15s\n",
 				time.Duration(time.Since(start).Seconds()+0.5)*time.Second,
 				float64(opsCount-lastOpsCount)/elapsed.Seconds(),

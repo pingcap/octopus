@@ -15,9 +15,16 @@ default: build
 
 all: build check test
 
-build:
+build: tidb-benchbot stability-tester ycsb
+
+tidb-benchbot:
 	$(GOBUILD) -o bin/tidb-benchbot benchbot/main.go
-	$(GOBUILD) -o bin/stability-tester stability-tester/*.go
+
+tidb-stability:
+	$(GOBUILD) -o bin/tidb-stability-tester stability-tester/*.go
+
+tidb-ycsb:
+	$(GOBUILD) -o bin/tidb-ycsb ycsb/*.go
 
 test:
 	$(GOTEST) --race $(PACKAGES)

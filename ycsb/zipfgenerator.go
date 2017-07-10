@@ -22,12 +22,12 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/ngaut/log"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +45,6 @@ type ZipfGenerator struct {
 	iMin  uint64
 	// internally computed values
 	alpha, zeta2 float64
-	verbose      bool
 }
 
 // ZipfGeneratorMu holds variables which must be globally synced.
@@ -60,7 +59,7 @@ type ZipfGeneratorMu struct {
 
 // NewZipfGenerator constructs a new ZipfGenerator with the given parameters.
 // It returns an error if the parameters are outside the accepted range.
-func NewZipfGenerator(iMin, iMax uint64, theta float64, verbose bool) (*ZipfGenerator, error) {
+func NewZipfGenerator(iMin, iMax uint64, theta float64) (*ZipfGenerator, error) {
 	if iMin > iMax {
 		return nil, errors.Errorf("iMin %d > iMax %d", iMin, iMax)
 	}
@@ -74,8 +73,7 @@ func NewZipfGenerator(iMin, iMax uint64, theta float64, verbose bool) (*ZipfGene
 			r:    rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
 			iMax: iMax,
 		},
-		theta:   theta,
-		verbose: verbose,
+		theta: theta,
 	}
 	z.zipfGenMu.mu.Lock()
 	defer z.zipfGenMu.mu.Unlock()
@@ -134,9 +132,9 @@ func (z *ZipfGenerator) Uint64() uint64 {
 		spread := float64(z.zipfGenMu.iMax + 1 - z.iMin)
 		result = z.iMin + uint64(spread*math.Pow(z.zipfGenMu.eta*u-z.zipfGenMu.eta+1.0, z.alpha))
 	}
-	if z.verbose {
-		fmt.Printf("Uint64[%d, %d] -> %d\n", z.iMin, z.zipfGenMu.iMax, result)
-	}
+
+	log.Debugf("Zip Generator: Uint64[%d, %d] -> %d", z.iMin, z.zipfGenMu.iMax, result)
+
 	z.zipfGenMu.mu.Unlock()
 	return result
 }
