@@ -15,7 +15,7 @@ package main
 
 import (
 	"fmt"
-	"net/url"
+	"strings"
 )
 
 type Database interface {
@@ -28,16 +28,21 @@ type Database interface {
 // with a single table. If the desired table already exists on the cluster, the
 // existing table will be dropped if the -drop flag was specified.
 func SetupDatabase(dbURL string) (Database, error) {
-	parsedURL, err := url.Parse(dbURL)
-	if err != nil {
-		return nil, err
+	seps := strings.SplitN(dbURL, "://", 2)
+	if len(seps) != 2 {
+		return nil, fmt.Errorf("invalid url %s, must be scheme://path", dbURL)
 	}
 
-	switch parsedURL.Scheme {
+	switch seps[0] {
 	case "tidb", "mysql":
-		parsedURL.Scheme = "tidb"
-		return setupTiDB(parsedURL)
+		// url is tidb://username:password@protocol(address)
+		return setupTiDB(seps[1])
+	case "tikv", "txn":
+		// url is tikv://pd_addr
+		return setupTxnKV(seps[1])
+	// case "raw":
+	// 	// url is raw://pd_addr
 	default:
-		return nil, fmt.Errorf("unsupported database: %s", parsedURL.Scheme)
+		return nil, fmt.Errorf("unsupported database: %s", seps[0])
 	}
 }
