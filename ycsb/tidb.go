@@ -17,8 +17,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"net/url"
-	"strings"
 
 	"github.com/ngaut/log"
 )
@@ -62,9 +60,8 @@ func (c *tidb) Clone() Database {
 	return c
 }
 
-func setupTiDB(parsedURL *url.URL) (Database, error) {
+func setupTiDB(url string) (Database, error) {
 	// Open connection to server and create a database.
-	url := strings.TrimLeft(parsedURL.String(), "tidb://")
 	db, err := sql.Open("mysql", url)
 	if err != nil {
 		return nil, err
