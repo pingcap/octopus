@@ -20,6 +20,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/octopus/schrodinger/config"
 )
 
 func initLogger(cfg *Config) error {
@@ -41,7 +42,7 @@ func initLogger(cfg *Config) error {
 }
 
 func main() {
-	cfg := NewConfig()
+	cfg := config.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
 	case nil:
@@ -55,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Errorf("logger init failed: %s", err.Error())
 	}
-
+	//catService := cat.NewCatService()
 	go func() {
 		//addr := fmt.Sprintf(":%d", cfg.Port)
 	}()
