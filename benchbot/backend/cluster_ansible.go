@@ -24,6 +24,12 @@ var (
 	clusterDetectMaxtTimes int = 60
 )
 
+const (
+	GitHashNote = "Git Commit Hash"
+)
+
+type ansibleProcess func() error
+
 func initAnsibleEnv(cfg *ServerConfig) error {
 	packagesDir = filepath.Join(cfg.Dir, "packages")
 	ansibleResoucesDir = filepath.Join(cfg.Ansible.Dir, "resources")
@@ -39,6 +45,46 @@ func initAnsibleEnv(cfg *ServerConfig) error {
 	if err := os.MkdirAll(ansibleDowloadsDir, os.ModePerm); err != nil {
 		return err
 	}
+	return nil
+}
+
+func exportGitVersion(binFile string) (string, error) {
+	buf := new(bytes.Buffer)
+	success := ExecCmd(binFile+" -V", nil, buf)
+	output := string(buf.Bytes())
+
+	if !success {
+		return "", fmt.Errorf("'%s' git version export failed : %s", binFile, output)
+	}
+
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.HasPrefix(line, GitHashNote) {
+			continue
+		}
+
+		if parts := strings.Split(line, " "); len(parts) > 1 {
+			ver := parts[len(parts)-1]
+			return ver, nil
+		}
+	}
+
+	return "", nil
+}
+
+func checkGitVersion(binFile string, mustGitHash string) error {
+	if !FileExists(binFile) {
+		return fmt.Errorf("bin file not exists : %s", binFile)
+	}
+
+	binGitHash, err := exportGitVersion(binFile)
+	if err != nil {
+		return err
+	}
+
+	if strings.ToLower(binGitHash) != strings.ToLower(mustGitHash) {
+		return fmt.Errorf("Git Hash not match : %s != %s", binGitHash, mustGitHash)
+	}
+
 	return nil
 }
 
@@ -58,45 +104,13 @@ func (c *AnsibleCluster) operate(op string, output io.Writer) bool {
 }
 
 func (c *AnsibleCluster) Prepare() (err error) {
-	ops := [](func() error){c.fetchResources, c.boostrap}
+	ops := []ansibleProcess{c.fetchResources, c.boostrap}
 	for _, op := range ops {
 		if err = op(); err != nil {
 			return
 		}
 	}
 	return
-}
-
-func checkGitVersion(binFile string, mustGitHash string) error {
-	if !FileExists(binFile) {
-		return fmt.Errorf("bin file not exists : %s", binFile)
-	}
-
-	buf := new(bytes.Buffer)
-	if ok := ExecCmd(binFile+" -V", nil, buf); !ok {
-		return fmt.Errorf("load bin version failed : ", string(buf.Bytes()))
-	}
-
-	output := string(buf.Bytes())
-	// TODO : use reg to search
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if !strings.HasPrefix(line, "Git Commit Hash:") {
-			continue
-		}
-
-		if parts := strings.Split(line, " "); len(parts) > 1 {
-			binGitHash := parts[len(parts)-1]
-			if strings.ToLower(binGitHash) != strings.ToLower(mustGitHash) {
-				return fmt.Errorf("Git Hash not match : %s != %s", binGitHash, mustGitHash)
-			} else {
-				return nil
-			}
-		}
-		break
-	}
-
-	return fmt.Errorf("Git Hash not found : output = (%s)", output)
 }
 
 func (c *AnsibleCluster) fetchResources() error {
@@ -111,6 +125,14 @@ func (c *AnsibleCluster) fetchResources() error {
 		pkgBinFile := filepath.Join(pkgDir, "bin", pkg.Repo+"-server")
 
 		var localCached bool = FileExists(pkgBinFile)
+		if localCached {
+			if err := checkGitVersion(pkgBinFile, pkg.GitHash); err != nil {
+				log.Errorf("cached bin with unexpected git hash : %s - %s", pkg.Repo, err.Error())
+				os.Remove(pkgBinFile)
+				localCached = false
+			}
+		}
+
 		if !localCached {
 			if err := os.MkdirAll(pkgDir, os.ModePerm); err != nil {
 				return err
@@ -123,6 +145,7 @@ func (c *AnsibleCluster) fetchResources() error {
 			if err := checkGitVersion(pkgBinFile, pkg.GitHash); err != nil {
 				log.Errorf("%s - %s", pkg.Repo, err.Error())
 				os.Remove(pkgBinFile)
+				return err
 			}
 		}
 
@@ -224,34 +247,46 @@ func (c *AnsibleCluster) destory() error {
 	return nil
 }
 
-func (c *AnsibleCluster) Ping() (err error) {
-	if err = CheckConnection(c.db); err == nil {
-		return
+func (c *AnsibleCluster) Ping() error {
+	if err := CheckConnection(c.db); err == nil {
+		return err
 	}
 
 	if c.db != nil {
 		c.db.Close()
 	}
 
-	c.db, err = c.connectCluster()
+	if db, err := c.connectCluster(); err != nil {
+		return err
+	} else {
+		c.db = db
+	}
 
-	return
+	return nil
 }
 
-func (c *AnsibleCluster) connectCluster() (db *sql.DB, err error) {
+func (c *AnsibleCluster) connectCluster() (*sql.DB, error) {
+	var db *sql.DB
+	var err error
+
 	dsn := c.meta.dsn
 	for i := 0; i < clusterDetectMaxtTimes; i++ {
 		db, err = ConnectDB(dsn.user, dsn.password, dsn.host, dsn.port, dsn.db)
 		if err == nil {
-			return
+			return db, nil
 		}
+
 		time.Sleep(time.Second * 1)
 	}
-	return
+
+	return nil, err
 }
 
 func (c *AnsibleCluster) Close() {
 	// TODO ... ?
+	if c.db != nil {
+		c.db.Close()
+	}
 }
 
 func (c *AnsibleCluster) Accessor() *sql.DB {

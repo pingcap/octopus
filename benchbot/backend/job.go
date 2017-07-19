@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"bytes"
+	_ "bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -186,8 +186,9 @@ func (job *BenchmarkJob) onJobDone(success bool) {
 	callbackUrl := job.Meta.HttpCallback
 	if len(callbackUrl) > 0 {
 		// TODO ... timeout limitaion
-		data, _ := json.Marshal(map[string]interface{}{"id": job.ID})
-		resp, err := http.Post(callbackUrl, "application/json", bytes.NewReader(data))
+		// data, _ := json.Marshal(map[string]interface{}{"id": job.ID})
+		// resp, err := http.Post(callbackUrl, "application/json", bytes.NewReader(data))
+		resp, err := http.Get(callbackUrl)
 		if err != nil {
 			log.Errorf("[job-%d] cause error on callback (%s) : %s", job.ID, callbackUrl, err.Error())
 		} else {

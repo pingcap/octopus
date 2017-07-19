@@ -142,9 +142,8 @@ func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request)
 }
 
 func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	inDetail := len(r.URL.Query().Get("detail")) > 0
-
+	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
@@ -169,8 +168,9 @@ func (hdl *BenchmarkHandler) GetJobs(w http.ResponseWriter, r *http.Request) {
 	vals := strings.Split(mux.Vars(r)["ids"], ",")
 	ids := make([]int, 0, len(vals))
 	for _, v := range vals {
-		jobID, err := ParseInt64(v)
-		if err == nil {
+		if jobID, err := ParseInt64(v); err != nil {
+			continue
+		} else {
 			ids = append(ids, int(jobID))
 		}
 	}
