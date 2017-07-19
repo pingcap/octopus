@@ -27,15 +27,19 @@ Cases :
 const (
 	defaultCount = 0
 
-	simOLTPTables         = 1
-	simOLTPConcurrency    = 10
-	simOLTPGetSetRequests = 1000
+	simOLTPTables         = 16
+	simOLTPConcurrency    = 1000
+	simOLTPGetSetRequests = 500000
 )
 
 type SimpleOLTPSuite struct{}
 
 func NewSimpleOLTPSuite() *SimpleOLTPSuite {
 	return new(SimpleOLTPSuite)
+}
+
+func (s *SimpleOLTPSuite) String() string {
+	return "SimpleOLTPSuite"
 }
 
 func (s *SimpleOLTPSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseResult, err error) {
@@ -52,6 +56,7 @@ func (s *SimpleOLTPSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseR
 	for _, c := range cases {
 		ret, err := c.Run(ctx, db)
 		if err == nil {
+			log.Infof("case end : %s", ret.Summary.FormatJSON())
 			results = append(results, ret)
 		}
 	}
