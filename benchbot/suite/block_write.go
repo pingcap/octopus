@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
-	//"github.com/ngaut/log"
+	"github.com/ngaut/log"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
 
 const (
-	bwConcurrency = 10
-	round         = 300
-	minBlockSize  = 1024
-	maxBlockSize  = 1024 * 5
+	bwConcurrency = 1000
+	round         = 1000
+	minBlockSize  = 1024 * 3
+	maxBlockSize  = 1024 * 4 - 1
 
 	defaultFilling = byte('a')
 
@@ -32,10 +32,7 @@ const (
 )
 
 var (
-	dataFileter = []byte{
-		byte(0), byte('\n'), byte('\r'), byte('\x1a'),
-		byte('\''), byte('"'), byte('\\')
-	}
+	dataFilter = []byte{byte('\''), byte('"'), byte('\\')}
 )
 
 type BlockWriteSuite struct{}
@@ -59,6 +56,7 @@ func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseR
 		if res, err := c.Run(ctx, db); err != nil {
 			break
 		} else {
+			log.Infof("case end : %s", res.Summary.FormatJSON())
 			results = append(results, res)
 		}
 	}
@@ -121,27 +119,23 @@ func newBlockWriter(stat *statisticManager) *blockWriter {
 
 func (bw *blockWriter) randomBlock() []byte {
 	blockSize := bw.rand.Intn(bw.maxSize-bw.minSize) + bw.minSize
+	blockData := randomAsciiBytes(blockSize, bw.rand)
 
-	// blockData := make([]byte, blockSize)
-
-	// var v byte
-	// for i := range blockData {
-	// 	v = byte(bw.rand.Int() & 0xff)
-	// 	for _, c := range dataFileter {
-	// 		if c == v {
-	// 			v = defaultFilling
-	// 			break
-	// 		}
-	// 	}
-	// 	blockData[i] = v
-	// }
-	// return blockData
-
-
-	return randomAsciiBytes(blockSize, bw.rand)
+	var v byte
+	for i := range blockData {
+		v = byte(bw.rand.Int() & 0xff)
+		for _, c := range dataFilter {
+			if c == v {
+				v = defaultFilling
+				break
+			}
+		}
+		blockData[i] = v
+	}
+	return blockData
 }
 
-func (bw *blockWriter) execute(db *sql.DB) {
+func (bw *blockWriter) execute(db *sql.DB) error {
 	bw.blockCount++
 	blockID := bw.rand.Int63()
 	blockData := bw.randomBlock()
@@ -157,6 +151,8 @@ func (bw *blockWriter) execute(db *sql.DB) {
 		latency: time.Now().Sub(start).Seconds(),
 		err:     err != nil,
 	})
+
+	return err
 }
 
 // Initialize implements Case Initialize interface.
@@ -176,6 +172,7 @@ func (c *BlockWriteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, erro
 		wg := sync.WaitGroup{}
 		wg.Add(bwConcurrency)
 
+		var err error
 		process := func(w *blockWriter, id int) {
 			defer wg.Done()
 			for i := 0; i < round; i++ {
@@ -183,7 +180,9 @@ func (c *BlockWriteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, erro
 				case <-ctx.Done():
 					return
 				default:
-					w.execute(db)
+					if err = w.execute(db); err != nil {
+						log.Errorf("[block_write] error : %s", err.Error())
+					}
 				}
 			}
 		}

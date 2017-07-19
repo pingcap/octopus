@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"encoding/gob"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/pkg"
 	"golang.org/x/net/context"
 )
@@ -21,7 +22,7 @@ const (
 	opTxCommit
 	opTxRollback
 
-	batchFlushLimit = 1000
+	batchFlushLimit = 100000
 
 	percentile = 0.95
 )
@@ -258,6 +259,10 @@ func (mgr *statisticManager) start() {
 func (mgr *statisticManager) record(op *dbop) {
 	if op.latency > 0.00000001 {
 		op.latencyMs = op.latency * 1000
+	}
+
+	if op.latency > 10.0 {
+		log.Warnf("long time sql op : cls = %d / time = %.1f sec", op.class, op.latency)	
 	}
 
 	mgr.mux.Lock()

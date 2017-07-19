@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	simOpsTables = 10
+	simOpsTables = 16
 
-	simSetConcurrency = 32   // sysbench : num-threads
-	simSetRequests    = 1100 // sysbench : max-requests
+	simSetConcurrency = 1000   // sysbench : num-threads
+	simSetRequests    = 1000000 // sysbench : max-requests
 
-	simGetConcurrency = 32   // sysbench : num-threads
-	simGetRequests    = 1010 // sysbench : max-requests
+	simGetConcurrency = 1000   // sysbench : num-threads
+	simGetRequests    = 2000000 // sysbench : max-requests
 
-	simDelConcurrency = 32  // sysbench : num-threads
-	simDelRequests    = 555 // sysbench : max-requests
+	simDelConcurrency = 1000  // sysbench : num-threads
+	simDelRequests    = 1000000 // sysbench : max-requests
 )
 
 type simExeContext struct {
@@ -63,8 +63,10 @@ func (s *SimpleOperationSuite) Run(ctx context.Context, db *sql.DB) (results []*
 		if res, err := c.Run(ctx, db); err != nil {
 			break
 		} else {
+			log.Infof("case end : %s", res.Summary.FormatJSON())
 			results = append(results, res)
 		}
+		time.Sleep(time.Second * 60)
 	}
 
 	return
@@ -110,9 +112,10 @@ func (c *SimpleSetCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error
 	// ps : After finish filling tables with data,
 	//      set the max `Seq` base on the executing stragety above !
 	rowsPerTable := float64(simSetRequests) / float64(simOpsTables)
-	c.ctx.tableMaxSeq = int(math.Floor(rowsPerTable))
-
-	time.Sleep(time.Second * 60)
+	if c.ctx != nil {
+		c.ctx.tableMaxSeq = int(math.Floor(rowsPerTable))
+	}
+	
 	// ps : while tikv configre wtih "sync-log = false" ,
 	//		here wait for moment to aviod query via index causing long time latency !!!
 

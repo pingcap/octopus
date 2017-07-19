@@ -17,7 +17,7 @@ const (
 	asciiStart = int(' ')
 	asciiEnd   = int('~')
 
-	fillConcurrency   = 64
+	fillConcurrency   = 512
 	fillStringLen     = 32
 	defaultStringSize = 32
 
