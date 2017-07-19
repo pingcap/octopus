@@ -1,7 +1,19 @@
 package api
 
-import "github.com/gorilla/mux"
+import (
+	"net/http"
 
-func NewRouter() {
-	router := mux.NewRouter()
+	"github.com/gorilla/mux"
+	"github.com/pingcap/octopus/schrodinger/cat"
+	"github.com/unrolled/render"
+)
+
+func NewRouter(service *cat.CatService) http.Handler {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+	catHandler := newCatHandler(service, rd)
+	r := mux.NewRouter()
+	r.HandleFunc("/cat/new", catHandler.NewCat).Methods("POST")
+	return httpRequest(r)
 }

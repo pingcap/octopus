@@ -25,10 +25,12 @@ import (
 type Config struct {
 	*flag.FlagSet `json:"-"`
 
-	LogLevel  string `toml:"log-level" json:"log-level"`
-	LogFile   string `toml:"log-file" json:"log-file"`
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
-	Port      int    `toml:"port" json:"port"`
+	LogLevel    string `toml:"log-level" json:"log-level"`
+	LogFile     string `toml:"log-file" json:"log-file"`
+	LogRotate   string `toml:"log-rotate" json:"log-rotate"`
+	Port        int    `toml:"port" json:"port"`
+	RepoPrefix  string `toml:"repo-prefix" json:"repo-prefix"`
+	ServiceType string `toml:"service-type" json:"service-type"`
 
 	configFile   string
 	printVersion bool
@@ -41,12 +43,14 @@ func NewConfig() *Config {
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
 	fs.StringVar(&cfg.configFile, "config", "", "path to config file")
-	fs.IntVar(&cfg.Port, "port", "8088", "port of the web service")
+	fs.IntVar(&cfg.Port, "port", 8088, "port of the web service")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
+	fs.StringVar(&cfg.RepoPrefix, "repo-prefix", "pingcap", "docker repo prefix for tidb related images")
+	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP,LoadBalancer) for tidb")
 
-	return fs
+	return cfg
 }
 
 // Parse parses flag definitions from the arguments list.
@@ -73,7 +77,7 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Trace(err)
 	}
 
-	if len(c.FlagSet.Arg()) != 0 {
+	if len(c.FlagSet.Args()) != 0 {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
 	}
 

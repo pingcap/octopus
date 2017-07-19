@@ -15,15 +15,21 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
 	"syscall"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/octopus/schrodinger/api"
+	"github.com/pingcap/octopus/schrodinger/cat"
+	"github.com/pingcap/octopus/schrodinger/cluster"
 	"github.com/pingcap/octopus/schrodinger/config"
 )
 
-func initLogger(cfg *Config) error {
+func initLogger(cfg *config.Config) error {
 	log.SetLevelByString(cfg.LogLevel)
 	if len(cfg.LogFile) > 0 {
 		err := log.SetOutputByName(cfg.LogFile)
@@ -56,13 +62,18 @@ func main() {
 	if err != nil {
 		log.Errorf("logger init failed: %s", err.Error())
 	}
-	//catService := cat.NewCatService()
+	clusterManger := cluster.NewClusterManager()
+	catService := cat.NewCatService(clusterManger)
 	go func() {
-		//addr := fmt.Sprintf(":%d", cfg.Port)
+		r := api.NewRouter(catService)
+		addr := fmt.Sprintf(":%d", cfg.Port)
+		if err := http.ListenAndServe(addr, r); err != nil {
+			log.Errorf("start api server failed: %s", err)
+		}
 	}()
 
 	sc := make(chan os.Signal, 1)
-	signale.Notify(sc,
+	signal.Notify(sc,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,

@@ -10,7 +10,7 @@ const (
 
 type CATStatus int
 
-type Cat struct {
+type cat struct {
 	Name      string        `yaml:"name"`
 	CodePath  string        `yaml:"code-path"`
 	RunTime   time.Duration `yaml:"duration"`
@@ -19,14 +19,29 @@ type Cat struct {
 	Status    CATStatus     `yaml:"-"`
 }
 
-//func (c *Cat) start() {
+//func (c *cat) start() {
 //}
 
-//func (c *Cat) stop() {
+//func (c *cat) stop() {
 //}
 
-//func (c *Cat) initCluster() {
+//func (c *cat) initCluster() {
 //}
 
-//func (c *Cat) destroyCluster() {
+//func (c *cat) destroyCluster() {
+//}
+
+//func (c *cat) startNamesis() {
+//}
+
+//func (c *cat) stopNamesis() {
+//}
+
+//func (c *cat) parse(path string) {
+//}
+
+//func (c *cat) run() {
+//}
+
+//func (c *cat) alert() {
 //}
