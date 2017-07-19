@@ -11,6 +11,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/ngaut/log"
 	"golang.org/x/net/context"
+
+	. "github.com/pingcap/octopus/benchbot/pkg"
 )
 
 const (
