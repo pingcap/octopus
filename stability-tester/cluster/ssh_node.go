@@ -61,6 +61,7 @@ func (s *sshNode) createClient() *ssh.Client {
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
