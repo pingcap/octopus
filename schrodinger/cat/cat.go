@@ -11,12 +11,14 @@ const (
 type CATStatus int
 
 type cat struct {
-	Name      string        `yaml:"name"`
-	CodePath  string        `yaml:"code-path"`
-	RunTime   time.Duration `yaml:"duration"`
-	AlertURL  string        `yaml:"alert-url"`
-	IsNamesis bool          `yaml:"namesis"`
-	Status    CATStatus     `yaml:"-"`
+	Name        string        `yaml:"name"`
+	CodePath    string        `yaml:"code-path"`
+	RunTime     time.Duration `yaml:"duration"`
+	AlertURL    string        `yaml:"alert-url"`
+	IsNamesis   bool          `yaml:"namesis"`
+	Status      CATStatus     `yaml:"-"`
+	namespace   string
+	clusterName string
 }
 
 //func (c *cat) start() {

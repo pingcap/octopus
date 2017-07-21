@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		log.Errorf("logger init failed: %s", err.Error())
 	}
-	clusterManger := cluster.NewClusterManager()
+	clusterManger := cluster.NewClusterManager(cfg.RepoPrefix, cfg.ServiceType)
 	catService := cat.NewCatService(clusterManger)
 	go func() {
 		r := api.NewRouter(catService)
