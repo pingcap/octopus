@@ -67,6 +67,7 @@ func main() {
 	go func() {
 		r := api.NewRouter(catService)
 		addr := fmt.Sprintf(":%d", cfg.Port)
+		log.Infof("Starting listen %s", addr)
 		if err := http.ListenAndServe(addr, r); err != nil {
 			log.Errorf("start api server failed: %s", err)
 		}
@@ -81,6 +82,9 @@ func main() {
 
 	go func() {
 		sig := <-sc
-		log.Info("got signal [%d], exit", sig)
+		log.Infof("got signal [%d], exit", sig)
+		os.Exit(0)
 	}()
+
+	select {}
 }

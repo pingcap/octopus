@@ -1,8 +1,12 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/schrodinger/cat"
 	"github.com/unrolled/render"
 )
@@ -19,6 +23,28 @@ func newCatHandler(service *cat.CatService, rd *render.Render) *CatHandler {
 	}
 }
 
-func (c *CatHandler) NewCat(w http.ResponseWriter, r *http.Request) {
-	//defer r.Body.Close()
+func (c *CatHandler) newCat(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		c.render.JSON(w, http.StatusBadRequest, "invalid post data !")
+		return
+	}
+	cat := &cat.Cat{}
+	if err := json.Unmarshal(data, cat); err != nil {
+		log.Errorf("invalid json data - %s", data)
+		c.render.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrent: %s", err.Error()))
+		return
+	}
+	if !cat.Valid() {
+		c.render.JSON(w, http.StatusBadRequest, "not no valid request, params request!")
+		return
+	}
+	if err := c.service.PutCat(cat); err != nil {
+		log.Errorf("put cat to service list failed: %s", err)
+		c.render.JSON(w, http.StatusInternalServerError, fmt.Sprint("put cat to service list failed!"))
+		return
+	}
+	c.render.JSON(w, http.StatusOK, fmt.Sprint("success!"))
+	return
 }

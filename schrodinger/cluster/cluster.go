@@ -38,7 +38,6 @@ type Cluster struct {
 
 	// response info
 	CreatedAt         time.Time    `json:"created_at,omitempty"`
-	Initialized       bool         `json:"initialized,omitempty"` // whether initialization password is set
 	TiDBService       Service      `json:"tidb_service,omitempty"`
 	PrometheusService Service      `json:"prometheus_service,omitempty"`
 	GrafanaService    Service      `json:"grafana_service,omitempty"`
@@ -47,14 +46,12 @@ type Cluster struct {
 	TiKVStatus        []*PodStatus `json:"tikv_status,omitempty"`
 }
 
-func NewCluster(cluster *tcapi.TidbCluster) *Cluster {
-	return &Cluster{
-		Name:      cluster.Metadata.Name,
-		CreatedAt: cluster.Metadata.CreationTimestamp.Time,
-		PD:        &PodSpec{Size: cluster.Spec.PD.Size, Version: getVersion(cluster.Spec.PD.Image)},
-		TiDB:      &PodSpec{Size: cluster.Spec.TiDB.Size, Version: getVersion(cluster.Spec.TiDB.Image)},
-		TiKV:      &PodSpec{Size: cluster.Spec.TiKV.Size, Version: getVersion(cluster.Spec.TiKV.Image)},
-	}
+func (c *Cluster) Valid() bool {
+	return true
+}
+
+type clusterConfig struct {
+	MetricsAddr string
 }
 
 type PodStatus struct {

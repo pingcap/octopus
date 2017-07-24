@@ -1,16 +1,25 @@
 package cluster
 
 import (
+	"bytes"
+	"fmt"
 	"html/template"
+	"strconv"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-operator/pkg/client"
+	tcapi "github.com/pingcap/tidb-operator/pkg/tidbcluster/api"
+	"github.com/pingcap/tidb-operator/pkg/util/label"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/pkg/api/v1"
+)
+
+const (
+	clusterName = "tidb-cluster"
 )
 
 type Manager struct {
@@ -52,7 +61,13 @@ func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
 		}
 		return nil, errors.Trace(err)
 	}
-	c := NewCluster(cluster)
+	c := &Cluster{
+		Name:      cluster.Metadata.Namespace,
+		CreatedAt: cluster.Metadata.CreationTimestamp.Time,
+		PD:        &PodSpec{Size: cluster.Spec.PD.Size, Version: getVersion(cluster.Spec.PD.Image)},
+		TiDB:      &PodSpec{Size: cluster.Spec.TiDB.Size, Version: getVersion(cluster.Spec.TiDB.Image)},
+		TiKV:      &PodSpec{Size: cluster.Spec.TiKV.Size, Version: getVersion(cluster.Spec.TiKV.Image)},
+	}
 	option := metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{
 			"tidb_cluster": clusterName,
@@ -120,6 +135,91 @@ func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
 	return c, nil
 }
 
+func (m *Manager) CreateCluster(c *Cluster) error {
+	ns := c.Name
+	//create namespace with cluster name
+	err := m.CreateNamespace(ns)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	enableMonitor := c.Monitor != nil
+	config, err := m.genConfig(enableMonitor, c.TiDBLease)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	//if enableMonitor {
+	//err := m.createTidbMonitor(c)
+	//if err != nil {
+	//return errors.Trace(err)
+	//}
+	//}
+	if c.ServiceType == "" {
+		c.ServiceType = m.ServiceType
+	}
+	s := &tcapi.TidbCluster{
+		Metadata: metav1.ObjectMeta{
+			Name:   clusterName,
+			Labels: c.Labels,
+		},
+		Spec: tcapi.ClusterSpec{
+			PD: tcapi.PDSpec{
+				tcapi.MemberSpec{
+					Size:         c.PD.Size,
+					Image:        m.getImage("pd", c.PD.Version),
+					Limits:       c.PD.Limits,
+					Requests:     c.PD.Requests,
+					NodeSelector: c.PD.NodeSelector,
+				},
+			},
+			TiDB: tcapi.TiDBSpec{
+				tcapi.MemberSpec{
+					Size:         c.TiDB.Size,
+					Image:        m.getImage("tidb", c.TiDB.Version),
+					Limits:       c.TiDB.Limits,
+					Requests:     c.TiDB.Requests,
+					NodeSelector: c.TiDB.NodeSelector,
+				},
+			},
+			TiKV: tcapi.TiKVSpec{
+				tcapi.MemberSpec{
+					Size:         c.TiKV.Size,
+					Image:        m.getImage("tikv", c.TiKV.Version),
+					Limits:       c.TiKV.Limits,
+					Requests:     c.TiKV.Requests,
+					NodeSelector: c.TiKV.NodeSelector,
+				},
+			},
+			Paused:  false,
+			Config:  config,
+			Service: c.ServiceType,
+		},
+	}
+	_, err = m.cli.PingcapV1().TidbClusters(ns).Create(s)
+	if err != nil {
+		log.Errorf("failed to create tidbcluster %s: %v", ns, err)
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (m *Manager) CreateNamespace(namespace string) error {
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   namespace,
+			Labels: label.New().Cluster(clusterName).Labels(),
+		},
+	}
+	_, err := m.cli.CoreV1().Namespaces().Create(ns)
+	return errors.Trace(err)
+}
+
+func (m *Manager) getImage(kind string, version string) string {
+	if version == "" {
+		return fmt.Sprintf("%s/%s:%s", m.RepoPrefix, kind, defaultVersion)
+	}
+	return fmt.Sprintf("%s/%s:%s", m.RepoPrefix, kind, version)
+}
+
 func (m *Manager) getService(svc *v1.Service) Service {
 	service := Service{
 		ClusterIP:   svc.Spec.ClusterIP,
@@ -159,13 +259,50 @@ func (m *Manager) getLatestNodes() []string {
 	return m.nodesInfo.Nodes
 }
 
+func (m Manager) genConfig(enableMonitor bool, lease int) (map[string]string, error) {
+	pdConfig := bytes.NewBuffer([]byte{})
+	tikvConfig := bytes.NewBuffer([]byte{})
+	metricsAddr := ""
+	if enableMonitor {
+		metricsAddr = "tidb-cluster-pushgateway:9091"
+	}
+	c := &clusterConfig{
+		MetricsAddr: metricsAddr,
+	}
+	err := m.pdConfigTmpl.Execute(pdConfig, c)
+	if err != nil {
+		return nil, err
+	}
+	err = m.tikvConfigTmpl.Execute(tikvConfig, c)
+	if err != nil {
+		return nil, err
+	}
+	config := map[string]string{
+		"pd-config":         pdConfig.String(),
+		"tikv-config":       tikvConfig.String(),
+		"tidb.lease":        strconv.Itoa(lease),
+		"tidb.metrics-addr": metricsAddr,
+	}
+	if enableMonitor {
+		config["prometheus-config"] = `global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  labels:
+    monitor: 'prometheus'
+scrape_configs:
+  - job_name: 'tidb-cluster'
+    scrape_interval: 5s
+    honor_labels: true
+    static_configs:
+      - targets: ['127.0.0.1:9091']
+        labels:
+          cluster: 'tidb-cluster'
+`
+	}
+	return config, nil
+}
+
 //func (m *Manager) ListCluster() {
-//}
-
-//func (m *Manager) CreateCluster() {
-//}
-
-//func (m *Manager) CreateNamespace() {
 //}
 
 //func (m *Manager) DestroyCluster() {

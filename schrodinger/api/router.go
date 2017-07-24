@@ -14,6 +14,6 @@ func NewRouter(service *cat.CatService) http.Handler {
 	})
 	catHandler := newCatHandler(service, rd)
 	r := mux.NewRouter()
-	r.HandleFunc("/cat/new", catHandler.NewCat).Methods("POST")
+	r.HandleFunc("/cat/new", catHandler.newCat).Methods("POST")
 	return httpRequest(r)
 }

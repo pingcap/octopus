@@ -48,7 +48,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.RepoPrefix, "repo-prefix", "pingcap", "docker repo prefix for tidb related images")
-	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP,LoadBalancer) for tidb")
+	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP, LoadBalancer) for tidb")
 
 	return cfg
 }
