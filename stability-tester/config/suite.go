@@ -26,6 +26,7 @@ type SuiteConfig struct {
 	Ledger      LedgerConfig          `toml:"ledger"`
 	CRUD        CRUDCaseConfig        `toml:"crud"`
 	Log         LogCaseConfig         `toml:"log"`
+	DDL         DDLCaseConfig         `toml:"ddl"`
 	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
 }
 
@@ -68,6 +69,16 @@ type LogCaseConfig struct {
 	DeleteCount int      `toml:"delete_count"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
+}
+
+// DDLCaseConfig is for DDL test case.
+type DDLCaseConfig struct {
+	InsertRows           int     `toml:"insert_rows"`
+	InitialColumns       int     `toml:"initial_columns"`
+	UpdateRatio          float32 `toml:"update_ratio"`
+	DeleteRatio          float32 `toml:"delete_ratio"`
+	AddIndexProbability  float32 `toml:"add_index_probability"`
+	DropIndexProbability float32 `toml:"drop_index_probability"`
 }
 
 type BlockWriterCaseConfig struct {
