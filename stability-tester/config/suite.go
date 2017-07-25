@@ -73,12 +73,14 @@ type LogCaseConfig struct {
 
 // DDLCaseConfig is for DDL test case.
 type DDLCaseConfig struct {
-	InsertRows           int     `toml:"insert_rows"`
-	InitialColumns       int     `toml:"initial_columns"`
-	UpdateRatio          float32 `toml:"update_ratio"`
-	DeleteRatio          float32 `toml:"delete_ratio"`
-	AddIndexProbability  float32 `toml:"add_index_probability"`
-	DropIndexProbability float32 `toml:"drop_index_probability"`
+	InsertRows            int     `toml:"insert_rows"`
+	InitialColumns        int     `toml:"initial_columns"`
+	UpdateRatio           float32 `toml:"update_ratio"`
+	DeleteRatio           float32 `toml:"delete_ratio"`
+	AddIndexProbability   float32 `toml:"add_index_probability"`
+	DropIndexProbability  float32 `toml:"drop_index_probability"`
+	AddColumnProbability  float32 `toml:"add_column_probability"`
+	DropColumnProbability float32 `toml:"drop_column_probability"`
 }
 
 type BlockWriterCaseConfig struct {

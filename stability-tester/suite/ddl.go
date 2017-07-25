@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 
 	"strconv"
 
@@ -42,32 +41,29 @@ const (
 
 // DDLCase performs DDL operations while running DML operations.
 type DDLCase struct {
-	cfg        *config.DDLCaseConfig
-	insertRows int
-	wg         sync.WaitGroup
-	stop       int32
+	cfg *config.DDLCaseConfig
 }
 
 type ddlTestCaseContext struct {
-	c                *DDLCase
-	db               *sql.DB
-	ddlOpFlags       int
-	dmlOpFlags       int
-	currentTableID   string
-	numberOfColumns  int
-	numberOfRows     int
-	columnNames      []string
-	columnIndexNames []string
-	values           [][]int32
-	tableDataLock    sync.RWMutex
-	tableNameLock    sync.RWMutex
+	c                   *DDLCase
+	db                  *sql.DB
+	ddlOpFlags          int
+	dmlOpFlags          int
+	currentTableID      string
+	numberOfBaseColumns int
+	numberOfAllColumns  int
+	numberOfRows        int
+	columnNames         []string
+	columnIndexNames    []string
+	columnNamesLock     sync.RWMutex
+	values              [][]int32
+	valuesLock          sync.RWMutex
 }
 
 // NewDDLCase returns a DDLCase.
 func NewDDLCase(cfg *config.Config) Case {
 	b := &DDLCase{
-		cfg:        &cfg.Suite.DDL,
-		insertRows: cfg.Suite.DDL.InsertRows,
+		cfg: &cfg.Suite.DDL,
 	}
 	return b
 }
@@ -79,9 +75,6 @@ func (c *DDLCase) Initialize(ctx context.Context, db *sql.DB) error {
 
 // Execute implements Case Execute interface.
 func (c *DDLCase) Execute(db *sql.DB, index int) error {
-	if atomic.LoadInt32(&c.stop) != 0 {
-		return errors.New("ddl stopped")
-	}
 	for dmlOp := 0; dmlOp <= dmlOpMax; dmlOp++ {
 		for ddlOp := 0; ddlOp <= ddlOpMax; ddlOp++ {
 			err := c.testDDL(db, dmlOp, ddlOp)
@@ -106,14 +99,15 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	ctx.currentTableID = uuid.NewV4().String()
 
 	// Verify table not exist.
-	_, err := db.Query(fmt.Sprintf("SELECT * FROM `%s`", ctx.currentTableID))
+	_, err := db.Exec(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", ctx.currentTableID))
 	if err == nil {
 		return errors.Trace(fmt.Errorf("Expect table does not exist error, but no errors are thrown"))
 	}
 
 	// Generate column names
-	ctx.numberOfColumns = c.cfg.InitialColumns/2 + rand.Intn(c.cfg.InitialColumns/2) + 1
-	for colIdx := 0; colIdx < ctx.numberOfColumns; colIdx++ {
+	ctx.numberOfBaseColumns = c.cfg.InitialColumns/2 + rand.Intn(c.cfg.InitialColumns/2) + 1
+	ctx.numberOfAllColumns = ctx.numberOfBaseColumns
+	for colIdx := 0; colIdx < ctx.numberOfBaseColumns; colIdx++ {
 		ctx.columnNames = append(ctx.columnNames, uuid.NewV4().String())
 		ctx.columnIndexNames = append(ctx.columnIndexNames, "")
 	}
@@ -157,6 +151,14 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 		return errors.Trace(err)
 	}
 
+	// Add and drop extra column
+	if ddlOpFlags&ddlOpAddDropColumn > 0 {
+		err = addAndDropColumn(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	err = parallel(func() error {
 		// Add and drop index.
 		if ddlOpFlags&ddlOpAddDropIndex > 0 {
@@ -190,9 +192,18 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	}, func() error {
 		// Update data.
 		if dmlOpFlags&dmlOpUpdate > 0 {
-			whereCol := rand.Intn(ctx.numberOfColumns)
-			updateCol := rand.Intn(ctx.numberOfColumns)
+			whereCol := rand.Intn(ctx.numberOfBaseColumns)
+			updateCol := rand.Intn(ctx.numberOfBaseColumns)
 			err = updateTable(ctx, whereCol, updateCol)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}, func() error {
+		// Add and drop extra column
+		if ddlOpFlags&ddlOpAddDropColumn > 0 {
+			err = addAndDropColumn(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -227,8 +238,17 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	}, func() error {
 		// Delete data.
 		if dmlOpFlags&dmlOpDelete > 0 {
-			whereCol := rand.Intn(ctx.numberOfColumns)
+			whereCol := rand.Intn(ctx.numberOfBaseColumns)
 			err = deleteTable(ctx, whereCol)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}, func() error {
+		// Add and drop extra column
+		if ddlOpFlags&ddlOpAddDropColumn > 0 {
+			err = addAndDropColumn(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -261,10 +281,20 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 		}
 		return nil
 	}, func() error {
+		return nil
 		// Truncate table.
-		err = truncateTable(ctx)
-		if err != nil {
-			return errors.Trace(err)
+		// err = truncateTable(ctx)
+		// if err != nil {
+		// 	return errors.Trace(err)
+		// }
+		// return nil
+	}, func() error {
+		// Add and drop extra column
+		if ddlOpFlags&ddlOpAddDropColumn > 0 {
+			err = addAndDropColumn(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		return nil
 	})
@@ -273,14 +303,14 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	}
 
 	// Verify truncation.
-	rowsCount := -1
-	err = db.QueryRow(fmt.Sprintf("SELECT count(*) FROM `%s`", ctx.currentTableID)).Scan(&rowsCount)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if rowsCount != 0 {
-		return errors.Trace(fmt.Errorf("Unexpected rows count, expect %d rows, got %d rows", 0, rowsCount))
-	}
+	// rowsCount := -1
+	// err = db.QueryRow(fmt.Sprintf("SELECT count(*) FROM `%s`", ctx.currentTableID)).Scan(&rowsCount)
+	// if err != nil {
+	// 	return errors.Trace(err)
+	// }
+	// if rowsCount != 0 {
+	// 	return errors.Trace(fmt.Errorf("Unexpected rows count, expect %d rows, got %d rows", 0, rowsCount))
+	// }
 
 	// Rename table.
 	err = renameTableAndVerify(ctx)
@@ -297,7 +327,7 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	log.Infof("[ddl] Dropped table `%s`", ctx.currentTableID)
 
 	// Verify drop.
-	_, err = db.Query(fmt.Sprintf("SELECT * FROM `%s`", ctx.currentTableID))
+	_, err = db.Exec(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", ctx.currentTableID))
 	if err == nil {
 		return errors.Trace(fmt.Errorf("Expect table does not exist error, but no errors are thrown"))
 	}
@@ -306,18 +336,18 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 
 // createTable creates a new table.
 func createTable(ctx *ddlTestCaseContext) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-
-	createTableStatement := fmt.Sprintf("CREATE TABLE `%s` (", ctx.currentTableID)
-	for colIdx := 0; colIdx < ctx.numberOfColumns; colIdx++ {
+	ctx.columnNamesLock.RLock()
+	sql := fmt.Sprintf("CREATE TABLE `%s` (", ctx.currentTableID)
+	for colIdx := 0; colIdx < ctx.numberOfAllColumns; colIdx++ {
 		if colIdx > 0 {
-			createTableStatement += ", "
+			sql += ", "
 		}
-		createTableStatement += fmt.Sprintf("`%s` int", ctx.columnNames[colIdx])
+		sql += fmt.Sprintf("`%s` int", ctx.columnNames[colIdx])
 	}
-	createTableStatement += ")"
-	_, err := ctx.db.Exec(createTableStatement)
+	sql += ")"
+	ctx.columnNamesLock.RUnlock()
+
+	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -328,17 +358,14 @@ func createTable(ctx *ddlTestCaseContext) error {
 
 // truncateTable truncates a table.
 func truncateTable(ctx *ddlTestCaseContext) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-	ctx.tableDataLock.Lock()
-	defer ctx.tableDataLock.Unlock()
-
 	_, err := ctx.db.Exec(fmt.Sprintf("TRUNCATE TABLE `%s`", ctx.currentTableID))
 	if err != nil {
 		return errors.Trace(err)
 	}
+	ctx.valuesLock.Lock()
 	ctx.values = ctx.values[:0]
 	ctx.numberOfRows = 0
+	ctx.valuesLock.Unlock()
 
 	log.Infof("[ddl] Truncated table `%s`", ctx.currentTableID)
 	return nil
@@ -346,9 +373,6 @@ func truncateTable(ctx *ddlTestCaseContext) error {
 
 // renameTable renames a table.
 func renameTable(ctx *ddlTestCaseContext) (string, error) {
-	ctx.tableNameLock.Lock()
-	defer ctx.tableNameLock.Unlock()
-
 	oldTableID := ctx.currentTableID
 	ctx.currentTableID = uuid.NewV4().String()
 
@@ -379,16 +403,13 @@ func renameTableAndVerify(ctx *ddlTestCaseContext) error {
 	}
 
 	// Verify old table does not exist.
-	_, err = ctx.db.Query(fmt.Sprintf("SELECT * FROM `%s`", oldTableID))
+	_, err = ctx.db.Exec(fmt.Sprintf("SELECT * FROM `%s`", oldTableID))
 	if err == nil {
 		return errors.Trace(fmt.Errorf("Expect table does not exist error, but no errors are thrown"))
 	}
 
-	ctx.tableNameLock.Lock()
-	defer ctx.tableNameLock.Unlock()
-
 	// Verify new table exists.
-	_, err = ctx.db.Query(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", ctx.currentTableID))
+	_, err = ctx.db.Exec(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", ctx.currentTableID))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -398,17 +419,12 @@ func renameTableAndVerify(ctx *ddlTestCaseContext) error {
 
 // insertTable inserts data into the specified table.
 func insertTable(ctx *ddlTestCaseContext) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-	ctx.tableDataLock.Lock()
-	defer ctx.tableDataLock.Unlock()
-
 	rowsToInsert := int(ctx.c.cfg.InsertRows)/2 + int(rand.Int31n(int32(ctx.c.cfg.InsertRows)/2)) + 1
 
 	for r := 0; r < rowsToInsert; r++ {
 		row := []int32{}
 		insertStatement := fmt.Sprintf("INSERT INTO `%s` VALUES (", ctx.currentTableID)
-		for colIdx := 0; colIdx < ctx.numberOfColumns; colIdx++ {
+		for colIdx := 0; colIdx < ctx.numberOfBaseColumns; colIdx++ {
 			row = append(row, rand.Int31())
 			if colIdx > 0 {
 				insertStatement += ", "
@@ -416,12 +432,15 @@ func insertTable(ctx *ddlTestCaseContext) error {
 			insertStatement += fmt.Sprintf("%d", row[colIdx])
 		}
 		insertStatement += ")"
+		ctx.valuesLock.Lock()
+		ctx.values = append(ctx.values, row)
+		ctx.numberOfRows++
+		ctx.valuesLock.Unlock()
+
 		_, err := ctx.db.Exec(insertStatement)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		ctx.values = append(ctx.values, row)
-		ctx.numberOfRows++
 	}
 
 	log.Infof("[ddl] Inserted %d records into `%s`", rowsToInsert, ctx.currentTableID)
@@ -430,22 +449,24 @@ func insertTable(ctx *ddlTestCaseContext) error {
 
 // updateTable updates data in the specified table.
 func updateTable(ctx *ddlTestCaseContext, whereCol int, updateCol int) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-	ctx.tableDataLock.Lock()
-	defer ctx.tableDataLock.Unlock()
-
-	rowsToUpdate := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfColumns) * ctx.c.cfg.UpdateRatio)))
+	rowsToUpdate := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfBaseColumns) * ctx.c.cfg.UpdateRatio)))
 
 	for i := 0; i < rowsToUpdate; i++ {
+		ctx.columnNamesLock.RLock()
+		ctx.valuesLock.Lock()
 		rowIdx := rand.Int31n(int32(ctx.numberOfRows))
-		ctx.values[rowIdx][updateCol] = rand.Int31()
-		_, err := ctx.db.Exec(fmt.Sprintf("UPDATE `%s` SET `%s` = %d WHERE `%s` = %d",
+		newValue := rand.Int31()
+		sql := fmt.Sprintf("UPDATE `%s` SET `%s` = %d WHERE `%s` = %d",
 			ctx.currentTableID,
-			ctx.columnNames[updateCol],    // update col name
-			ctx.values[rowIdx][updateCol], // update col value
-			ctx.columnNames[whereCol],     // where col name
-			ctx.values[rowIdx][whereCol])) // where col value
+			ctx.columnNames[updateCol],   // update col name
+			newValue,                     // update col value
+			ctx.columnNames[whereCol],    // where col name
+			ctx.values[rowIdx][whereCol]) // where col value
+		ctx.values[rowIdx][updateCol] = newValue
+		ctx.valuesLock.Unlock()
+		ctx.columnNamesLock.RUnlock()
+
+		_, err := ctx.db.Exec(sql)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -457,24 +478,25 @@ func updateTable(ctx *ddlTestCaseContext, whereCol int, updateCol int) error {
 
 // deleteTable deletes data from the specified table.
 func deleteTable(ctx *ddlTestCaseContext, whereCol int) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-	ctx.tableDataLock.Lock()
-	defer ctx.tableDataLock.Unlock()
-
-	rowsToDelete := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfColumns) * ctx.c.cfg.DeleteRatio)))
+	rowsToDelete := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfBaseColumns) * ctx.c.cfg.DeleteRatio)))
 
 	for i := 0; i < rowsToDelete; i++ {
+		ctx.columnNamesLock.RLock()
+		ctx.valuesLock.Lock()
 		rowIdx := rand.Int31n(int32(ctx.numberOfRows))
-		_, err := ctx.db.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE `%s` = %d",
+		sql := fmt.Sprintf("DELETE FROM `%s` WHERE `%s` = %d",
 			ctx.currentTableID,
-			ctx.columnNames[whereCol],     // where col name
-			ctx.values[rowIdx][whereCol])) // where col value
+			ctx.columnNames[whereCol],    // where col name
+			ctx.values[rowIdx][whereCol]) // where col value
+		ctx.values = append(ctx.values[:rowIdx], ctx.values[rowIdx+1:]...)
+		ctx.numberOfRows--
+		ctx.valuesLock.Unlock()
+		ctx.columnNamesLock.RUnlock()
+
+		_, err := ctx.db.Exec(sql)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		ctx.values = append(ctx.values[:rowIdx], ctx.values[rowIdx+1:]...)
-		ctx.numberOfRows--
 	}
 
 	log.Infof("[ddl] Deleted %d records in `%s`", rowsToDelete, ctx.currentTableID)
@@ -483,11 +505,6 @@ func deleteTable(ctx *ddlTestCaseContext, whereCol int) error {
 
 // verifyDataEquality checks whether all data in the specified table matches the given 2d-array exactly.
 func verifyDataEquality(ctx *ddlTestCaseContext) error {
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-	ctx.tableDataLock.RLock()
-	defer ctx.tableDataLock.RUnlock()
-
 	rows, err := ctx.db.Query(fmt.Sprintf("SELECT * FROM `%s`", ctx.currentTableID))
 	if err != nil {
 		return errors.Trace(err)
@@ -530,6 +547,9 @@ func verifyDataEquality(ctx *ddlTestCaseContext) error {
 		actualRows = append(actualRows, result)
 	}
 
+	ctx.valuesLock.RLock()
+	defer ctx.valuesLock.RUnlock()
+
 	if len(actualRows) != ctx.numberOfRows {
 		return errors.Trace(fmt.Errorf("Unexpected rows count, expect %d rows, got %d rows", ctx.numberOfRows, len(actualRows)))
 	}
@@ -555,23 +575,26 @@ func addIndexWithProbability(ctx *ddlTestCaseContext) error {
 		return nil
 	}
 
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-
-	columnToAddIndex := rand.Intn(ctx.numberOfColumns)
+	ctx.columnNamesLock.Lock()
+	columnToAddIndex := rand.Intn(ctx.numberOfBaseColumns)
 	if len(ctx.columnIndexNames[columnToAddIndex]) > 0 {
+		ctx.columnNamesLock.Unlock()
 		return nil
 	}
 	indexName := uuid.NewV4().String()
-	_, err := ctx.db.Query(fmt.Sprintf("ALTER TABLE `%s` ADD INDEX `%s` (`%s`)",
+	columnName := ctx.columnNames[columnToAddIndex]
+	sql := fmt.Sprintf("ALTER TABLE `%s` ADD INDEX `%s` (`%s`)",
 		ctx.currentTableID,
 		indexName,
-		ctx.columnNames[columnToAddIndex]))
+		columnName)
+	ctx.columnIndexNames[columnToAddIndex] = indexName
+	ctx.columnNamesLock.Unlock()
+
+	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	ctx.columnIndexNames[columnToAddIndex] = indexName
-	log.Infof("[ddl] Added index %s at column %s for table %s", indexName, ctx.columnNames[columnToAddIndex], ctx.currentTableID)
+	log.Infof("[ddl] Added index %s at column %s for table %s", indexName, columnName, ctx.currentTableID)
 	return nil
 }
 
@@ -581,9 +604,7 @@ func dropIndexWithProbability(ctx *ddlTestCaseContext) error {
 		return nil
 	}
 
-	ctx.tableNameLock.RLock()
-	defer ctx.tableNameLock.RUnlock()
-
+	ctx.columnNamesLock.Lock()
 	indexColumns := []int{}
 	for idx, indexName := range ctx.columnIndexNames {
 		if len(indexName) > 0 {
@@ -591,18 +612,23 @@ func dropIndexWithProbability(ctx *ddlTestCaseContext) error {
 		}
 	}
 	if len(indexColumns) == 0 {
+		ctx.columnNamesLock.Unlock()
 		return nil
 	}
 	columnToDropIndex := indexColumns[rand.Intn(len(indexColumns))]
 	indexName := ctx.columnIndexNames[columnToDropIndex]
-	_, err := ctx.db.Query(fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`",
+	columnName := ctx.columnNames[columnToDropIndex]
+	sql := fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`",
 		ctx.currentTableID,
-		indexName))
+		indexName)
+	ctx.columnIndexNames[columnToDropIndex] = ""
+	ctx.columnNamesLock.Unlock()
+
+	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	ctx.columnIndexNames[columnToDropIndex] = ""
-	log.Infof("[ddl] Dropped index %s at column %s for table %s", indexName, ctx.columnNames[columnToDropIndex], ctx.currentTableID)
+	log.Infof("[ddl] Dropped index %s at column %s for table %s", indexName, columnName, ctx.currentTableID)
 	return nil
 }
 
@@ -612,6 +638,85 @@ func addAndDropIndex(ctx *ddlTestCaseContext) error {
 		return err
 	}
 	err = dropIndexWithProbability(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// addColumnWithProbability adds an extra column randomly with the probability in config.
+func addColumnWithProbability(ctx *ddlTestCaseContext) error {
+	if rand.Float32() >= ctx.c.cfg.AddColumnProbability {
+		return nil
+	}
+
+	ctx.columnNamesLock.Lock()
+	ctx.valuesLock.Lock()
+	newColumnID := uuid.NewV4().String()
+	newColumnDefaultValue := rand.Int31()
+	ctx.columnNames = append(ctx.columnNames, newColumnID)
+	ctx.columnIndexNames = append(ctx.columnIndexNames, "")
+	ctx.numberOfAllColumns++
+	for rowIdx, row := range ctx.values {
+		ctx.values[rowIdx] = append(row, newColumnDefaultValue)
+	}
+	ctx.valuesLock.Unlock()
+	ctx.columnNamesLock.Unlock()
+
+	sql := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` int NULL DEFAULT %d",
+		ctx.currentTableID,
+		newColumnID,
+		newColumnDefaultValue)
+
+	_, err := ctx.db.Exec(sql)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Infof("[ddl] Added new column %s for table %s", newColumnID, ctx.currentTableID)
+	return nil
+}
+
+// dropColumnWithProbability drops an extra column randomly with the probability in config.
+func dropColumnWithProbability(ctx *ddlTestCaseContext) error {
+	if rand.Float32() >= ctx.c.cfg.DropColumnProbability {
+		return nil
+	}
+
+	ctx.columnNamesLock.Lock()
+	if ctx.numberOfAllColumns == ctx.numberOfBaseColumns {
+		ctx.columnNamesLock.Unlock()
+		return nil
+	}
+	ctx.valuesLock.Lock()
+	columnIdxToDrop := ctx.numberOfBaseColumns + rand.Intn(ctx.numberOfAllColumns-ctx.numberOfBaseColumns)
+	columnName := ctx.columnNames[columnIdxToDrop]
+	ctx.columnNames = append(ctx.columnNames[:columnIdxToDrop], ctx.columnNames[columnIdxToDrop+1:]...)
+	ctx.columnIndexNames = append(ctx.columnIndexNames[:columnIdxToDrop], ctx.columnIndexNames[columnIdxToDrop+1:]...)
+	ctx.numberOfAllColumns--
+	for rowIdx, row := range ctx.values {
+		ctx.values[rowIdx] = append(row[:columnIdxToDrop], row[columnIdxToDrop+1:]...)
+	}
+	ctx.valuesLock.Unlock()
+	ctx.columnNamesLock.Unlock()
+
+	sql := fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`",
+		ctx.currentTableID,
+		columnName)
+
+	_, err := ctx.db.Exec(sql)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Infof("[ddl] Dropped column %s from table %s", columnName, ctx.currentTableID)
+	return nil
+}
+
+func addAndDropColumn(ctx *ddlTestCaseContext) error {
+	err := addColumnWithProbability(ctx)
+	if err != nil {
+		return err
+	}
+	err = dropColumnWithProbability(ctx)
 	if err != nil {
 		return err
 	}
