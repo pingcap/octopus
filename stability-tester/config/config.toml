@@ -70,6 +70,7 @@ add_index_probability = 0.8
 drop_index_probability = 0.4
 add_column_probability = 0.8
 drop_column_probability = 0.4
+rename_column_probability = 0.8
 
 [mvcc]
 names = ["bank"]

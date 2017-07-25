@@ -35,8 +35,7 @@ const (
 	ddlOpAddDropIndex  int = 1 << 0
 	ddlOpAddDropColumn int = 1 << 1
 	ddlOpRenameColumn  int = 1 << 2
-	ddlOpModifyColumn  int = 1 << 3
-	ddlOpMax           int = ddlOpAddDropIndex | ddlOpAddDropColumn | ddlOpRenameColumn | ddlOpModifyColumn
+	ddlOpMax           int = ddlOpAddDropIndex | ddlOpAddDropColumn | ddlOpRenameColumn
 )
 
 // DDLCase performs DDL operations while running DML operations.
@@ -55,6 +54,7 @@ type ddlTestCaseContext struct {
 	numberOfRows        int
 	columnNames         []string
 	columnIndexNames    []string
+	columnDef           []string
 	columnNamesLock     sync.RWMutex
 	values              [][]int32
 	valuesLock          sync.RWMutex
@@ -85,6 +85,7 @@ func (c *DDLCase) Execute(db *sql.DB, index int) error {
 			}
 		}
 	}
+	log.Infof("[ddl] Round compeleted")
 	return nil
 }
 
@@ -110,6 +111,7 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	for colIdx := 0; colIdx < ctx.numberOfBaseColumns; colIdx++ {
 		ctx.columnNames = append(ctx.columnNames, uuid.NewV4().String())
 		ctx.columnIndexNames = append(ctx.columnIndexNames, "")
+		ctx.columnDef = append(ctx.columnDef, "int")
 	}
 
 	// Create table.
@@ -138,6 +140,15 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 		err = insertTable(ctx)
 		if err != nil {
 			return errors.Trace(err)
+		}
+		return nil
+	}, func() error {
+		// Rename column.
+		if ddlOpFlags&ddlOpRenameColumn > 0 {
+			err = renameColumnWithProbability(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		return nil
 	})
@@ -173,6 +184,15 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 		err = verifyDataEquality(ctx)
 		if err != nil {
 			return errors.Trace(err)
+		}
+		return nil
+	}, func() error {
+		// Rename column.
+		if ddlOpFlags&ddlOpRenameColumn > 0 {
+			err = renameColumnWithProbability(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		return nil
 	})
@@ -218,8 +238,23 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 		return errors.Trace(err)
 	}
 
-	// Verify.
-	err = verifyDataEquality(ctx)
+	err = parallel(func() error {
+		// Verify.
+		err = verifyDataEquality(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}, func() error {
+		// Rename column.
+		if ddlOpFlags&ddlOpRenameColumn > 0 {
+			err = renameColumnWithProbability(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -339,7 +374,7 @@ func createTable(ctx *ddlTestCaseContext) error {
 		if colIdx > 0 {
 			sql += ", "
 		}
-		sql += fmt.Sprintf("`%s` int", ctx.columnNames[colIdx])
+		sql += fmt.Sprintf("`%s` %s", ctx.columnNames[colIdx], ctx.columnDef[colIdx])
 	}
 	sql += ")"
 	ctx.columnNamesLock.RUnlock()
@@ -588,13 +623,13 @@ func addIndexWithProbability(ctx *ddlTestCaseContext) error {
 		indexName,
 		columnName)
 	ctx.columnIndexNames[columnToAddIndex] = indexName
+	_, err := ctx.db.Exec(sql)
 	ctx.columnNamesLock.Unlock()
 
-	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("[ddl] Added index %s at column %s for table %s", indexName, columnName, ctx.currentTableID)
+	log.Infof("[ddl] Added index `%s` at column `%s` for table `%s`", indexName, columnName, ctx.currentTableID)
 	return nil
 }
 
@@ -622,13 +657,13 @@ func dropIndexWithProbability(ctx *ddlTestCaseContext) error {
 		ctx.currentTableID,
 		indexName)
 	ctx.columnIndexNames[columnToDropIndex] = ""
+	_, err := ctx.db.Exec(sql)
 	ctx.columnNamesLock.Unlock()
 
-	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("[ddl] Dropped index %s at column %s for table %s", indexName, columnName, ctx.currentTableID)
+	log.Infof("[ddl] Dropped index `%s` at column `%s` for table `%s`", indexName, columnName, ctx.currentTableID)
 	return nil
 }
 
@@ -654,8 +689,10 @@ func addColumnWithProbability(ctx *ddlTestCaseContext) error {
 	ctx.valuesLock.Lock()
 	newColumnID := uuid.NewV4().String()
 	newColumnDefaultValue := rand.Int31()
+	newColumnDef := fmt.Sprintf("int NULL DEFAULT %d", newColumnDefaultValue)
 	ctx.columnNames = append(ctx.columnNames, newColumnID)
 	ctx.columnIndexNames = append(ctx.columnIndexNames, "")
+	ctx.columnDef = append(ctx.columnDef, newColumnDef)
 	ctx.numberOfAllColumns++
 	for rowIdx, row := range ctx.values {
 		ctx.values[rowIdx] = append(row, newColumnDefaultValue)
@@ -663,16 +700,16 @@ func addColumnWithProbability(ctx *ddlTestCaseContext) error {
 	ctx.valuesLock.Unlock()
 	ctx.columnNamesLock.Unlock()
 
-	sql := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` int NULL DEFAULT %d",
+	sql := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s",
 		ctx.currentTableID,
 		newColumnID,
-		newColumnDefaultValue)
+		newColumnDef)
 
 	_, err := ctx.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("[ddl] Added new column %s for table %s", newColumnID, ctx.currentTableID)
+	log.Infof("[ddl] Added new column `%s` for table `%s`", newColumnID, ctx.currentTableID)
 	return nil
 }
 
@@ -692,6 +729,7 @@ func dropColumnWithProbability(ctx *ddlTestCaseContext) error {
 	columnName := ctx.columnNames[columnIdxToDrop]
 	ctx.columnNames = append(ctx.columnNames[:columnIdxToDrop], ctx.columnNames[columnIdxToDrop+1:]...)
 	ctx.columnIndexNames = append(ctx.columnIndexNames[:columnIdxToDrop], ctx.columnIndexNames[columnIdxToDrop+1:]...)
+	ctx.columnDef = append(ctx.columnDef[:columnIdxToDrop], ctx.columnDef[columnIdxToDrop+1:]...)
 	ctx.numberOfAllColumns--
 	for rowIdx, row := range ctx.values {
 		ctx.values[rowIdx] = append(row[:columnIdxToDrop], row[columnIdxToDrop+1:]...)
@@ -707,7 +745,37 @@ func dropColumnWithProbability(ctx *ddlTestCaseContext) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("[ddl] Dropped column %s from table %s", columnName, ctx.currentTableID)
+	log.Infof("[ddl] Dropped column `%s` from table `%s`", columnName, ctx.currentTableID)
+	return nil
+}
+
+// renameColumnWithProbability renames a column randomly with the probability in config.
+// This operation cannot run in parallel with update, delete and add/drop column.
+func renameColumnWithProbability(ctx *ddlTestCaseContext) error {
+	if rand.Float32() >= ctx.c.cfg.RenameColumnProbability {
+		return nil
+	}
+
+	ctx.columnNamesLock.Lock()
+	defer ctx.columnNamesLock.Unlock()
+
+	columnIdxToRename := rand.Intn(ctx.numberOfAllColumns)
+	columnDef := ctx.columnDef[columnIdxToRename]
+	oldColumnID := ctx.columnNames[columnIdxToRename]
+	newColumnID := uuid.NewV4().String()
+	ctx.columnNames[columnIdxToRename] = newColumnID
+
+	sql := fmt.Sprintf("ALTER TABLE `%s` CHANGE `%s` `%s` %s",
+		ctx.currentTableID,
+		oldColumnID,
+		newColumnID,
+		columnDef)
+
+	_, err := ctx.db.Exec(sql)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Infof("[ddl] Renamed column from `%s` to `%s` in table `%s`", oldColumnID, newColumnID, ctx.currentTableID)
 	return nil
 }
 
