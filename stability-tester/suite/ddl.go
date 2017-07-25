@@ -192,9 +192,7 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	}, func() error {
 		// Update data.
 		if dmlOpFlags&dmlOpUpdate > 0 {
-			whereCol := rand.Intn(ctx.numberOfBaseColumns)
-			updateCol := rand.Intn(ctx.numberOfBaseColumns)
-			err = updateTable(ctx, whereCol, updateCol)
+			err = updateTable(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -238,8 +236,7 @@ func (c *DDLCase) testDDL(db *sql.DB, dmlOpFlags int, ddlOpFlags int) error {
 	}, func() error {
 		// Delete data.
 		if dmlOpFlags&dmlOpDelete > 0 {
-			whereCol := rand.Intn(ctx.numberOfBaseColumns)
-			err = deleteTable(ctx, whereCol)
+			err = deleteTable(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -448,12 +445,14 @@ func insertTable(ctx *ddlTestCaseContext) error {
 }
 
 // updateTable updates data in the specified table.
-func updateTable(ctx *ddlTestCaseContext, whereCol int, updateCol int) error {
-	rowsToUpdate := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfBaseColumns) * ctx.c.cfg.UpdateRatio)))
+func updateTable(ctx *ddlTestCaseContext) error {
+	rowsToUpdate := int(rand.Int31n(int32(float32(ctx.numberOfRows) * ctx.c.cfg.UpdateRatio)))
 
 	for i := 0; i < rowsToUpdate; i++ {
 		ctx.columnNamesLock.RLock()
 		ctx.valuesLock.Lock()
+		whereCol := rand.Intn(ctx.numberOfBaseColumns)
+		updateCol := rand.Intn(ctx.numberOfBaseColumns)
 		rowIdx := rand.Int31n(int32(ctx.numberOfRows))
 		newValue := rand.Int31()
 		sql := fmt.Sprintf("UPDATE `%s` SET `%s` = %d WHERE `%s` = %d",
@@ -477,12 +476,13 @@ func updateTable(ctx *ddlTestCaseContext, whereCol int, updateCol int) error {
 }
 
 // deleteTable deletes data from the specified table.
-func deleteTable(ctx *ddlTestCaseContext, whereCol int) error {
-	rowsToDelete := int(rand.Int31n(int32(float32(ctx.numberOfRows) / float32(ctx.numberOfBaseColumns) * ctx.c.cfg.DeleteRatio)))
+func deleteTable(ctx *ddlTestCaseContext) error {
+	rowsToDelete := int(rand.Int31n(int32(float32(ctx.numberOfRows) * ctx.c.cfg.DeleteRatio)))
 
 	for i := 0; i < rowsToDelete; i++ {
 		ctx.columnNamesLock.RLock()
 		ctx.valuesLock.Lock()
+		whereCol := rand.Intn(ctx.numberOfBaseColumns)
 		rowIdx := rand.Int31n(int32(ctx.numberOfRows))
 		sql := fmt.Sprintf("DELETE FROM `%s` WHERE `%s` = %d",
 			ctx.currentTableID,
