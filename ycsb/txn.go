@@ -46,7 +46,7 @@ func (c *txnKV) ReadRow(key uint64) (bool, error) {
 		return false, err
 	}
 
-	return data != nil, nil
+	return data == nil, nil
 }
 
 func (c *txnKV) InsertRow(key uint64, fields []string) error {
