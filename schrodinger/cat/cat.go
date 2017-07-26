@@ -1,9 +1,8 @@
 package cat
 
 import (
-	"time"
-
 	"github.com/pingcap/octopus/schrodinger/cluster"
+	"github.com/pingcap/octopus/stability-tester/nemesis"
 )
 
 const (
@@ -13,45 +12,25 @@ const (
 	BUILDING = "building"
 )
 
-type CATStatus int
+type CATStatus string
 
 type Cat struct {
-	Name      string          `yaml:"name" json:"name, omitempty"`
-	CodePath  string          `yaml:"code-path" json:"code-path, omitempty"`
-	RunTime   time.Duration   `yaml:"duration" json:"duration, omitempty"`
-	AlertURL  string          `yaml:"alert-url" json:"alert-url, omitempty"`
-	IsNamesis bool            `yaml:"namesis" json:"namesis, omitempty"`
-	Cluster   cluster.Cluster `yaml:"cluster" json:"cluster, omitempty"`
-	Status    CATStatus       `yaml:"-", json:"-"`
+	Name    string          `yaml:"name" json:"name, omitempty"`
+	Control Control         `yaml:"control" json:"control"`
+	Cases   []Case          `yaml:"case" json:"case"`
+	Cluster cluster.Cluster `yaml:"cluster" json:"cluster, omitempty"`
+	Status  CATStatus       `yaml:"-", json:"-"`
+	Nemesis nemesis.Nemesis `yaml:"nemesis" json:"nemesis"`
+}
+
+type Control struct {
+	AlertURL  string `yaml:"alert-url" json:"alert-url, omitempty"`
+	Repeat    int    `yaml:"repeat" json:"repeat"`
+	TimeLimit string `yaml:"time-limit" json:"time-limit"`
+	CIHook    string `yaml:"ci-hook" json:"ci-hool"`
 }
 
 func (c *Cat) Valid() bool {
-	return len(c.Name) > 0 && len(c.CodePath) > 0 && len(c.AlertURL) > 0 && c.Cluster.Valid()
+	// TODO: check cat
+	return true
 }
-
-//func (c *cat) start() {
-//}
-
-//func (c *cat) stop() {
-//}
-
-//func (c *cat) initCluster() {
-//}
-
-//func (c *cat) destroyCluster() {
-//}
-
-//func (c *cat) startNamesis() {
-//}
-
-//func (c *cat) stopNamesis() {
-//}
-
-//func (c *cat) parse(path string) {
-//}
-
-//func (c *cat) run() {
-//}
-
-//func (c *cat) alert() {
-//}

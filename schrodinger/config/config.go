@@ -31,6 +31,7 @@ type Config struct {
 	Port        int    `toml:"port" json:"port"`
 	RepoPrefix  string `toml:"repo-prefix" json:"repo-prefix"`
 	ServiceType string `toml:"service-type" json:"service-type"`
+	CatDir      string `timl:"cat-dir" json:"cat-dir"`
 
 	configFile   string
 	printVersion bool
@@ -43,13 +44,13 @@ func NewConfig() *Config {
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
 	fs.StringVar(&cfg.configFile, "config", "", "path to config file")
-	fs.IntVar(&cfg.Port, "port", 8088, "port of the web service")
+	fs.IntVar(&cfg.Port, "port", 9088, "port of the web service")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.RepoPrefix, "repo-prefix", "pingcap", "docker repo prefix for tidb related images")
 	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP, LoadBalancer) for tidb")
-
+	fs.StringVar(&cfg.CatDir, "cat-dir", "./cat-data", "path to save cat")
 	return cfg
 }
 

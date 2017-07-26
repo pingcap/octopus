@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/schrodinger/cat"
 	"github.com/unrolled/render"
@@ -42,9 +43,24 @@ func (c *CatHandler) newCat(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := c.service.PutCat(cat); err != nil {
 		log.Errorf("put cat to service list failed: %s", err)
-		c.render.JSON(w, http.StatusInternalServerError, fmt.Sprint("put cat to service list failed!"))
+		c.render.JSON(w, http.StatusInternalServerError, fmt.Sprintf("put cat to service list failed: %s", err.Error()))
 		return
 	}
-	c.render.JSON(w, http.StatusOK, fmt.Sprint("success!"))
+	c.render.JSON(w, http.StatusOK, "success!")
 	return
+}
+
+func (c *CatHandler) startCat(w http.ResponseWriter, r *http.Request) {
+	catName := mux.Vars(r)["name"]
+	if !c.service.IsExist(catName) {
+		c.render.JSON(w, http.StatusBadRequest, "cat is not exist")
+		return
+	}
+	go func() {
+		err := c.service.RunCat(catName)
+		if err != nil {
+			log.Errorf("Start Cat failed: %s", err.Error())
+		}
+	}()
+	c.render.JSON(w, http.StatusOK, "cat is building")
 }
