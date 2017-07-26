@@ -55,12 +55,12 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		log.Errorf("parse cmd flags err %s", err)
+		log.Fatalf("parse cmd flags err %s", err)
 	}
 
 	err = initLogger(cfg)
 	if err != nil {
-		log.Errorf("logger init failed: %s", err.Error())
+		log.Fatalf("logger init failed: %s", err.Error())
 	}
 	clusterManger := cluster.NewClusterManager(cfg.RepoPrefix, cfg.ServiceType, cfg.KubeConfig)
 	catService := cat.NewCatService(clusterManger, cfg)
@@ -69,7 +69,7 @@ func main() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		log.Infof("Starting listen %s", addr)
 		if err := http.ListenAndServe(addr, r); err != nil {
-			log.Errorf("start api server failed: %s", err)
+			log.Fatalf("start api server failed: %s", err)
 		}
 	}()
 
