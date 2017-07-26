@@ -12,14 +12,14 @@ const (
 	BUILDING = "building"
 )
 
-type CATStatus string
+type Status string
 
 type Cat struct {
 	Name    string          `yaml:"name" json:"name, omitempty"`
 	Control Control         `yaml:"control" json:"control"`
 	Cases   []Case          `yaml:"case" json:"case"`
 	Cluster cluster.Cluster `yaml:"cluster" json:"cluster, omitempty"`
-	Status  CATStatus       `yaml:"-", json:"-"`
+	Status  CATStatus       `yaml:"status", json:"status"`
 	Nemesis nemesis.Nemesis `yaml:"nemesis" json:"nemesis"`
 }
 
