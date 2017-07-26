@@ -29,7 +29,7 @@ func (s *CatService) PutCat(c *Cat) error {
 		log.Warnf("cat already exists: [%s]", c.Name)
 		return errors.New(fmt.Sprintf("[%s] cat already exists", c.Name))
 	}
-	c.Status = CATStatus(STOP)
+	c.Status = Status(STOP)
 	s.cats[c.Name] = c
 	return nil
 }

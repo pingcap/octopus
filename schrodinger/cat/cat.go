@@ -19,7 +19,7 @@ type Cat struct {
 	Control Control         `yaml:"control" json:"control"`
 	Cases   []Case          `yaml:"case" json:"case"`
 	Cluster cluster.Cluster `yaml:"cluster" json:"cluster, omitempty"`
-	Status  CATStatus       `yaml:"status", json:"status"`
+	Status  Status          `yaml:"status", json:"status"`
 	Nemesis nemesis.Nemesis `yaml:"nemesis" json:"nemesis"`
 }
 

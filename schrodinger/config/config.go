@@ -31,7 +31,8 @@ type Config struct {
 	Port        int    `toml:"port" json:"port"`
 	RepoPrefix  string `toml:"repo-prefix" json:"repo-prefix"`
 	ServiceType string `toml:"service-type" json:"service-type"`
-	CatDir      string `timl:"cat-dir" json:"cat-dir"`
+	CatDir      string `toml:"cat-dir" json:"cat-dir"`
+	KubeConfig  string `toml:"kube-config" json:"kube-config"`
 
 	configFile   string
 	printVersion bool
@@ -51,6 +52,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.RepoPrefix, "repo-prefix", "pingcap", "docker repo prefix for tidb related images")
 	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP, LoadBalancer) for tidb")
 	fs.StringVar(&cfg.CatDir, "cat-dir", "./cat-data", "path to save cat")
+	fs.StringVar(&cfg.KubeConfig, "kube-config", "", "path to kubeconfig file, omit this if run in cluster")
 	return cfg
 }
 

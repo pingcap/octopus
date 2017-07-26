@@ -46,10 +46,15 @@ type Service struct {
 	ExternalPort int      `json:"external_port,omitempty"` // LoadBalancer Port
 }
 
-func NewClusterManager(repoPrefix, serviceType string) *Manager {
+func NewClusterManager(repoPrefix, serviceType, kubeconfig string) *Manager {
+	cli, err := client.New(kubeconfig)
+	if err != nil {
+		log.Fatal("failed to initialize kube client")
+	}
 	return &Manager{
 		RepoPrefix:  repoPrefix,
 		ServiceType: serviceType,
+		cli:         cli,
 	}
 }
 
