@@ -1,0 +1,69 @@
+package: github.com/pingcap/tidb-operator
+import:
+- package: github.com/juju/errors
+- package: github.com/ngaut/log
+- package: k8s.io/client-go
+  version: v3.0.0
+  subpackages:
+  - kubernetes
+  - pkg/api
+  - pkg/api/v1
+  - pkg/apis/extensions/v1beta1
+  - rest
+  - tools/cache
+  - tools/clientcmd
+  - tools/record
+  - util/workqueue
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/api/errors
+  - pkg/api/meta
+  - pkg/api/resource
+  - pkg/api/unversioned
+  - pkg/conversion
+  - pkg/labels
+  - pkg/runtime
+  - pkg/runtime/schema
+  - pkg/runtime/serializer
+  - pkg/util/intstr
+  - pkg/util/net
+  - pkg/util/runtime
+  - pkg/util/wait
+  - pkg/watch
+  - pkg/apis/meta/v1
+- package: github.com/pingcap/kvproto
+  subpackages:
+  - pkg/pdpb
+  - pkg/metapb
+- package: github.com/pingcap/pd
+  subpackages:
+  - pkg/typeutil
+  - server
+- package: k8s.io/kubernetes
+  version: v1.6.7
+  subpackages:
+  - plugin/pkg/scheduler/api/v1
+- package: github.com/emicklei/go-restful
+- package: github.com/pborman/uuid
+
+# Following are implicit dependencies
+- package: google.golang.org/grpc
+  version: 777daa17ff9b5daef1cfdf915088a2ada3332bf0
+- package: golang.org/x/text
+  version: 2910a502d2bf9e43193af9d68ca516529614eed3
+- package: golang.org/x/net
+  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+- package: golang.org/x/sys
+  version: 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
+- package: github.com/onsi/gomega
+  version: d59fa0ac68bb5dd932ee8d24eed631cdd519efc3
+- package: github.com/onsi/ginkgo
+  version: 74c678d97c305753605c338c6c78c49ec104b5e7
+- package: github.com/prometheus/client_golang
+  version: c5b7fccd204277076155f10851dad72b76a49317
+- package: github.com/coreos/etcd
+  version: ea5f6dab6b1d07e22cf46bf5f5088d567548c124
+- package: github.com/Sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+- package: github.com/google/btree
+  version: 925471ac9e2131377a91e1595defec898166fe49

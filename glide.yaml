@@ -1,8 +1,14 @@
 package: github.com/pingcap/octopus
-import: 
+import:
 - package: golang.org/x/net
   version: 6acef71eb69611914f7a30939ea9f6e194c78172
   repo: https://github.com/golang/net.git
   vcs: git
   subpackages:
   - context
+- package: golang.org/x/crypto
+  version: 2faea1465de239e4babd8f5905cc25b781712442
+  repo: https://github.com/golang/crypto.git
+  vcs: git
+  subpackages:
+  - ssh

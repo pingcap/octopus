@@ -1,0 +1,194 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: tidb-operator
+  labels:
+    app: tidb-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tidb-operator
+      name: tidb-operator
+  template:
+    metadata:
+      labels:
+        app: tidb-operator
+        name: tidb-operator
+    spec:
+      containers:
+      - name: tidb-operator
+        image: pingcap/tidb-operator:v0.1.0
+        args:
+          - /usr/local/bin/tidb-operator
+          - -L=debug
+        env:
+        volumeMounts:
+          - name: timezone
+            mountPath: /etc/localtime
+      volumes:
+      - name: timezone
+        hostPath:
+          path: /etc/localtime
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: kube-system
+  name: tidb-scheduler-policy
+  labels:
+    app: tidb-operator
+data:
+  policy-config-file.json: |-
+    {
+            "kind" : "Policy",
+            "apiVersion" : "v1",
+            "predicates": [
+                    {"name": "MatchNodeSelector"},
+                    {"name": "PodFitsResources"},
+                    {"name": "PodFitsHostPorts"},
+                    {"name": "HostName"},
+                    {"name": "NoDiskConflict"},
+                    {"name": "PodToleratesNodeTaints"},
+                    {"name": "CheckNodeMemoryPressure"},
+                    {"name": "CheckNodeDiskPressure"},
+                    {"name": "MatchInterPodAffinity"},
+                    {"name": "GeneralPredicates"}
+            ],
+            "priorities": [
+                    {"name": "EqualPriority", "weight": 1},
+                    {"name": "ImageLocalityPriority", "weight": 1},
+                    {"name": "LeastRequestedPriority", "weight": 1},
+                    {"name": "BalancedResourceAllocation", "weight": 1},
+                    {"name": "SelectorSpreadPriority", "weight": 1},
+                    {"name": "NodePreferAvoidPodsPriority", "weight": 1},
+                    {"name": "NodeAffinityPriority", "weight": 1},
+                    {"name": "TaintTolerationPriority", "weight": 1},
+                    {"name": "InterPodAffinityPriority", "weight": 1},
+                    {"name": "MostRequestedPriority", "weight": 1}
+            ],
+            "extenders": [
+                    {
+                            "urlPrefix": "http://127.0.0.1:10262/scheduler",
+                            "filterVerb": "filter",
+                            "weight": 1,
+                            "enableHttps": false
+                    }
+            ]
+    }
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: tidb-scheduler
+  labels:
+    app: tidb-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tidb-operator
+      name: tidb-scheduler
+  template:
+    metadata:
+      labels:
+        app: tidb-operator
+        name: tidb-scheduler
+    spec:
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: "Equal"
+        effect: "NoSchedule"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/master
+                operator: In
+                values:
+                - "true"
+      containers:
+      - name: tidb-scheduler
+        image: pingcap/tidb-operator:v0.1.0
+        args:
+          - /usr/local/bin/tidb-scheduler
+          - -L=debug
+          - --port=10262
+      - name: kube-scheduler
+        image: quay.io/coreos/hyperkube:v1.6.4_coreos.0
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 250m
+            memory: 512M
+          requests:
+            cpu: 80m
+            memory: 170M
+        command:
+        - /hyperkube
+        - scheduler
+        - --master=http://127.0.0.1:8080
+        - --port=10261
+        - --leader-elect=false
+        - --scheduler-name=tidb-scheduler
+        - --v=2
+        - --policy-config-file=/etc/tidb/policy-config-file.json
+        livenessProbe:
+          httpGet:
+            host: 127.0.0.1
+            path: /healthz
+            port: 10261
+          initialDelaySeconds: 30
+          timeoutSeconds: 10
+        volumeMounts:
+        - name: k8sconfig
+          mountPath: /etc/kubernetes
+        - name: tidb-scheduler-policy
+          mountPath: /etc/tidb
+      volumes:
+      - name: k8sconfig
+        hostPath:
+          path: /etc/kubernetes
+      - name: tidb-scheduler-policy
+        configMap:
+          name: tidb-scheduler-policy
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  namespace: kube-system
+  name: tidb-volume-manager
+  labels:
+    app: tidb-operator
+spec:
+  selector:
+    matchLabels:
+      app: tidb-operator
+      name: tidb-volume-manager
+  template:
+    metadata:
+      labels:
+        app: tidb-operator
+        name: tidb-volume-manager
+    spec:
+      hostNetwork: true
+      containers:
+      - name: tidb-volume-manager
+        image: pingcap/tidb-operator:v0.1.0
+        command:
+          - /usr/local/bin/tidb-volume-manager
+        volumeMounts:
+          - name: tidb
+            mountPath: /tidb
+      volumes:
+      - name: tidb
+        hostPath:
+          ##################################################################################################
+          # This path is the parent dir of all volumes, must be same as example/tidb-volume-configmap.yaml #
+          ##################################################################################################
+          path: /tidb

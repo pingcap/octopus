@@ -1,0 +1,9 @@
+#!groovy
+
+node {
+	def TIDB_OPERATOR_BRANCH = env.BRANCH_NAME
+
+	fileLoader.withGit('git@github.com:pingcap/tidb-operator.git', TIDB_OPERATOR_BRANCH, 'k8s', '') {
+		fileLoader.load('ci/pingcap_tidb_operator_branch.groovy').call(TIDB_OPERATOR_BRANCH)
+	}
+}

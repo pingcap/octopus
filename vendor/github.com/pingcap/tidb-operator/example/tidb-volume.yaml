@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: kube-system
+  name: tidb-volume
+data:
+  ########################################################################################################################
+  # All paths bellow must be sub directory of /tidb, because tidb-volume-manager can only manage directories under /tidb #
+  ########################################################################################################################
+  volume: |-
+    {
+        "nodes": [
+           {
+               "name": "10.1.0.5",
+               "directories": [
+                   {
+                       "path": "/tidb/tikv-dir-1",
+                       "size": "100Gi"
+                   },
+                   {
+                       "path": "/tidb/tikv-dir-2",
+                       "size": "100Gi"
+                   }
+               ]
+           },
+           {
+               "name": "10.1.0.6",
+               "directories": [
+                   {
+                       "path": "/tidb/tikv-dir-1",
+                       "size": "50Gi"
+                   },
+                   {
+                       "path": "/tidb/tikv-dir-2",
+                       "size": "50Gi"
+                   }
+               ]
+           }
+        ]
+    }
