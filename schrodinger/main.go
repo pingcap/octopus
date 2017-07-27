@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("logger init failed: %s", err.Error())
 	}
-	clusterManger := cluster.NewClusterManager(cfg.RepoPrefix, cfg.ServiceType, cfg.KubeConfig)
+	clusterManger := cluster.NewClusterManager(cfg)
 	catService := cat.NewCatService(clusterManger, cfg)
 	go func() {
 		r := api.NewRouter(catService)

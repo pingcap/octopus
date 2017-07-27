@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/octopus/schrodinger/config"
 	"github.com/pingcap/tidb-operator/pkg/client"
 	tcapi "github.com/pingcap/tidb-operator/pkg/tidbcluster/api"
-	"github.com/pingcap/tidb-operator/pkg/util/label"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -19,7 +21,8 @@ import (
 )
 
 const (
-	clusterName = "tidb-cluster"
+	pdTemplateFile   = "pd.toml.tmpl"
+	tikvTemplateFile = "tikv.toml.tmpl"
 )
 
 type Manager struct {
@@ -46,16 +49,38 @@ type Service struct {
 	ExternalPort int      `json:"external_port,omitempty"` // LoadBalancer Port
 }
 
-func NewClusterManager(repoPrefix, serviceType, kubeconfig string) *Manager {
-	cli, err := client.New(kubeconfig)
+func NewClusterManager(cfg *config.Config) *Manager {
+	cli, err := client.New(cfg.KubeConfig)
 	if err != nil {
 		log.Fatal("failed to initialize kube client")
 	}
-	return &Manager{
-		RepoPrefix:  repoPrefix,
-		ServiceType: serviceType,
+	m := &Manager{
+		RepoPrefix:  cfg.RepoPrefix,
+		ServiceType: cfg.ServiceType,
 		cli:         cli,
 	}
+	err = m.loadTemplateFiles(cfg.TemplateDir)
+	if err != nil {
+	}
+	return m
+}
+
+func (m *Manager) loadTemplateFiles(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return errors.Trace(err)
+	}
+	pdTmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", path, pdTemplateFile))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.pdConfigTmpl = template.Must(template.New("pd-config").Parse(string(pdTmpl)))
+
+	tikvTmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", path, tikvTemplateFile))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.tikvConfigTmpl = template.Must(template.New("tikv-config").Parse(string(tikvTmpl)))
+	return nil
 }
 
 func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
@@ -141,9 +166,8 @@ func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
 }
 
 func (m *Manager) CreateCluster(c *Cluster) error {
-	ns := c.Name
 	//create namespace with cluster name
-	err := m.CreateNamespace(ns)
+	err := m.CreateNamespace(c.Name)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -152,18 +176,12 @@ func (m *Manager) CreateCluster(c *Cluster) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	//if enableMonitor {
-	//err := m.createTidbMonitor(c)
-	//if err != nil {
-	//return errors.Trace(err)
-	//}
-	//}
 	if c.ServiceType == "" {
 		c.ServiceType = m.ServiceType
 	}
 	s := &tcapi.TidbCluster{
 		Metadata: metav1.ObjectMeta{
-			Name:   clusterName,
+			Name:   c.Name,
 			Labels: c.Labels,
 		},
 		Spec: tcapi.ClusterSpec{
@@ -199,19 +217,24 @@ func (m *Manager) CreateCluster(c *Cluster) error {
 			Service: c.ServiceType,
 		},
 	}
-	_, err = m.cli.PingcapV1().TidbClusters(ns).Create(s)
+	_, err = m.cli.PingcapV1().TidbClusters(c.Name).Create(s)
 	if err != nil {
-		log.Errorf("failed to create tidbcluster %s: %v", ns, err)
+		log.Errorf("failed to create tidbcluster %s: %v", c.Name, err)
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (m *Manager) CreateNamespace(namespace string) error {
+//func (m *Manager) DeleteCluster(namespace, clusterName string, interval, timeout time.Duration) {
+//}
+
+//func (m *Manager) deleteJobs(namespace, clusterName string) {
+//}
+
+func (m *Manager) createNamespace(namespace string) error {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: label.New().Cluster(clusterName).Labels(),
+			Name: namespace,
 		},
 	}
 	_, err := m.cli.CoreV1().Namespaces().Create(ns)

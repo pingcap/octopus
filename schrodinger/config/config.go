@@ -33,6 +33,7 @@ type Config struct {
 	ServiceType string `toml:"service-type" json:"service-type"`
 	CatDir      string `toml:"cat-dir" json:"cat-dir"`
 	KubeConfig  string `toml:"kube-config" json:"kube-config"`
+	TemplateDir string `toml:"template-dir" json:"template-dir"`
 
 	configFile   string
 	printVersion bool
@@ -53,6 +54,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ServiceType, "service-type", "NodePort", "service type(NodePort, ClusterIP, LoadBalancer) for tidb")
 	fs.StringVar(&cfg.CatDir, "cat-dir", "./cat-data", "path to save cat")
 	fs.StringVar(&cfg.KubeConfig, "kube-config", "", "path to kubeconfig file, omit this if run in cluster")
+	fs.StringVar(&cfg.TemplateDir, "config-template-dir", "./template", "pd, tikv config template dir")
+
 	return cfg
 }
 

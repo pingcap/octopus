@@ -50,7 +50,7 @@ func (c *CatHandler) newCat(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func (c *CatHandler) startCat(w http.ResponseWriter, r *http.Request) {
+func (c *CatHandler) runCat(w http.ResponseWriter, r *http.Request) {
 	catName := mux.Vars(r)["name"]
 	if !c.service.IsExist(catName) {
 		c.render.JSON(w, http.StatusBadRequest, "cat is not exist")
