@@ -62,12 +62,18 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		return nil
 	}
 
+	var newUsers, deleteUsers, newPosts, newAuthors, deletePosts []int64
+	defer func() {
+		log.Infof("[crud] newUsers %v, deleteUsers %v, newPosts %v, newAuthors %v, deletePosts %v", newUsers, deleteUsers, newPosts, newAuthors, deletePosts)
+	}()
+
 	// Add new users.
 	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() < c.cfg.UserCount+c.cfg.UpdateUsers; i++ {
 		id := c.userIDs.allocID()
 		if err := c.createUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		newUsers = append(newUsers, id)
 	}
 
 	// Delete random users.
@@ -79,6 +85,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.deleteUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		deleteUsers = append(deleteUsers, id)
 	}
 
 	// Add new posts.
@@ -88,6 +95,8 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.addPost(db, id, author); err != nil {
 			return errors.Trace(err)
 		}
+		newPosts = append(newPosts, id)
+		newAuthors = append(newAuthors, author)
 	}
 
 	// Delete random posts.
@@ -96,6 +105,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.deletePost(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		deletePosts = append(deletePosts, id)
 	}
 
 	// Check all.
@@ -161,6 +171,9 @@ func (c *CRUDCase) deleteUser(db *sql.DB, id int64) error {
 }
 
 func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
+	if err := c.checkUserPostCount(db, author); err != nil {
+		return errors.Trace(err)
+	}
 	title := make([]byte, 64)
 	randString(title, c.rnd)
 	q := []queryEntry{
@@ -177,6 +190,9 @@ func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
 func (c *CRUDCase) deletePost(db *sql.DB, id int64) error {
 	author, err := c.QueryInt64(db, fmt.Sprintf("SELECT author from crud_posts WHERE id=%v", id))
 	if err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.checkUserPostCount(db, author); err != nil {
 		return errors.Trace(err)
 	}
 	q := []queryEntry{
