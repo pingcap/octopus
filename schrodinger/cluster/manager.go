@@ -14,9 +14,11 @@ import (
 	"github.com/pingcap/octopus/schrodinger/config"
 	"github.com/pingcap/tidb-operator/pkg/client"
 	tcapi "github.com/pingcap/tidb-operator/pkg/tidbcluster/api"
+	"github.com/pingcap/tidb-operator/pkg/util/label"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -50,17 +52,17 @@ type Service struct {
 }
 
 func NewClusterManager(cfg *config.Config) *Manager {
-	cli, err := client.New(cfg.KubeConfig)
-	if err != nil {
-		log.Fatal("failed to initialize kube client")
-	}
 	m := &Manager{
 		RepoPrefix:  cfg.RepoPrefix,
 		ServiceType: cfg.ServiceType,
-		cli:         cli,
 	}
-	err = m.loadTemplateFiles(cfg.TemplateDir)
+	err := m.loadTemplateFiles(cfg.TemplateDir)
 	if err != nil {
+		log.Fatalf("failed to load template file : %s", err.Error())
+	}
+	m.cli, err = client.New(cfg.KubeConfig)
+	if err != nil {
+		log.Fatalf("failed to initialize kube client: %s", err.Error())
 	}
 	return m
 }
@@ -167,7 +169,7 @@ func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
 
 func (m *Manager) CreateCluster(c *Cluster) error {
 	//create namespace with cluster name
-	err := m.CreateNamespace(c.Name)
+	err := m.createNamespace(c.Name)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -225,11 +227,64 @@ func (m *Manager) CreateCluster(c *Cluster) error {
 	return nil
 }
 
-//func (m *Manager) DeleteCluster(namespace, clusterName string, interval, timeout time.Duration) {
-//}
+func (m *Manager) DeleteCluster(namespace, clusterName string, interval, timeout time.Duration) error {
+	if err := m.cli.PingcapV1().TidbClusters(namespace).Delete(clusterName, nil); err != nil {
+		return errors.Trace(err)
+	}
 
-//func (m *Manager) deleteJobs(namespace, clusterName string) {
-//}
+	return wait.Poll(interval, timeout, func() (bool, error) {
+		// TODO: delete monitor
+		err := m.deleteJobs(namespace, clusterName)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		err = m.cli.CoreV1().Namespaces().Delete(namespace, nil)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		return true, nil
+	})
+}
+
+func (m *Manager) ListCluster(namespace string) ([]*Cluster, error) {
+	clusterList, err := m.cli.PingcapV1().TidbClusters(namespace).List(metav1.ListOptions{})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	clusters := []*Cluster{}
+	for _, item := range clusterList.Items {
+		clusters = append(clusters, &Cluster{
+			Name:      item.Metadata.Name,
+			CreatedAt: item.Metadata.CreationTimestamp.Time,
+			PD:        &PodSpec{Size: item.Spec.PD.Size},
+			TiDB:      &PodSpec{Size: item.Spec.TiDB.Size},
+			TiKV:      &PodSpec{Size: item.Spec.TiKV.Size},
+		})
+	}
+	return clusters, nil
+}
+
+func (m *Manager) deleteJobs(namespace, clusterName string) error {
+	lbs := label.New().Cluster(clusterName).Labels()
+	opts := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(lbs).String()}
+	jobs, err := m.cli.BatchV1().Jobs(namespace).List(opts)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		log.Errorf("failed to list jobs")
+		return errors.Trace(err)
+	}
+
+	for _, job := range jobs.Items {
+		err = m.cli.BatchV1().Jobs(namespace).Delete(job.Name, nil)
+		if err != nil {
+			log.Errorf("failed to delete job %s: %s", job.Name, err)
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
 
 func (m *Manager) createNamespace(namespace string) error {
 	ns := &v1.Namespace{

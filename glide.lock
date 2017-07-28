@@ -1,5 +1,5 @@
-hash: b85a099fcc07cea18686ba8d70b859dc40bdc0417e6172376d3678aa02f94576
-updated: 2017-07-27T11:29:54.350204672+08:00
+hash: 7a963fdc049e34b7681975014351ddef65dc93e9041342106a72614492911273
+updated: 2017-07-28T16:27:13.55969914+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -314,6 +314,7 @@ imports:
   - pkg/conversion/queryparams
   - pkg/fields
   - pkg/labels
+  - pkg/labels
   - pkg/openapi
   - pkg/runtime
   - pkg/runtime/schema
@@ -412,20 +413,17 @@ imports:
   - rest
   - rest/watch
   - tools/auth
-  - tools/cache
   - tools/clientcmd
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
   - tools/clientcmd/api/v1
   - tools/metrics
-  - tools/record
   - transport
   - util/cert
   - util/clock
   - util/flowcontrol
   - util/homedir
   - util/integer
-  - util/workqueue
 testImports:
 - name: github.com/jarcoal/httpmock
   version: 4442edb3db31196622da56482fd8d0fa375fba4d

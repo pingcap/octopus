@@ -57,11 +57,12 @@ func main() {
 	default:
 		log.Fatalf("parse cmd flags err %s", err)
 	}
-
 	err = initLogger(cfg)
 	if err != nil {
 		log.Fatalf("logger init failed: %s", err.Error())
 	}
+	log.Info("Welcome to schrodinger")
+
 	clusterManger := cluster.NewClusterManager(cfg)
 	catService := cat.NewCatService(clusterManger, cfg)
 	go func() {

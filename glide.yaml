@@ -12,3 +12,20 @@ import:
   vcs: git
   subpackages:
   - ssh
+- package: k8s.io/client-go
+  version: v3.0.0
+  subpackages:
+  - kubernetes
+  - pkg/api/v1
+  - pkg/apis/batch/v1
+  - pkg/apis/extensions/v1beta1
+  - rest
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/api/errors
+  - pkg/labels
+  - pkg/api/resource
+  - pkg/apis/meta/v1
+  - pkg/labels
+  - pkg/util/intstr
+  - pkg/util/wait
