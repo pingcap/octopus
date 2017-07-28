@@ -62,12 +62,18 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		return nil
 	}
 
+	var newUsers, deleteUsers, newPosts, newAuthors, deletePosts []int64
+	defer func() {
+		log.Infof("[crud] newUsers %v, deleteUsers %v, newPosts %v, newAuthors %v, deletePosts %v", newUsers, deleteUsers, newPosts, newAuthors, deletePosts)
+	}()
+
 	// Add new users.
 	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() < c.cfg.UserCount+c.cfg.UpdateUsers; i++ {
 		id := c.userIDs.allocID()
 		if err := c.createUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		newUsers = append(newUsers, id)
 	}
 
 	// Delete random users.
@@ -79,6 +85,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.deleteUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		deleteUsers = append(deleteUsers, id)
 	}
 
 	// Add new posts.
@@ -88,6 +95,8 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.addPost(db, id, author); err != nil {
 			return errors.Trace(err)
 		}
+		newPosts = append(newPosts, id)
+		newAuthors = append(newAuthors, author)
 	}
 
 	// Delete random posts.
@@ -96,6 +105,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 		if err := c.deletePost(db, id); err != nil {
 			return errors.Trace(err)
 		}
+		deletePosts = append(deletePosts, id)
 	}
 
 	// Check all.
@@ -109,7 +119,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 func (c *CRUDCase) createUser(db *sql.DB, id int64) error {
 	name := make([]byte, 10)
 	randString(name, c.rnd)
-	_, err := ExecWithRollback(db, []queryEntry{{query: fmt.Sprintf(`INSERT INTO crud_users VALUES (%v, "%s", %v)`, id, name, 0)}})
+	_, err := ExecWithRollback(db, []queryEntry{{query: fmt.Sprintf(`INSERT INTO crud_users VALUES (%v, "%s", %v)`, id, name, 0), expectAffectedRows: 1}})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -147,8 +157,8 @@ func (c *CRUDCase) deleteUser(db *sql.DB, id int64) error {
 		return errors.Trace(err)
 	}
 	q := []queryEntry{
-		{query: fmt.Sprintf("DELETE FROM crud_users WHERE id=%v", id)},
-		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE author=%v", id)},
+		{query: fmt.Sprintf("DELETE FROM crud_users WHERE id=%v", id), expectAffectedRows: 1},
+		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE author=%v", id), expectAffectedRows: int64(len(posts))},
 	}
 	if _, err = ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
@@ -161,11 +171,14 @@ func (c *CRUDCase) deleteUser(db *sql.DB, id int64) error {
 }
 
 func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
+	if err := c.checkUserPostCount(db, author); err != nil {
+		return errors.Trace(err)
+	}
 	title := make([]byte, 64)
 	randString(title, c.rnd)
 	q := []queryEntry{
-		{query: fmt.Sprintf(`INSERT INTO crud_posts VALUES (%v, %v, "%s")`, id, author, title)},
-		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts+1 WHERE id=%v", author)},
+		{query: fmt.Sprintf(`INSERT INTO crud_posts VALUES (%v, %v, "%s")`, id, author, title), expectAffectedRows: 1},
+		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts+1 WHERE id=%v", author), expectAffectedRows: 1},
 	}
 	if _, err := ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
@@ -179,9 +192,12 @@ func (c *CRUDCase) deletePost(db *sql.DB, id int64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if err := c.checkUserPostCount(db, author); err != nil {
+		return errors.Trace(err)
+	}
 	q := []queryEntry{
-		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE id=%v", id)},
-		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts-1 WHERE id=%v", author)},
+		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE id=%v", id), expectAffectedRows: 1},
+		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts-1 WHERE id=%v", author), expectAffectedRows: 1},
 	}
 	if _, err := ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
