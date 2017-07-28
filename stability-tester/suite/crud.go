@@ -119,7 +119,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 func (c *CRUDCase) createUser(db *sql.DB, id int64) error {
 	name := make([]byte, 10)
 	randString(name, c.rnd)
-	_, err := ExecWithRollback(db, []queryEntry{{query: fmt.Sprintf(`INSERT INTO crud_users VALUES (%v, "%s", %v)`, id, name, 0)}})
+	_, err := ExecWithRollback(db, []queryEntry{{query: fmt.Sprintf(`INSERT INTO crud_users VALUES (%v, "%s", %v)`, id, name, 0), expectAffectedRows: 1}})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -157,8 +157,8 @@ func (c *CRUDCase) deleteUser(db *sql.DB, id int64) error {
 		return errors.Trace(err)
 	}
 	q := []queryEntry{
-		{query: fmt.Sprintf("DELETE FROM crud_users WHERE id=%v", id)},
-		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE author=%v", id)},
+		{query: fmt.Sprintf("DELETE FROM crud_users WHERE id=%v", id), expectAffectedRows: 1},
+		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE author=%v", id), expectAffectedRows: int64(len(posts))},
 	}
 	if _, err = ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
@@ -177,8 +177,8 @@ func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
 	title := make([]byte, 64)
 	randString(title, c.rnd)
 	q := []queryEntry{
-		{query: fmt.Sprintf(`INSERT INTO crud_posts VALUES (%v, %v, "%s")`, id, author, title)},
-		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts+1 WHERE id=%v", author)},
+		{query: fmt.Sprintf(`INSERT INTO crud_posts VALUES (%v, %v, "%s")`, id, author, title), expectAffectedRows: 1},
+		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts+1 WHERE id=%v", author), expectAffectedRows: 1},
 	}
 	if _, err := ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
@@ -196,8 +196,8 @@ func (c *CRUDCase) deletePost(db *sql.DB, id int64) error {
 		return errors.Trace(err)
 	}
 	q := []queryEntry{
-		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE id=%v", id)},
-		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts-1 WHERE id=%v", author)},
+		{query: fmt.Sprintf("DELETE FROM crud_posts WHERE id=%v", id), expectAffectedRows: 1},
+		{query: fmt.Sprintf("UPDATE crud_users SET posts=posts-1 WHERE id=%v", author), expectAffectedRows: 1},
 	}
 	if _, err := ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)

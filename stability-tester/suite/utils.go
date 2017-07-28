@@ -82,8 +82,9 @@ func mustQuery(db *sql.DB, query string, args ...interface{}) *sql.Rows {
 }
 
 type queryEntry struct {
-	query string
-	args  []interface{}
+	query              string
+	args               []interface{}
+	expectAffectedRows int64
 }
 
 func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err error) {
@@ -96,6 +97,16 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 		if err != nil {
 			tx.Rollback()
 			return nil, errors.Trace(err)
+		}
+		if q.expectAffectedRows >= 0 {
+			affected, err := res.RowsAffected()
+			if err != nil {
+				tx.Rollback()
+				return nil, errors.Trace(err)
+			}
+			if affected != q.expectAffectedRows {
+				log.Fatalf("expect affectedRows %v, but got %v, query %v", q.expectAffectedRows, affected, q)
+			}
 		}
 	}
 	if err = tx.Commit(); err != nil {
