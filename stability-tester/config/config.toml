@@ -14,7 +14,7 @@ pd = ""
 # shuffle-region = false
 
 [suite]
-names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
+names = ["bank", "bank2", "ledger", "crud", "block_writer", "log"]
 concurrency = 10000
 
 [suite.bank]
@@ -56,7 +56,7 @@ num_accounts = 10000
 interval = "1s"
 
 [serial_suite]
-names = ["sysbench"]
+names = ["sysbench", "reclaim_space"]
 
 [serial_suite.sysbench] 
 table_count = 8
@@ -66,6 +66,13 @@ max_time = 1800
 interval = "1h"
 database = "sbtest"
 lua_path = "./sysbench_lua"
+
+[serial_suite.reclaim_space]
+batch_size = 10
+concurrency = 32
+table_count = 16
+items = 100
+sleep_time = 1200
 
 [metric]
 job = "stability_test"

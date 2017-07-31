@@ -20,13 +20,14 @@ type SuiteConfig struct {
 	// Names contains all cases to be run later.
 	Names []string `toml:"names"`
 	// Concurrency is the concurrency to run all cases.
-	Concurrency int                   `toml:"concurrency"`
-	Bank        BankCaseConfig        `toml:"bank"`
-	Bank2       Bank2CaseConfig       `toml:"bank2"`
-	Ledger      LedgerConfig          `toml:"ledger"`
-	CRUD        CRUDCaseConfig        `toml:"crud"`
-	Log         LogCaseConfig         `toml:"log"`
-	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
+	Concurrency  int                    `toml:"concurrency"`
+	Bank         BankCaseConfig         `toml:"bank"`
+	Bank2        Bank2CaseConfig        `toml:"bank2"`
+	Ledger       LedgerConfig           `toml:"ledger"`
+	CRUD         CRUDCaseConfig         `toml:"crud"`
+	Log          LogCaseConfig          `toml:"log"`
+	BlockWriter  BlockWriterCaseConfig  `toml:"block_writer"`
+	ReclaimSpace ReclaimSpaceCaseConfig `toml:"reclaim_space"`
 }
 
 // BankCaseConfig is for bank test case.
@@ -100,4 +101,13 @@ type SysbenchConfig struct {
 	Interval   Duration `toml:"interval"`
 	DBName     string   `toml:"database"`
 	LuaPath    string   `toml:"lua_path"`
+}
+
+// ReclaimSpaceCaseConfig is for ReclaimSpace test case.
+type ReclaimSpaceCaseConfig struct {
+	BatchSize   int `toml:"batch_size"`
+	Concurrency int `toml:"concurrency"`
+	TableCount  int `toml:"table_count"`
+	Items       int `toml:"items"`
+	SleepTime   int `toml:"sleep_time"`
 }
