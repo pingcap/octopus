@@ -40,10 +40,10 @@ func (s *testCRUDSuite) TestCRUD(c *C) {
 	crudCase := NewCRUDCase(&config.Config{
 		Suite: config.SuiteConfig{
 			CRUD: config.CRUDCaseConfig{
-				UserCount:   10,
-				PostCount:   10,
-				UpdateUsers: 20,
-				UpdatePosts: 20,
+				UserCount:   20,
+				PostCount:   20,
+				UpdateUsers: 10,
+				UpdatePosts: 10,
 				Interval:    config.Duration{2 * time.Millisecond},
 			},
 		},
