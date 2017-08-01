@@ -134,10 +134,10 @@ func (m *Manager) GetCluster(namespace, clusterName string) (*Cluster, error) {
 					NodeIP: pod.Status.HostIP,
 					Status: string(pod.Status.Phase),
 				})
-			case "tidb-monitor", "configure-grafana":
-				log.Infof("tidb monitor: %s", pod.ObjectMeta.Labels["app"])
+			case "tidb-monitor", "configure-grafana", "privileged-tidb":
+				log.Debugf("tidb monitor: %s", pod.ObjectMeta.Labels[label.AppLabelKey])
 			default:
-				log.Warnf("unexpected pod type %s", pod.ObjectMeta.Labels["app"])
+				log.Warnf("unexpected pod type %s", pod.ObjectMeta.Labels[label.AppLabelKey])
 			}
 		}
 	}
@@ -177,6 +177,12 @@ func (m *Manager) CreateCluster(c *Cluster) error {
 	config, err := m.genConfig(enableMonitor, c.TiDBLease)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if enableMonitor {
+		err = m.createTidbMonitor(c, c.Name)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	if c.ServiceType == "" {
 		c.ServiceType = m.ServiceType
@@ -234,7 +240,12 @@ func (m *Manager) DeleteCluster(namespace, clusterName string, interval, timeout
 
 	return wait.Poll(interval, timeout, func() (bool, error) {
 		// TODO: delete monitor
-		err := m.deleteJobs(namespace, clusterName)
+		err := m.deleteTidbMonitor(namespace, clusterName)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
+		err = m.deleteJobs(namespace, clusterName)
 		if err != nil {
 			return false, errors.Trace(err)
 		}

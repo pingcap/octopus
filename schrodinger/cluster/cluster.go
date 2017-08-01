@@ -26,7 +26,7 @@ var (
 
 type Cluster struct {
 	Name               string            `yaml:"name" json:"name"`
-	PD                 *PodSpec          `yaml:"name" json:"pd"`
+	PD                 *PodSpec          `yaml:"pd" json:"pd"`
 	TiKV               *PodSpec          `yaml:"tikv" json:"tikv"`
 	TiDB               *PodSpec          `yaml:"tidb" json:"tidb"`
 	Monitor            *PodSpec          `yaml:"monitor" json:"monitor,omitempty"`
@@ -71,8 +71,4 @@ type PodSpec struct {
 //type Job struct {
 //Name   string `json:"name"`
 //Status string `json:"status"`
-//}
-
-//type clusterConfig struct {
-//MetricsAddr string
 //}
