@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"database/sql"
+
 	"golang.org/x/net/context"
 )
 
@@ -23,7 +24,7 @@ type Cluster interface {
 type clusterDSN struct {
 	name     string
 	host     string
-	port     uint16
+	port     int
 	db       string
 	user     string
 	password string

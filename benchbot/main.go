@@ -12,6 +12,7 @@ import (
 	log "github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
+	"github.com/pingcap/octopus/benchbot/suite"
 )
 
 var (
@@ -48,9 +49,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	svr, err := backend.NewServer(cfg)
+	suites, err := suite.NewBenchSuites(*configFile)
 	if err != nil {
-		fmt.Printf("failed to run server: %s\n", err)
+		fmt.Printf("failed to create suites: %s\n", err)
+		os.Exit(1)
+	}
+
+	svr, err := backend.NewServer(cfg, suites)
+	if err != nil {
+		fmt.Printf("failed to create server: %s\n", err)
 		os.Exit(1)
 	}
 

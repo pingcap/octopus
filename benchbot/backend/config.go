@@ -12,10 +12,13 @@ const (
 	defaultAnsibleDir = "ansible"
 )
 
-type ServerConfig struct {
-	Port    int           `toml:"port"`
-	Dir     string        `toml:"dir"`
-	Ansible AnsibleConfig `toml:"ansible"`
+type ClusterDSN struct {
+	Name         string `toml:"name"`
+	Host         string `toml:"host"`
+	Port         int    `toml:"port"`
+	DB           string `toml:"db"`
+	AuthUser     string `toml:"user"`
+	AuthPassword string `toml:"password"`
 }
 
 type AnsibleConfig struct {
@@ -23,13 +26,10 @@ type AnsibleConfig struct {
 	Clusters []ClusterDSN `toml:"clusters"`
 }
 
-type ClusterDSN struct {
-	Name         string `toml:"name"`
-	Host         string `toml:"host"`
-	Port         uint16 `toml:"port"`
-	DB           string `toml:"db"`
-	AuthUser     string `toml:"user"`
-	AuthPassword string `toml:"password"`
+type ServerConfig struct {
+	Port    int           `toml:"port"`
+	Dir     string        `toml:"dir"`
+	Ansible AnsibleConfig `toml:"ansible"`
 }
 
 func ParseConfig(filePath string) (*ServerConfig, error) {

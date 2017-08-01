@@ -1,7 +1,6 @@
 package suite
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"sort"
@@ -9,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"encoding/gob"
 	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/pkg"
 	"golang.org/x/net/context"
@@ -99,14 +97,6 @@ func calcPercentileF64(vals []float64, percent float64) float64 {
 	}
 }
 
-func deepCopy(dst, src interface{}) error {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(src); err != nil {
-		return err
-	}
-	return gob.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(dst)
-}
-
 func roundF64(val float64, places int) float64 {
 	v, _ := strconv.ParseFloat(fmt.Sprintf("%0.3f", val), 64)
 	return v
@@ -180,16 +170,16 @@ func (s *StatIndex) updateLatencyPercentile(latencyRecords []float64) {
 	}
 }
 
-func (s *StatIndex) copy() *StatIndex {
+func (s *StatIndex) clone() *StatIndex {
 	cp := new(StatIndex)
-	if err := deepCopy(cp, s); err != nil {
+	if err := DeepClone(cp, s); err != nil {
 		return nil
 	}
 	return cp
 }
 
 func (s *StatIndex) FormatJSON() string {
-	cp := s.copy()
+	cp := s.clone()
 	data, err := DumpJSON(cp, true)
 	if err != nil {
 		return ""
@@ -262,7 +252,7 @@ func (mgr *statisticManager) record(op *dbop) {
 	}
 
 	if op.latency > 10.0 {
-		log.Warnf("long time sql op : cls = %d / time = %.1f sec", op.class, op.latency)	
+		log.Warnf("long time sql op : cls = %d / time = %.1f sec", op.class, op.latency)
 	}
 
 	mgr.mux.Lock()
@@ -279,8 +269,6 @@ func (mgr *statisticManager) run() {
 	end := false
 	for !end {
 		select {
-		// case <- time.After():
-		//     // TODO
 		case batch := <-mgr.batchNews:
 			mgr.update(batch.ops, batch.duration)
 		case <-mgr.ctx.Done():
@@ -379,7 +367,7 @@ func (mon *statisticManager) getSummary() *StatIndex {
 	mon.mux.RLock()
 	defer mon.mux.RUnlock()
 
-	return mon.summary.copy()
+	return mon.summary.clone()
 }
 
 func (mon *statisticManager) getStages() []*StatIndex {

@@ -7,22 +7,24 @@ import (
 	"sync"
 
 	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/suite"
 	"golang.org/x/net/context"
 )
 
 const (
-	penndingJobLimit        int    = 10
-	defaultHistoryShowCount int    = 10
+	penndingJobLimit        int = 10
+	defaultHistoryShowCount int = 10
 )
 
 type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
-	conf   *ServerConfig
+	cfg    *ServerConfig
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	suites     []BenchSuite
 	runningJob *BenchmarkJob
 	orders     chan *BenchmarkJob
 	jobs       *JobSet
@@ -34,8 +36,8 @@ type Summary struct {
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig) (*Server, error) {
-	svr := &Server{conf: cfg}
+func NewServer(cfg *ServerConfig, suites []BenchSuite) (*Server, error) {
+	svr := &Server{cfg: cfg, suites: suites}
 	svr.ctx, svr.cancel = context.WithCancel(context.Background())
 
 	var err error
@@ -63,15 +65,15 @@ func (svr *Server) init() (err error) {
 		panic("conetext required !")
 	}
 
-	if err = os.MkdirAll(svr.conf.Dir, os.ModePerm); err != nil {
+	if err = os.MkdirAll(svr.cfg.Dir, os.ModePerm); err != nil {
 		return err
 	}
 
-	if err = initAnsibleEnv(svr.conf); err != nil {
+	if err = initAnsibleEnv(svr.cfg); err != nil {
 		return
 	}
 
-	if err = initClusterManager(svr.conf, svr.ctx); err != nil {
+	if err = initClusterManager(svr.cfg, svr.ctx); err != nil {
 		return
 	}
 
@@ -138,7 +140,7 @@ func (svr *Server) setRunningJob(job *BenchmarkJob) {
 }
 
 func (svr *Server) CreateJob(meta *BenchmarkMeta) (*BenchmarkJob, error) {
-	job := NewBenchmarkJob()
+	job := NewBenchmarkJob(svr.suites)
 	job.Meta = meta
 
 	select {
@@ -174,10 +176,7 @@ func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 		return nil
 	}
 
-	clone := NewBenchmarkJob()
-	DeepCopy(clone, job)
-
-	return clone
+	return job.Clone()
 }
 
 func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
@@ -195,9 +194,7 @@ func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 	jobs := svr.jobs.List()[:size]
 	cloneJobs := make([]*BenchmarkJob, 0, len(jobs))
 	for _, job := range jobs {
-		clone := NewBenchmarkJob()
-		DeepCopy(clone, job)
-		cloneJobs = append(cloneJobs, clone)
+		cloneJobs = append(cloneJobs, job.Clone())
 	}
 
 	return cloneJobs

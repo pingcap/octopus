@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/pkg"
 	"golang.org/x/net/context"
 )
 

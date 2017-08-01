@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/pkg"
 	. "github.com/pingcap/octopus/benchbot/suite"
 	"golang.org/x/net/context"
 )
@@ -52,8 +53,9 @@ type BenchmarkJob struct {
 	cancel context.CancelFunc
 
 	ID         int64            `json:"id"`
-	CreateTime string           `json:"created_time"`
+	Suites     []BenchSuite     `json:"suites"`
 	Status     string           `json:"status"`
+	CreateTime string           `json:"created_time"`
 	Meta       *BenchmarkMeta   `json:"meta"`
 	Result     *BenchmarkResult `json:"result"`
 }
@@ -99,9 +101,10 @@ func (pkg *BinPackage) valid() bool {
 	return (len(pkg.Branch) > 0 || len(pkg.Tag) > 0) && len(pkg.GitHash) > 0
 }
 
-func NewBenchmarkJob() *BenchmarkJob {
+func NewBenchmarkJob(suites []BenchSuite) *BenchmarkJob {
 	job := &BenchmarkJob{
 		ID:         -1,
+		Suites:     suites,
 		Status:     Pending,
 		CreateTime: time.Now().Format(TimeFormat),
 		Meta:       NewBenchmarkMeta(),
@@ -111,6 +114,14 @@ func NewBenchmarkJob() *BenchmarkJob {
 	job.ctx, job.cancel = context.WithCancel(context.Background())
 
 	return job
+}
+
+func (job *BenchmarkJob) Clone() *BenchmarkJob {
+	dst := new(BenchmarkJob)
+	if err := DeepClone(dst, job); err != nil {
+		return nil
+	}
+	return dst
 }
 
 func (job *BenchmarkJob) ParseFromRequstJSON(data []byte) error {
@@ -150,27 +161,21 @@ func (job *BenchmarkJob) DumpToJson() string {
 }
 
 func (job *BenchmarkJob) abortedError() error {
-	return fmt.Errorf("job [%s] aborted", job.ID)
+	return fmt.Errorf("job [%d] aborted", job.ID)
 }
 
 func (job *BenchmarkJob) Run() (err error) {
-	var cluster Cluster
-	defer func() {
-		success := (err == nil)
-		if cluster != nil {
-			cluster.Destory()
-			cluster.Close()
-		}
-		job.onJobDone(success)
-	}()
-
-	cluster, err = job.initCluster()
+	cluster, err := job.initCluster()
 	if err != nil {
 		return
 	}
+	defer func() {
+		cluster.Close()
+		job.onJobDone(err == nil)
+	}()
 
 	if err = job.run(cluster); err != nil {
-		return
+		log.Errorf("[job-%d] run error : %s", job.ID, err)
 	}
 
 	return
@@ -205,20 +210,12 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 	}
 
 	cluster = clusterManager.applyAnsibleCluster(job.Meta.TiDB, job.Meta.TiKV, job.Meta.Pd)
-	defer func() {
-		if err != nil && cluster != nil {
-			cluster.Destory()
-			cluster.Close()
-		}
-	}()
-
 	if cluster == nil {
-		// TODO ... retry ?
-		err = errors.New("not any availble cluster to run")
+		err = errors.New("no available cluster to run")
 		return
 	}
 
-	ops := [](func() error){cluster.Prepare, cluster.Deploy, cluster.Run}
+	ops := [](func() error){cluster.Prepare, cluster.Deploy, cluster.Reset}
 	for step, op := range ops {
 		// TODO :
 		// so as to suspend operation imidate, call "kill -9" while op in another gorountine.
@@ -254,7 +251,27 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 
 	log.Infof("[job-%d] start running bench ...", job.ID)
 
-	time.Sleep(time.Millisecond * 500) // ps : pretend to run cases
+	results := make([]*CaseResult, 0, len(job.Suites))
+	for _, s := range job.Suites {
+		cluster.Run()
+		if err := cluster.Ping(); err != nil {
+			log.Errorf("failed to access cluster: %s", err)
+			return err
+		}
+
+		db := cluster.Accessor()
+		db.SetMaxIdleConns(1024)
+		db.SetMaxOpenConns(1024)
+		db.SetConnMaxLifetime(-1)
+		time.Sleep(time.Second * 60)
+
+		if res, err := s.Run(job.ctx, db); err == nil {
+			results = append(results, res...)
+		}
+	}
+
+	job.Result.Cases = len(results)
+	job.Result.Details = results
 
 	log.Infof("[job-%d] bench finish !", job.ID)
 

@@ -2,204 +2,117 @@ package suite
 
 import (
 	"database/sql"
-	//"encoding/json"
 	"fmt"
-	//"math"
 	"math/rand"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
 
+type BlockWriteConfig struct {
+	NumThreads   int `toml:"num_threads"`
+	NumRequests  int `toml:"num_requests"`
+	MinBlockSize int `toml:"min_block_size"`
+	MaxBlockSize int `toml:"max_block_size"`
+}
+
 const (
-	bwConcurrency = 1000
-	round         = 1000
-	minBlockSize  = 1024 * 3
-	maxBlockSize  = 1024 * 4 - 1
-
-	defaultFilling = byte('a')
-
-	blockWriteTableSchema = `block_writer (
-      block_id BIGINT NOT NULL,
-      writer_id VARCHAR(64) NOT NULL,
-      block_num BIGINT NOT NULL,
-      raw_bytes BLOB NOT NULL,
-      PRIMARY KEY (block_id, writer_id, block_num)
+	blockWriteTable       = "block_writer"
+	blockWriteTableSchema = `(
+        block_id BIGINT NOT NULL,
+        block_data BLOB NOT NULL,
+        PRIMARY KEY (block_id)
 	)`
 )
 
-var (
-	dataFilter = []byte{byte('\''), byte('"'), byte('\\')}
-)
+type BlockWriteSuite struct {
+	cfg *BlockWriteConfig
+}
 
-type BlockWriteSuite struct{}
-
-func NewBlockWriteSuite() *BlockWriteSuite {
-	return new(BlockWriteSuite)
+func NewBlockWriteSuite(cfg *BlockWriteConfig) *BlockWriteSuite {
+	return &BlockWriteSuite{cfg: cfg}
 }
 
 func (s *BlockWriteSuite) String() string {
-	return "BlockWriteSuite"
+	return "block-write"
 }
 
 func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseResult, err error) {
+	if err = s.prepare(db); err != nil {
+		return
+	}
+
 	cases := []BenchCase{
-		NewBlockWriteCase(),
+		NewBlockWriteCase(s),
 	}
 
 	results = make([]*CaseResult, 0, len(cases))
 	for _, c := range cases {
-		c.Initialize(ctx, db)
-		if res, err := c.Run(ctx, db); err != nil {
-			break
-		} else {
-			log.Infof("case end : %s", res.Summary.FormatJSON())
-			results = append(results, res)
+		res, err := c.Run(ctx, db)
+		if err != nil {
+			log.Errorf("[case:%s] run: %s", c, err)
+			continue
 		}
+		log.Infof("[case:%s] end: %s", c, res.Summary.FormatJSON())
+		results = append(results, res)
 	}
 
 	return
+}
+
+func (s *BlockWriteSuite) prepare(db *sql.DB) (err error) {
+	if err := dropTable(db, blockWriteTable); err != nil {
+		return err
+	}
+	return createTable(db, blockWriteTable, blockWriteTableSchema)
 }
 
 // BlockWriteCase is for concurrent writing blocks.
 type BlockWriteCase struct {
-	desc string
-	bws  []*blockWriter
-	stat *statisticManager
+	suite   *BlockWriteSuite
+	blockID uint64
 }
 
-type blockWriter struct {
-	id         string
-	minSize    int
-	maxSize    int
-	blockCount int
-
-	rand *rand.Rand
-	stat *statisticManager
-}
-
-// NewBlockWriteCase returns the BlockWriteCase.
-func NewBlockWriteCase() BenchCase {
-	c := &BlockWriteCase{
-		desc: "block-write",
-		stat: newStatisticManager(), // TODO ... not start until run() !
-	}
-	c.initBlocks()
-	return c
-}
-
-func (bw *BlockWriteCase) String() string {
-	return bw.desc
-}
-
-func (c *BlockWriteCase) initBlocks() {
-	c.bws = make([]*blockWriter, bwConcurrency)
-	for i := 0; i < bwConcurrency; i++ {
-		c.bws[i] = newBlockWriter(c.stat)
+func NewBlockWriteCase(suite *BlockWriteSuite) *BlockWriteCase {
+	return &BlockWriteCase{
+		suite:   suite,
+		blockID: 0,
 	}
 }
 
-// block writer
-func newBlockWriter(stat *statisticManager) *blockWriter {
-	source := rand.NewSource(int64(time.Now().UnixNano()))
-	bw := &blockWriter{
-		id:      uuid.NewV4().String(),
-		rand:    rand.New(source),
-		minSize: minBlockSize,
-		maxSize: maxBlockSize,
-		// summary: newBlockWriteSummary(),
-		stat: stat,
-	}
-
-	return bw
-}
-
-func (bw *blockWriter) randomBlock() []byte {
-	blockSize := bw.rand.Intn(bw.maxSize-bw.minSize) + bw.minSize
-	blockData := randomAsciiBytes(blockSize, bw.rand)
-
-	var v byte
-	for i := range blockData {
-		v = byte(bw.rand.Int() & 0xff)
-		for _, c := range dataFilter {
-			if c == v {
-				v = defaultFilling
-				break
-			}
-		}
-		blockData[i] = v
-	}
-	return blockData
-}
-
-func (bw *blockWriter) execute(db *sql.DB) error {
-	bw.blockCount++
-	blockID := bw.rand.Int63()
-	blockData := bw.randomBlock()
-
-	start := time.Now()
-	_, err := db.Exec(
-		`INSERT INTO block_writer (block_id, writer_id, block_num, raw_bytes) VALUES (?, ?, ?, ?)`,
-		blockID, bw.id, bw.blockCount, blockData)
-
-	bw.stat.record(&dbop{
-		class:   opWrite,
-		bytes:   uint64(len(blockData)),
-		latency: time.Now().Sub(start).Seconds(),
-		err:     err != nil,
-	})
-
-	return err
-}
-
-// Initialize implements Case Initialize interface.
-func (c *BlockWriteCase) Initialize(ctx context.Context, db *sql.DB) (err error) {
-	if _, err = db.Exec("DROP TABLE IF EXISTS block_writer"); err != nil {
-		return
-	}
-
-	_, err = db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s`, blockWriteTableSchema))
-
-	return
+func (c *BlockWriteCase) String() string {
+	return "block-write"
 }
 
 func (c *BlockWriteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
-	c.stat.start()
-	{
-		wg := sync.WaitGroup{}
-		wg.Add(bwConcurrency)
+	log.Infof("[case:%s] start ...", c)
 
-		var err error
-		process := func(w *blockWriter, id int) {
-			defer wg.Done()
-			for i := 0; i < round; i++ {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					if err = w.execute(db); err != nil {
-						log.Errorf("[block_write] error : %s", err.Error())
-					}
-				}
-			}
-		}
-
-		for i := 0; i < bwConcurrency; i++ {
-			go process(c.bws[i], i)
-		}
-
-		wg.Wait() // Wait all over.
-	}
-	c.stat.close()
-
-	res := &CaseResult{
-		Name:    c.desc,
-		Summary: c.stat.getSummary(),
-		Stages:  c.stat.getStages(),
+	cfg := c.suite.cfg
+	stat := processStatistic(ctx, db, cfg.NumThreads, cfg.NumRequests, c.execute)
+	result := &CaseResult{
+		Name:    c.String(),
+		Summary: stat.summary,
+		Stages:  stat.stages,
 	}
 
-	return res, ctx.Err()
+	return result, nil
+}
+
+func (c *BlockWriteCase) execute(ctx context.Context, db *StatDB, id, requests int) {
+	cfg := c.suite.cfg
+	rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+
+	for i := 0; i < requests; i++ {
+		blockID := atomic.AddUint64(&c.blockID, 1)
+		blockSize := rand.Intn(cfg.MaxBlockSize-cfg.MinBlockSize) + cfg.MinBlockSize
+		blockData := randomAsciiBytes(blockSize, rander)
+
+		query := fmt.Sprintf(
+			"INSERT INTO `%s` (`block_id`, `block_data`) VALUES (?, ?)", blockWriteTable)
+		if _, err := db.Exec(query, blockID, blockData); err != nil {
+			log.Errorf("[case:%s] exec: %s", c, err)
+		}
+	}
 }

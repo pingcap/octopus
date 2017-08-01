@@ -6,30 +6,28 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/octopus/benchbot/backend"
+	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/pkg"
 )
 
 const (
 	createTestTable = `
-CREATE TABLE IF NOT EXISTS statdb_test (
-id INTEGER UNSIGNED NOT NULL,
-name VARCHAR(32) DEFAULT '' NOT NULL,
-age INTEGER DEFAULT 0
-) ENGINE=innodb;
-	`
+    CREATE TABLE IF NOT EXISTS statdb_test (
+        id INTEGER UNSIGNED NOT NULL,
+        name VARCHAR(32) DEFAULT '' NOT NULL,
+        age INTEGER DEFAULT 0
+    ) ENGINE=innodb;`
 )
 
 func TestStatDB(t *testing.T) {
-	var user, psw, host, dbName string = "root", "", "localhost", "test"
-	var port uint16 = 3306
+	var user, passwd, host, port, dbname = "root", "", "localhost", 4000, "test"
 
-	rawDB, err := ConnectDB(user, psw, host, port, dbName)
+	rawDB, err := ConnectDB(user, passwd, host, port, dbname)
 	if err != nil {
-		fmt.Println("DB connect failed !")
-		return
+		log.Fatalf("failed to connect db: %s", err)
 	}
 
-	rawDB.Exec("truncate table `statdb_test`")
+	rawDB.Exec("TRUNCATE TABLE `statdb_test`")
 	rawDB.Exec(createTestTable)
 
 	db := NewStatDB(rawDB)

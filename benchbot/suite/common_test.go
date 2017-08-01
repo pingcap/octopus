@@ -4,25 +4,31 @@ import (
 	"fmt"
 	"testing"
 
-	. "github.com/pingcap/octopus/benchbot/backend"
+	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/pkg"
 )
 
-func testPrepare(t *testing.T) {
-	var user, psw, host, dbName string = "root", "", "localhost", "test"
-	var port uint16 = 3306
+func TestPrepare(t *testing.T) {
+	var user, passwd, host, port, dbname = "root", "", "localhost", 4000, "test"
 
-	db, err := ConnectDB(user, psw, host, port, dbName)
+	db, err := ConnectDB(user, passwd, host, port, dbname)
 	if err != nil {
-		fmt.Println("DB connect failed !")
-		return
+		log.Fatalf("failed to connect db: %s", err)
 	}
 
-	tableCount := 35
-	tableRows := 10
+	tableSize := 100
+	numTables := 4
+	numThreads := 4
 
-	for i := 0; i < tableCount; i++ {
+	for i := 0; i < numTables; i++ {
 		table := fmt.Sprintf("%s_%d", defaultTableName, i)
 		dropTable(db, table)
 	}
-	prepare(db, tableCount, tableRows)
+
+	tables, err := prepare(db, tableSize, numTables, numThreads)
+	if err != nil {
+		log.Fatalf("failed to prepare: %s", err)
+	}
+
+	fmt.Println(tables)
 }
