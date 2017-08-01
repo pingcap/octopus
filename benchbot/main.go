@@ -7,29 +7,20 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"runtime"
 	"syscall"
 
 	log "github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
-	"github.com/pingcap/octopus/pkg/util"
 )
 
 var (
-	version    bool
-	configFile string
+	configFile = flag.String("c", "config.toml", "benchbot configuration file")
 )
 
 const (
-	logFileName string = "server.log"
+	logFileName string = "benchbot.log"
 )
-
-func parseArgs() {
-	flag.StringVar(&configFile, "config", "config.toml", "server configuration")
-	flag.BoolVar(&version, "V", false, "print version information and exit")
-	flag.BoolVar(&version, "version", false, "print version information and exit")
-}
 
 func initLogger(cfg *backend.ServerConfig) error {
 	err := os.MkdirAll(cfg.Dir, os.ModePerm)
@@ -44,30 +35,22 @@ func initLogger(cfg *backend.ServerConfig) error {
 }
 
 func main() {
-	parseArgs()
+	flag.Parse()
 
-	if version {
-		util.PrintInfo()
-		return
-	}
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	cfg, err := backend.ParseConfig(configFile)
+	cfg, err := backend.ParseConfig(*configFile)
 	if err != nil {
-		fmt.Printf("failed to load config (%s) : %s\n", configFile, err.Error())
+		fmt.Printf("failed to load %s: %s\n", *configFile, err)
 		os.Exit(1)
 	}
 
-	err = initLogger(cfg)
-	if err != nil {
-		fmt.Printf("logger init failed : %s\n", err.Error())
+	if err = initLogger(cfg); err != nil {
+		fmt.Printf("failed to init logger: %s\n", err)
 		os.Exit(1)
 	}
 
-	var svr *backend.Server
-	if svr, err = backend.NewServer(cfg); err != nil {
-		fmt.Printf("server running failed : %s\n", err.Error())
+	svr, err := backend.NewServer(cfg)
+	if err != nil {
+		fmt.Printf("failed to run server: %s\n", err)
 		os.Exit(1)
 	}
 
@@ -77,8 +60,8 @@ func main() {
 		http.ListenAndServe(addr, r)
 	}()
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig,
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
 		os.Kill,
 		os.Interrupt,
 		syscall.SIGHUP,
@@ -86,7 +69,8 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	<-sig
+	sig := <-sc
+	log.Infof("Got signal [%d] to exit.", sig)
+
 	svr.Close()
-	log.Info("Exit.")
 }
