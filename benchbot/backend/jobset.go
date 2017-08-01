@@ -37,7 +37,7 @@ type JobSet struct {
 }
 
 const (
-	defaultJobsStorePath = "./jobs.db"
+	defaultJobsStorePath = "jobs.db"
 )
 
 func NewJobSet(localFile string) (*JobSet, error) {

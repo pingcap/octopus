@@ -8,9 +8,20 @@ import (
 
 const (
 	defaultPort       = 20170
-	defaultDir        = "./"
-	defaultAnsibleDir = "./ansible"
+	defaultDir        = "."
+	defaultAnsibleDir = "ansible"
 )
+
+type ServerConfig struct {
+	Port    int           `toml:"port"`
+	Dir     string        `toml:"dir"`
+	Ansible AnsibleConfig `toml:"ansible"`
+}
+
+type AnsibleConfig struct {
+	Dir      string       `toml:"dir"`
+	Clusters []ClusterDSN `toml:"clusters"`
+}
 
 type ClusterDSN struct {
 	Name         string `toml:"name"`
@@ -19,22 +30,6 @@ type ClusterDSN struct {
 	DB           string `toml:"db"`
 	AuthUser     string `toml:"user"`
 	AuthPassword string `toml:"password"`
-}
-
-type AnsibleConfig struct {
-	Dir      string       `toml:"dir"`
-	Clusters []ClusterDSN `toml:"clusters"`
-}
-
-type BenchConfig struct {
-	Cases []string `toml:"port"`
-}
-
-type ServerConfig struct {
-	Port    int           `toml:"port"`
-	Dir     string        `toml:"dir"`
-	Ansible AnsibleConfig `toml:"ansible"`
-	Bench   BenchConfig   `toml:"bench"`
 }
 
 func ParseConfig(filePath string) (*ServerConfig, error) {
@@ -47,7 +42,6 @@ func ParseConfig(filePath string) (*ServerConfig, error) {
 	if err = toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
-
 	cfg.adjust()
 
 	return cfg, nil
@@ -59,10 +53,15 @@ func NewServerConfig() *ServerConfig {
 	return cfg
 }
 
-func adjustStr(sz *string, defVal string) {
-	if len(*sz) == 0 {
-		*sz = defVal
-	}
+func (svrCfg *ServerConfig) adjust() {
+	adjustInt(&svrCfg.Port, defaultPort)
+	adjustStr(&svrCfg.Dir, defaultDir)
+
+	svrCfg.Ansible.adjust()
+}
+
+func (ansCfg *AnsibleConfig) adjust() {
+	adjustStr(&ansCfg.Dir, defaultAnsibleDir)
 }
 
 func adjustInt(num *int, defVal int) {
@@ -71,18 +70,8 @@ func adjustInt(num *int, defVal int) {
 	}
 }
 
-func (svrCfg *ServerConfig) adjust() {
-	adjustInt(&svrCfg.Port, defaultPort)
-	adjustStr(&svrCfg.Dir, defaultDir)
-
-	svrCfg.Ansible.adjust()
-	svrCfg.Bench.adjust()
-}
-
-func (ansCfg AnsibleConfig) adjust() {
-	adjustStr(&ansCfg.Dir, defaultAnsibleDir)
-}
-
-func (bchCfg BenchConfig) adjust() {
-
+func adjustStr(sz *string, defVal string) {
+	if len(*sz) == 0 {
+		*sz = defVal
+	}
 }

@@ -1,9 +1,8 @@
-
-dir = "./"
 port = 20170
+dir = "."
 
 [ansible]
-dir = "./ansible"
+dir = "ansible"
 
 [[ansible.clusters]]
 name = "local-3306"

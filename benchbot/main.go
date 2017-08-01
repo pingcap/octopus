@@ -26,7 +26,7 @@ const (
 )
 
 func parseArgs() {
-	flag.StringVar(&configFile, "config", "./config.toml", "server configuration")
+	flag.StringVar(&configFile, "config", "config.toml", "server configuration")
 	flag.BoolVar(&version, "V", false, "print version information and exit")
 	flag.BoolVar(&version, "version", false, "print version information and exit")
 }

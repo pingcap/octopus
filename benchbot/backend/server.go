@@ -13,7 +13,6 @@ import (
 const (
 	penndingJobLimit        int    = 10
 	defaultHistoryShowCount int    = 10
-	logFileName             string = "server.log"
 )
 
 type Server struct {
@@ -193,7 +192,7 @@ func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 		size = lastN
 	}
 
-	jobs := svr.jobs.List()
+	jobs := svr.jobs.List()[:size]
 	cloneJobs := make([]*BenchmarkJob, 0, len(jobs))
 	for _, job := range jobs {
 		clone := NewBenchmarkJob()
