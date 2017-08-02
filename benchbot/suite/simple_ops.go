@@ -51,7 +51,7 @@ func (s *SimpleOpsSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, er
 		}
 		log.Infof("[case:%s] end: %s", c, res.Summary.FormatJSON())
 		results = append(results, res)
-		// time.Sleep(time.Second * 60)
+		time.Sleep(time.Second * 30)
 	}
 
 	return results, nil
@@ -76,7 +76,7 @@ func (c *SimpleSelectCase) String() string {
 
 func (c *SimpleSelectCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
+	stat := processStatistic(c.execute, ctx, db, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
@@ -113,7 +113,7 @@ func (c *SimpleInsertCase) String() string {
 
 func (c *SimpleInsertCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
+	stat := processStatistic(c.execute, ctx, db, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
@@ -151,7 +151,7 @@ func (c *SimpleDeleteCase) String() string {
 
 func (c *SimpleDeleteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
+	stat := processStatistic(c.execute, ctx, db, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,

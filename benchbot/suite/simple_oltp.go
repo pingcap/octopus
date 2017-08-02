@@ -88,7 +88,7 @@ func (c *SimpleOLTPCase) String() string {
 
 func (c *SimpleOLTPCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
+	stat := processStatistic(c.execute, ctx, db, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,

@@ -121,7 +121,7 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 
 type execution func(context.Context, *StatDB, int, int)
 
-func processStatistic(ctx context.Context, db *sql.DB, exec execution, numThreads, numRequests int) *StatResult {
+func processStatistic(exec execution, ctx context.Context, db *sql.DB, numThreads, numRequests int) *StatResult {
 	stdb := NewStatDB(db)
 
 	wg := sync.WaitGroup{}
