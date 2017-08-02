@@ -126,6 +126,7 @@ func (c *SimpleInsertCase) execute(ctx context.Context, db *StatDB, id, requests
 	tables := c.suite.tables
 	rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
 
+	requests /= len(tables)
 	for i := 0; i < requests; i++ {
 		name := randomAsciiBytes(defaultStringSize, rander)
 		for _, table := range tables {
@@ -163,6 +164,7 @@ func (c *SimpleDeleteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, er
 func (c *SimpleDeleteCase) execute(ctx context.Context, db *StatDB, id, requests int) {
 	tables := c.suite.tables
 
+	requests /= len(tables)
 	for i := 0; i < requests; i++ {
 		rowID := id*requests + i + 1
 		for _, table := range tables {
