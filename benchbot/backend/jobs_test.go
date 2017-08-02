@@ -43,7 +43,7 @@ func assert(res bool, msg string) {
 // }
 
 func TestJobSet(t *testing.T) {
-	dumpFile := "./jobs.db"
+	dumpFile := "jobs.db"
 	defer os.Remove(dumpFile)
 
 	var err error

@@ -97,7 +97,7 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 		tables = append(tables, tableName)
 	}
 
-	log.Infof("fill tables ... (%d x %d)", tableSize, numTables)
+	log.Infof("fill tables ... (%d x %d)", numTables, tableSize)
 
 	wg := sync.WaitGroup{}
 	wg.Add(numThreads)

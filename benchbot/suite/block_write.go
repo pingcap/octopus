@@ -63,9 +63,6 @@ func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseR
 }
 
 func (s *BlockWriteSuite) prepare(db *sql.DB) (err error) {
-	if err := dropTable(db, blockWriteTable); err != nil {
-		return err
-	}
 	return createTable(db, blockWriteTable, blockWriteTableSchema)
 }
 

@@ -69,8 +69,6 @@ func (s *SimpleOLTPSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, e
 }
 
 func (s *SimpleOLTPSuite) prepare(db *sql.DB) (err error) {
-	log.Infof("[suite:%s] prepare (table_size = %d / num_tables = %d)",
-		s, s.cfg.TableSize, s.cfg.NumTables)
 	s.tables, err = prepare(db, s.cfg.TableSize, s.cfg.NumTables, s.cfg.NumThreads)
 	return
 }

@@ -57,8 +57,6 @@ func (s *SimpleOpsSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, er
 }
 
 func (s *SimpleOpsSuite) prepare(db *sql.DB) (err error) {
-	log.Infof("[suite:%s] prepare (table_size = %d / num_tables = %d)",
-		s, 0, s.cfg.NumTables)
 	s.tables, err = prepare(db, 0, s.cfg.NumTables, s.cfg.NumThreads)
 	return
 }
