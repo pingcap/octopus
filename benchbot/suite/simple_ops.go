@@ -43,6 +43,7 @@ func (s *SimpleOpsSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, er
 
 	results := make([]*CaseResult, 0, len(cases))
 	for _, c := range cases {
+		log.Infof("[case:%s] start ...", c)
 		res, err := c.Run(ctx, db)
 		if err != nil {
 			log.Errorf("[case:%s] run: %s", c, err)
@@ -74,16 +75,13 @@ func (c *SimpleSelectCase) String() string {
 }
 
 func (c *SimpleSelectCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
-	log.Infof("[case:%s] start ...", c)
-
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, cfg.NumThreads, cfg.NumRequests, c.execute)
+	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
 		Stages:  stat.stages,
 	}
-
 	return result, nil
 }
 
@@ -114,16 +112,13 @@ func (c *SimpleInsertCase) String() string {
 }
 
 func (c *SimpleInsertCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
-	log.Infof("[case:%s] start ...", c)
-
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, cfg.NumThreads, cfg.NumRequests, c.execute)
+	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
 		Stages:  stat.stages,
 	}
-
 	return result, nil
 }
 
@@ -131,7 +126,6 @@ func (c *SimpleInsertCase) execute(ctx context.Context, db *StatDB, id, requests
 	tables := c.suite.tables
 	rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
 
-	requests = requests / len(tables)
 	for i := 0; i < requests; i++ {
 		name := randomAsciiBytes(defaultStringSize, rander)
 		for _, table := range tables {
@@ -156,23 +150,19 @@ func (c *SimpleDeleteCase) String() string {
 }
 
 func (c *SimpleDeleteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
-	log.Infof("[case:%s] start ...", c)
-
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, cfg.NumThreads, cfg.NumRequests, c.execute)
+	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
 		Stages:  stat.stages,
 	}
-
 	return result, nil
 }
 
 func (c *SimpleDeleteCase) execute(ctx context.Context, db *StatDB, id, requests int) {
 	tables := c.suite.tables
 
-	requests = requests / len(tables)
 	for i := 0; i < requests; i++ {
 		rowID := id*requests + i + 1
 		for _, table := range tables {

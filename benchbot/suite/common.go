@@ -37,21 +37,21 @@ func randomAsciiBytes(size int, r *rand.Rand) []byte {
 }
 
 type dataFill struct {
-	id        int
-	db        *sql.DB
-	rand      *rand.Rand
-	tables    []string
-	tableSize int
+	id       int
+	db       *sql.DB
+	rand     *rand.Rand
+	tables   []string
+	requests int
 }
 
-func newDataFill(id int, db *sql.DB, tables []string, tableSize int) *dataFill {
+func newDataFill(id int, db *sql.DB, tables []string, requests int) *dataFill {
 	source := rand.NewSource(int64(time.Now().UnixNano()))
 	df := &dataFill{
-		id:        id,
-		db:        db,
-		rand:      rand.New(source),
-		tables:    tables,
-		tableSize: tableSize,
+		id:       id,
+		db:       db,
+		rand:     rand.New(source),
+		tables:   tables,
+		requests: requests,
 	}
 	return df
 }
@@ -67,7 +67,7 @@ func (df *dataFill) run() error {
 
 func (df *dataFill) fill(table string) error {
 	query := fmt.Sprintf("INSERT INTO `%s` (`seq`, `name`) VALUES (1, ?)", table)
-	for i := 0; i < df.tableSize; i++ {
+	for i := 0; i < df.requests; i++ {
 		name := randomAsciiBytes(defaultStringSize, df.rand)
 		if _, err := df.db.Exec(query, name); err != nil {
 			return err
@@ -101,8 +101,8 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 	log.Infof("fill tables ... (%d x %d)", numTables, tableSize)
 
 	wg := sync.WaitGroup{}
-	group := int(math.Ceil(float64(tableSize) / float64(numThreads)))
-	for id, requests := 0, tableSize; requests > 0; requests -= group {
+	step := int(math.Ceil(float64(tableSize) / float64(numThreads)))
+	for id, requests := 0, tableSize; requests > 0; id++ {
 		wg.Add(1)
 		go func(id, requests int) {
 			worker := newDataFill(id, db, tables, requests)
@@ -110,8 +110,8 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 				log.Errorf("failed to run worker: %s", err)
 			}
 			wg.Done()
-		}(id, int(math.Min(float64(group), float64(requests))))
-		id++
+		}(id, int(math.Min(float64(step), float64(requests))))
+		requests -= step
 	}
 	wg.Wait()
 
@@ -121,18 +121,18 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 
 type execution func(context.Context, *StatDB, int, int)
 
-func processStatistic(ctx context.Context, db *sql.DB, threads, requests int, exec execution) *StatResult {
+func processStatistic(ctx context.Context, db *sql.DB, exec execution, numThreads, numRequests int) *StatResult {
 	stdb := NewStatDB(db)
 
 	wg := sync.WaitGroup{}
-	group := int(math.Ceil(float64(requests) / float64(threads)))
-	for id := 0; requests > 0; requests -= group {
+	step := int(math.Ceil(float64(numRequests) / float64(numThreads)))
+	for id, requests := 0, numRequests; requests > 0; id++ {
 		wg.Add(1)
 		go func(id, requests int) {
 			exec(ctx, stdb, id, requests)
 			wg.Done()
-		}(id, int(math.Min(float64(group), float64(requests))))
-		id++
+		}(id, int(math.Min(float64(step), float64(requests))))
+		requests -= step
 	}
 	wg.Wait()
 

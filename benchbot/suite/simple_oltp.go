@@ -56,6 +56,7 @@ func (s *SimpleOLTPSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, e
 
 	results := make([]*CaseResult, 0, len(cases))
 	for _, c := range cases {
+		log.Infof("[case:%s] start ...", c)
 		res, err := c.Run(ctx, db)
 		if err != nil {
 			log.Errorf("[case:%s] run: %s", c, err)
@@ -86,16 +87,13 @@ func (c *SimpleOLTPCase) String() string {
 }
 
 func (c *SimpleOLTPCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, error) {
-	log.Infof("[case:%s] start ...", c)
-
 	cfg := c.suite.cfg
-	stat := processStatistic(ctx, db, cfg.NumThreads, cfg.NumRequests, c.execute)
+	stat := processStatistic(ctx, db, c.execute, cfg.NumThreads, cfg.NumRequests)
 	result := &CaseResult{
 		Name:    c.String(),
 		Summary: stat.summary,
 		Stages:  stat.stages,
 	}
-
 	return result, nil
 }
 
