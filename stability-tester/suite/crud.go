@@ -70,58 +70,50 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 	}()
 
 	// Add new users.
-	if c.userIDs.len() <= c.cfg.UserCount {
-		for i := 0; i < c.cfg.UpdateUsers; i++ {
-			id := c.userIDs.allocID()
-			if err := c.createUser(db, id); err != nil {
-				return errors.Trace(err)
-			}
-			newUsers = append(newUsers, id)
+	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() < c.cfg.UserCount+c.cfg.UpdateUsers; i++ {
+		id := c.userIDs.allocID()
+		if err := c.createUser(db, id); err != nil {
+			return errors.Trace(err)
 		}
+		newUsers = append(newUsers, id)
 	}
 
 	// Delete random users.
-	if c.userIDs.len() > c.cfg.UserCount {
-		for i := 0; i < c.cfg.UpdateUsers; i++ {
-			id, ok := c.userIDs.randomID()
-			if !ok {
-				break
-			}
-			if err := c.deleteUser(db, id); err != nil {
-				return errors.Trace(err)
-			}
-			deleteUsers = append(deleteUsers, id)
+	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() > c.cfg.UserCount; i++ {
+		id, ok := c.userIDs.randomID()
+		if !ok {
+			break
 		}
+		if err := c.deleteUser(db, id); err != nil {
+			return errors.Trace(err)
+		}
+		deleteUsers = append(deleteUsers, id)
 	}
 
 	// Add new posts.
-	if c.postIDs.len() <= c.cfg.PostCount {
-		for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() < c.cfg.PostCount+c.cfg.UpdatePosts; i++ {
-			id := c.postIDs.allocID()
-			author, ok := c.userIDs.randomID()
-			if !ok {
-				break
-			}
-			if err := c.addPost(db, id, author); err != nil {
-				return errors.Trace(err)
-			}
-			newPosts = append(newPosts, id)
-			newAuthors = append(newAuthors, author)
+	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() < c.cfg.PostCount+c.cfg.UpdatePosts; i++ {
+		id := c.postIDs.allocID()
+		author, ok := c.userIDs.randomID()
+		if !ok {
+			break
 		}
+		if err := c.addPost(db, id, author); err != nil {
+			return errors.Trace(err)
+		}
+		newPosts = append(newPosts, id)
+		newAuthors = append(newAuthors, author)
 	}
 
 	// Delete random posts.
-	if c.postIDs.len() > c.cfg.PostCount {
-		for i := 0; i < c.cfg.UpdatePosts; i++ {
-			id, ok := c.postIDs.randomID()
-			if !ok {
-				break
-			}
-			if err := c.deletePost(db, id); err != nil {
-				return errors.Trace(err)
-			}
-			deletePosts = append(deletePosts, id)
+	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() > c.cfg.PostCount; i++ {
+		id, ok := c.postIDs.randomID()
+		if !ok {
+			break
 		}
+		if err := c.deletePost(db, id); err != nil {
+			return errors.Trace(err)
+		}
+		deletePosts = append(deletePosts, id)
 	}
 
 	// Check all.
