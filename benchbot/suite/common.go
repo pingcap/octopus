@@ -3,6 +3,7 @@ package suite
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -100,15 +101,17 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 	log.Infof("fill tables ... (%d x %d)", numTables, tableSize)
 
 	wg := sync.WaitGroup{}
-	wg.Add(numThreads)
-	for i := 0; i < numThreads; i++ {
+	group := int(math.Ceil(float64(tableSize) / float64(numThreads)))
+	for id, requests := 0, tableSize; requests > 0; requests -= group {
+		wg.Add(1)
 		go func(id, requests int) {
 			worker := newDataFill(id, db, tables, requests)
 			if err := worker.run(); err != nil {
 				log.Errorf("failed to run worker: %s", err)
 			}
 			wg.Done()
-		}(i, tableSize/numThreads)
+		}(id, int(math.Min(float64(group), float64(requests))))
+		id++
 	}
 	wg.Wait()
 
@@ -122,12 +125,14 @@ func processStatistic(ctx context.Context, db *sql.DB, threads, requests int, ex
 	stdb := NewStatDB(db)
 
 	wg := sync.WaitGroup{}
-	wg.Add(threads)
-	for i := 0; i < threads; i++ {
+	group := int(math.Ceil(float64(requests) / float64(threads)))
+	for id := 0; requests > 0; requests -= group {
+		wg.Add(1)
 		go func(id, requests int) {
 			exec(ctx, stdb, id, requests)
 			wg.Done()
-		}(i, requests/threads)
+		}(id, int(math.Min(float64(group), float64(requests))))
+		id++
 	}
 	wg.Wait()
 

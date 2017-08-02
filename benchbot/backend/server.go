@@ -123,14 +123,12 @@ func (svr *Server) mainloop() {
 		}
 
 		svr.setRunningJob(job)
-		if err = job.Run(); err != nil {
+		if err = job.Run(svr.suites); err != nil {
 			log.Errorf("job-[%d] run failed : %s !", job.ID, err.Error())
 		}
 
 		svr.setRunningJob(nil)
 	}
-
-	return
 }
 
 func (svr *Server) setRunningJob(job *BenchmarkJob) {
@@ -140,7 +138,7 @@ func (svr *Server) setRunningJob(job *BenchmarkJob) {
 }
 
 func (svr *Server) CreateJob(meta *BenchmarkMeta) (*BenchmarkJob, error) {
-	job := NewBenchmarkJob(svr.suites)
+	job := NewBenchmarkJob()
 	job.Meta = meta
 
 	select {

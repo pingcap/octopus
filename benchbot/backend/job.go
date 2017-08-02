@@ -53,7 +53,6 @@ type BenchmarkJob struct {
 	cancel context.CancelFunc
 
 	ID         int64            `json:"id"`
-	Suites     []BenchSuite     `json:"suites"`
 	Status     string           `json:"status"`
 	CreateTime string           `json:"created_time"`
 	Meta       *BenchmarkMeta   `json:"meta"`
@@ -101,10 +100,9 @@ func (pkg *BinPackage) valid() bool {
 	return (len(pkg.Branch) > 0 || len(pkg.Tag) > 0) && len(pkg.GitHash) > 0
 }
 
-func NewBenchmarkJob(suites []BenchSuite) *BenchmarkJob {
+func NewBenchmarkJob() *BenchmarkJob {
 	job := &BenchmarkJob{
 		ID:         -1,
-		Suites:     suites,
 		Status:     Pending,
 		CreateTime: time.Now().Format(TimeFormat),
 		Meta:       NewBenchmarkMeta(),
@@ -164,7 +162,7 @@ func (job *BenchmarkJob) abortedError() error {
 	return fmt.Errorf("job [%d] aborted", job.ID)
 }
 
-func (job *BenchmarkJob) Run() (err error) {
+func (job *BenchmarkJob) Run(suites []BenchSuite) (err error) {
 	cluster, err := job.initCluster()
 	if err != nil {
 		return
@@ -174,7 +172,7 @@ func (job *BenchmarkJob) Run() (err error) {
 		job.onJobDone(err == nil)
 	}()
 
-	if err = job.run(cluster); err != nil {
+	if err = job.run(cluster, suites); err != nil {
 		log.Errorf("[job-%d] run error : %s", job.ID, err)
 	}
 
@@ -244,16 +242,17 @@ func (job *BenchmarkJob) initCluster() (cluster Cluster, err error) {
 	return
 }
 
-func (job *BenchmarkJob) run(cluster Cluster) error {
+func (job *BenchmarkJob) run(cluster Cluster, suites []BenchSuite) error {
 	if err := job.updateStatus(Running); err != nil {
 		return err
 	}
 
 	log.Infof("[job-%d] start running bench ...", job.ID)
 
-	results := make([]*CaseResult, 0, len(job.Suites))
-	for _, s := range job.Suites {
+	results := make([]*CaseResult, 0, len(suites))
+	for _, s := range suites {
 		cluster.Run()
+
 		if err := cluster.Ping(); err != nil {
 			log.Errorf("failed to access cluster: %s", err)
 			return err
@@ -263,11 +262,14 @@ func (job *BenchmarkJob) run(cluster Cluster) error {
 		db.SetMaxIdleConns(1024)
 		db.SetMaxOpenConns(1024)
 		db.SetConnMaxLifetime(-1)
-		time.Sleep(time.Second * 60)
+		time.Sleep(time.Second * 30)
 
 		if res, err := s.Run(job.ctx, db); err == nil {
 			results = append(results, res...)
 		}
+
+		cluster.Stop()
+		cluster.Reset()
 	}
 
 	job.Result.Cases = len(results)
