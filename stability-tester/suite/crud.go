@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
+var errNotExist = errors.New("the request row does not exist")
+
 // CRUDCase simulates a typical CMS system that contains Users and Posts.
 type CRUDCase struct {
 	sync.Mutex
@@ -78,9 +80,9 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 
 	// Delete random users.
 	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() > c.cfg.UserCount; i++ {
-		id := c.userIDs.randomID()
-		if err := c.checkUserPostCount(db, id); err != nil {
-			return errors.Trace(err)
+		id, ok := c.userIDs.randomID()
+		if !ok {
+			break
 		}
 		if err := c.deleteUser(db, id); err != nil {
 			return errors.Trace(err)
@@ -91,7 +93,10 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 	// Add new posts.
 	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() < c.cfg.PostCount+c.cfg.UpdatePosts; i++ {
 		id := c.postIDs.allocID()
-		author := c.userIDs.randomID()
+		author, ok := c.userIDs.randomID()
+		if !ok {
+			break
+		}
 		if err := c.addPost(db, id, author); err != nil {
 			return errors.Trace(err)
 		}
@@ -101,7 +106,10 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 
 	// Delete random posts.
 	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() > c.cfg.PostCount; i++ {
-		id := c.postIDs.randomID()
+		id, ok := c.postIDs.randomID()
+		if !ok {
+			break
+		}
 		if err := c.deletePost(db, id); err != nil {
 			return errors.Trace(err)
 		}
@@ -117,13 +125,14 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 }
 
 func (c *CRUDCase) createUser(db *sql.DB, id int64) error {
+	c.userIDs.pushID(id)
+
 	name := make([]byte, 10)
 	randString(name, c.rnd)
 	_, err := ExecWithRollback(db, []queryEntry{{query: fmt.Sprintf(`INSERT INTO crud_users VALUES (%v, "%s", %v)`, id, name, 0), expectAffectedRows: 1}})
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.userIDs.pushID(id)
 	return nil
 }
 
@@ -152,6 +161,13 @@ func (c *CRUDCase) checkUserPostCount(db *sql.DB, id int64) error {
 }
 
 func (c *CRUDCase) deleteUser(db *sql.DB, id int64) error {
+	if err := c.checkUserPostCount(db, id); err != nil {
+		if errors.Cause(err) == errNotExist {
+			c.userIDs.popID(id)
+			return nil
+		}
+		return errors.Trace(err)
+	}
 	posts, err := c.QueryInt64s(db, fmt.Sprintf("SELECT id FROM crud_posts WHERE author=%v", id))
 	if err != nil {
 		return errors.Trace(err)
@@ -174,6 +190,7 @@ func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
 	if err := c.checkUserPostCount(db, author); err != nil {
 		return errors.Trace(err)
 	}
+	c.postIDs.pushID(id)
 	title := make([]byte, 64)
 	randString(title, c.rnd)
 	q := []queryEntry{
@@ -183,13 +200,16 @@ func (c *CRUDCase) addPost(db *sql.DB, id, author int64) error {
 	if _, err := ExecWithRollback(db, q); err != nil {
 		return errors.Trace(err)
 	}
-	c.postIDs.pushID(id)
 	return nil
 }
 
 func (c *CRUDCase) deletePost(db *sql.DB, id int64) error {
 	author, err := c.QueryInt64(db, fmt.Sprintf("SELECT author from crud_posts WHERE id=%v", id))
 	if err != nil {
+		if errors.Cause(err) == errNotExist {
+			c.postIDs.popID(id)
+			return nil
+		}
 		return errors.Trace(err)
 	}
 	if err := c.checkUserPostCount(db, author); err != nil {
@@ -256,6 +276,9 @@ func (c *CRUDCase) QueryInt64(db *sql.DB, query string, args ...interface{}) (in
 	if err != nil {
 		return 0, err
 	}
+	if len(vals) == 0 {
+		return 0, errNotExist
+	}
 	if len(vals) != 1 {
 		return 0, errors.Errorf("expect 1 row for query %v, but got %v rows", query, len(vals))
 	}
@@ -263,6 +286,7 @@ func (c *CRUDCase) QueryInt64(db *sql.DB, query string, args ...interface{}) (in
 }
 
 type idList struct {
+	sync.RWMutex
 	ids       []int64
 	positions map[int64]int
 	maxID     int64
@@ -275,29 +299,51 @@ func newIDList() *idList {
 }
 
 func (l *idList) allocID() int64 {
+	l.Lock()
+	defer l.Unlock()
+
 	l.maxID++
 	return l.maxID
 }
 
 func (l *idList) len() int {
+	l.RLock()
+	defer l.RUnlock()
+
 	return len(l.ids)
 }
 
 func (l *idList) pushID(id int64) {
+	l.Lock()
+	defer l.Unlock()
+
 	l.positions[id] = len(l.ids)
 	l.ids = append(l.ids, id)
 }
 
 func (l *idList) popID(id int64) {
-	pos := l.positions[id]
-	lastID := l.ids[l.len()-1]
+	l.Lock()
+	defer l.Unlock()
+
+	pos, ok := l.positions[id]
+	if !ok {
+		return
+	}
+	lastID := l.ids[len(l.ids)-1]
 	l.ids[pos] = lastID
 	l.positions[lastID] = pos
-	l.ids = l.ids[:l.len()-1]
+	l.ids = l.ids[:len(l.ids)-1]
 }
 
-func (l *idList) randomID() int64 {
-	return l.ids[rand.Intn(l.len())]
+func (l *idList) randomID() (int64, bool) {
+	l.RLock()
+	defer l.RUnlock()
+
+	if len(l.ids) == 0 {
+		return 0, false
+	}
+
+	return l.ids[rand.Intn(len(l.ids))], true
 }
 
 func init() {
