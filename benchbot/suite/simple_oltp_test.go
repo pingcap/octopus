@@ -1,7 +1,6 @@
 package suite
 
 import (
-	"fmt"
 	"testing"
 	_ "time"
 
@@ -23,11 +22,6 @@ func TestSimpleOLTP(t *testing.T) {
 		NumTables:   4,
 		NumThreads:  4,
 		NumRequests: 32,
-	}
-
-	for i := 0; i < c.NumTables; i++ {
-		table := fmt.Sprintf("%s_%d", defaultTableName, i)
-		dropTable(db, table)
 	}
 
 	s := NewSimpleOLTPSuite(c)

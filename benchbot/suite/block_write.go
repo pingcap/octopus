@@ -19,7 +19,7 @@ type BlockWriteConfig struct {
 }
 
 const (
-	blockWriteTable       = "block_writer"
+	blockWriteTable       = "block_write"
 	blockWriteTableSchema = `(
         block_id BIGINT NOT NULL,
         block_data BLOB NOT NULL,
@@ -39,16 +39,16 @@ func (s *BlockWriteSuite) String() string {
 	return "block-write"
 }
 
-func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseResult, err error) {
-	if err = s.prepare(db); err != nil {
-		return
+func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, error) {
+	if err := s.prepare(db); err != nil {
+		return nil, err
 	}
 
 	cases := []BenchCase{
 		NewBlockWriteCase(s),
 	}
 
-	results = make([]*CaseResult, 0, len(cases))
+	results := make([]*CaseResult, 0, len(cases))
 	for _, c := range cases {
 		log.Infof("[case:%s] start ...", c)
 		res, err := c.Run(ctx, db)
@@ -60,7 +60,7 @@ func (s *BlockWriteSuite) Run(ctx context.Context, db *sql.DB) (results []*CaseR
 		results = append(results, res)
 	}
 
-	return
+	return results, nil
 }
 
 func (s *BlockWriteSuite) prepare(db *sql.DB) (err error) {

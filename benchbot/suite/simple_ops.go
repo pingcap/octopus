@@ -36,9 +36,9 @@ func (s *SimpleOpsSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, er
 	}
 
 	cases := []BenchCase{
-		NewSimpleInsertCase(s),
 		NewSimpleSelectCase(s),
 		NewSimpleDeleteCase(s),
+		NewSimpleInsertCase(s),
 	}
 
 	results := make([]*CaseResult, 0, len(cases))
@@ -58,7 +58,7 @@ func (s *SimpleOpsSuite) Run(ctx context.Context, db *sql.DB) ([]*CaseResult, er
 }
 
 func (s *SimpleOpsSuite) prepare(db *sql.DB) (err error) {
-	s.tables, err = prepare(db, 0, s.cfg.NumTables, s.cfg.NumThreads)
+	s.tables, err = prepare(db, s.cfg.NumRequests, s.cfg.NumTables, s.cfg.NumThreads)
 	return
 }
 
@@ -126,8 +126,7 @@ func (c *SimpleInsertCase) execute(ctx context.Context, db *StatDB, id, requests
 	tables := c.suite.tables
 	rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
 
-	requests /= len(tables)
-	for i := 0; i < requests; i++ {
+	for i := 0; i < requests/len(tables); i++ {
 		name := randomAsciiBytes(defaultStringSize, rander)
 		for _, table := range tables {
 			query := fmt.Sprintf("INSERT INTO `%s` (`seq`, `name`) VALUES (1, ?)", table)
@@ -164,8 +163,7 @@ func (c *SimpleDeleteCase) Run(ctx context.Context, db *sql.DB) (*CaseResult, er
 func (c *SimpleDeleteCase) execute(ctx context.Context, db *StatDB, id, requests int) {
 	tables := c.suite.tables
 
-	requests /= len(tables)
-	for i := 0; i < requests; i++ {
+	for i := 0; i < requests/len(tables); i++ {
 		rowID := id*requests + i + 1
 		for _, table := range tables {
 			query := fmt.Sprintf("DELETE FROM `%s` WHERE `id` = ?", table)

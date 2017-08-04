@@ -102,7 +102,6 @@ func (c *SimpleOLTPCase) execute(ctx context.Context, db *StatDB, id, requests i
 	tables := c.suite.tables
 	rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
 
-	var query, name string
 	for i := 0; i < requests; i++ {
 		table := tables[rander.Intn(len(tables))]
 		id := rander.Intn(cfg.TableSize)
@@ -111,6 +110,8 @@ func (c *SimpleOLTPCase) execute(ctx context.Context, db *StatDB, id, requests i
 		if err != nil {
 			continue
 		}
+
+		var query, name string
 
 		query = fmt.Sprintf("SELECT `name` FROM `%s` WHERE `id` = ?", table)
 		tx.QueryRow(query, id).Scan(&name)
