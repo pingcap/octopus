@@ -189,7 +189,8 @@ func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 		size = lastN
 	}
 
-	jobs := svr.jobs.List()[:size]
+	jobs := svr.jobs.List()
+	jobs = jobs[len(jobs)-size:]
 	cloneJobs := make([]*BenchmarkJob, 0, len(jobs))
 	for _, job := range jobs {
 		cloneJobs = append(cloneJobs, job.Clone())
