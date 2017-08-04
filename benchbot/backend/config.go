@@ -12,10 +12,22 @@ const (
 	defaultAnsibleDir = "./ansible"
 )
 
-type BenchConfig struct{}
+type ClusterDSN struct {
+	Name         string `toml:"name"`
+	Host         string `toml:"host"`
+	Port         uint16 `toml:"port"`
+	DB           string `toml:"db"`
+	AuthUser     string `toml:"user"`
+	AuthPassword string `toml:"password"`
+}
 
 type AnsibleConfig struct {
-	Dir string `toml:"dir"`
+	Dir      string       `toml:"dir"`
+	Clusters []ClusterDSN `toml:"clusters"`
+}
+
+type BenchConfig struct {
+	Cases []string `toml:"port"`
 }
 
 type ServerConfig struct {
@@ -39,6 +51,12 @@ func ParseConfig(filePath string) (*ServerConfig, error) {
 	cfg.adjust()
 
 	return cfg, nil
+}
+
+func NewServerConfig() *ServerConfig {
+	cfg := new(ServerConfig)
+	cfg.adjust()
+	return cfg
 }
 
 func adjustStr(sz *string, defVal string) {
