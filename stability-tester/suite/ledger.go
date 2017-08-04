@@ -150,6 +150,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer tx.Rollback()
 
 	if err = c.doPosting(tx, req); err != nil {
 		log.Errorf("[ledger] doPosting error: %v", err)
@@ -234,6 +235,7 @@ func (c *LedgerCase) verify(db *sql.DB) error {
 		ledgerVerifyFailedCounter.Inc()
 		return errors.Trace(err)
 	}
+	defer tx.Rollback()
 
 	var total int64
 	err = tx.QueryRow(`

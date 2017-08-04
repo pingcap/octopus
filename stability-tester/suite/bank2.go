@@ -172,6 +172,7 @@ func (c *Bank2Case) verify(db *sql.DB) {
 		bank2VerifyFailedCounter.Inc()
 		return
 	}
+	defer tx.Rollback()
 
 	var tso uint64
 	if err = tx.QueryRow("SELECT @@tidb_current_ts").Scan(&tso); err == nil {
@@ -237,6 +238,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer tx.Rollback()
 	rows, err := tx.Query(fmt.Sprintf("SELECT id, balance FROM bank2_accounts WHERE id IN (%d, %d) FOR UPDATE", from, to))
 	if err != nil {
 		return errors.Trace(err)
