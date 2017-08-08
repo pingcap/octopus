@@ -29,14 +29,10 @@ func (job *Job) parseFromJson(resp *http.Response) error {
 }
 
 func setup() *httptest.Server {
-	cfg := &ServerConfig{
-		StorePath:           "./store",
-		AnsibleDir:          "./ansible",
-		AnsibleDownloadsDir: "./ansible/downloads",
-		AnsibleBinsDir:      "./ansible/resources/bin",
-	} // TODO ... load from toml file
+	cfg := NewServerConfig()
+	cfg.Ansible.Clusters = make([]ClusterDSN, 0) // ps : not any cluster, just testing api.
 
-	svr := NewServer(cfg)
+	svr, _ := NewServer(cfg)
 	router := CreateRouter(svr)
 	return httptest.NewServer(router)
 }

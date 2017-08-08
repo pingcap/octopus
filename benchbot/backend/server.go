@@ -2,33 +2,32 @@ package backend
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
+	. "github.com/pingcap/octopus/benchbot/suite"
 	"golang.org/x/net/context"
 )
 
 const (
-	penndingJobLimit        int    = 10
-	defaultHistoryShowCount int    = 10
-	logFileName             string = "server.log"
+	penndingJobLimit        int = 10
+	defaultHistoryShowCount int = 10
 )
 
 type Server struct {
 	wg  sync.WaitGroup
 	mux sync.RWMutex
 
-	conf            *ServerConfig
-	ctx             context.Context
-	suspendMainloop context.CancelFunc
+	cfg    *ServerConfig
+	ctx    context.Context
+	cancel context.CancelFunc
 
-	uuidAllocator *UUIDAllocator
-
+	suites     []BenchSuite
 	runningJob *BenchmarkJob
 	orders     chan *BenchmarkJob
-	jobs       []*BenchmarkJob
-	jobsByID   map[int64]*BenchmarkJob
+	jobs       *JobSet
 }
 
 type Summary struct {
@@ -37,19 +36,22 @@ type Summary struct {
 	HistoryCount int
 }
 
-func NewServer(cfg *ServerConfig) (*Server, error) {
-	svr := &Server{conf: cfg}
-	if err := svr.init(); err != nil {
+func NewServer(cfg *ServerConfig, suites []BenchSuite) (*Server, error) {
+	svr := &Server{cfg: cfg, suites: suites}
+	svr.ctx, svr.cancel = context.WithCancel(context.Background())
+
+	var err error
+	if err = svr.init(); err != nil {
 		return nil, err
 	}
 
-	svr.ctx, svr.suspendMainloop = context.WithCancel(context.Background())
-	svr.uuidAllocator = NewUUIDAllocator()
+	svr.jobs, err = NewJobSet("")
+	if err != nil {
+		return nil, err
+	}
 
 	svr.runningJob = nil
 	svr.orders = make(chan *BenchmarkJob, penndingJobLimit)
-	svr.jobs = make([]*BenchmarkJob, 0, 1024) // TODO ...
-	svr.jobsByID = make(map[int64]*BenchmarkJob)
 
 	svr.wg.Add(1)
 	go svr.mainloop()
@@ -59,8 +61,19 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 }
 
 func (svr *Server) init() (err error) {
-	err = os.MkdirAll(svr.conf.Dir, os.ModePerm)
-	if err != nil {
+	if svr.ctx == nil {
+		panic("conetext required !")
+	}
+
+	if err = os.MkdirAll(svr.cfg.Dir, os.ModePerm); err != nil {
+		return err
+	}
+
+	if err = initAnsibleEnv(svr.cfg); err != nil {
+		return
+	}
+
+	if err = initClusterManager(svr.cfg, svr.ctx); err != nil {
 		return
 	}
 
@@ -71,8 +84,9 @@ func (svr *Server) Close() {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	svr.suspendMainloop()
+	svr.cancel()
 	svr.wg.Wait()
+	svr.jobs.Close()
 }
 
 func (svr *Server) DumpSummary() *Summary {
@@ -82,7 +96,7 @@ func (svr *Server) DumpSummary() *Summary {
 	info := &Summary{
 		PendingCount: len(svr.orders),
 		RunningCount: 0,
-		HistoryCount: len(svr.jobs),
+		HistoryCount: svr.jobs.Size(),
 	}
 
 	if svr.runningJob != nil {
@@ -109,13 +123,12 @@ func (svr *Server) mainloop() {
 		}
 
 		svr.setRunningJob(job)
-		if err = job.Run(); err != nil {
+		if err = job.Run(svr.suites); err != nil {
 			log.Errorf("job-[%d] run failed : %s !", job.ID, err.Error())
 		}
+
 		svr.setRunningJob(nil)
 	}
-
-	return
 }
 
 func (svr *Server) setRunningJob(job *BenchmarkJob) {
@@ -124,44 +137,51 @@ func (svr *Server) setRunningJob(job *BenchmarkJob) {
 	svr.mux.Unlock()
 }
 
-func (svr *Server) AddJob(job *BenchmarkJob) error {
-	var err error = nil
+func (svr *Server) CreateJob(meta *BenchmarkMeta) (*BenchmarkJob, error) {
+	job := NewBenchmarkJob()
+	job.Meta = meta
+
 	select {
 	case svr.orders <- job:
-		// nothing to do
-		svr.jobs = append(svr.jobs, job)
-		svr.jobsByID[job.ID] = job
+		svr.jobs.AddBenchJob(job)
 	default:
-		return errors.New("too many jobs waitting !")
+		return nil, errors.New("too many jobs waitting !")
 	}
-	return err
+	return job, nil
 }
 
-func (svr *Server) AbortJob(jobID int64, note string) bool {
+func (svr *Server) AbortJob(jobID int64, note string) error {
 	svr.mux.Lock()
 	defer svr.mux.Unlock()
 
-	if job, ok := svr.jobsByID[jobID]; ok {
-		return job.Abort(note)
+	job := svr.jobs.GetByID(jobID)
+	if job == nil {
+		return fmt.Errorf("job '%d' not found !", jobID)
 	}
-	return false
+
+	if err := job.Abort(note); err != nil {
+		log.Warnf(err.Error())
+	}
+	return nil
 }
 
 func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 	svr.mux.RLock()
 	defer svr.mux.RUnlock()
 
-	if job, ok := svr.jobsByID[jobID]; ok {
-		return job
+	job := svr.jobs.GetByID(jobID)
+	if job == nil {
+		return nil
 	}
-	return nil
+
+	return job.Clone()
 }
 
 func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 	svr.mux.RLock()
 	defer svr.mux.RUnlock()
 
-	size := len(svr.jobs)
+	size := svr.jobs.Size()
 	if lastN == 0 {
 		lastN = defaultHistoryShowCount
 	}
@@ -169,10 +189,12 @@ func (svr *Server) GetHistoryJobs(lastN int) []*BenchmarkJob {
 		size = lastN
 	}
 
-	his := make([]*BenchmarkJob, size)
-	for i := 0; i < size; i++ {
-		his[i] = svr.jobs[i]
+	jobs := svr.jobs.List()
+	jobs = jobs[len(jobs)-size:]
+	cloneJobs := make([]*BenchmarkJob, 0, len(jobs))
+	for _, job := range jobs {
+		cloneJobs = append(cloneJobs, job.Clone())
 	}
 
-	return his
+	return cloneJobs
 }

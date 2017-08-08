@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
+	. "github.com/pingcap/octopus/benchbot/suite"
 )
 
 const (
@@ -17,6 +20,48 @@ const (
 	defHistoryShowCount int = 10
 )
 
+// data format
+type BasicInfo struct {
+	ID         int64          `json:"id"`
+	CreateTime string         `json:"created_time"`
+	Status     string         `json:"status"`
+	Meta       *BenchmarkMeta `json:"meta"`
+}
+
+type BenchJobInfo struct {
+	BasicInfo
+	Result *BenchmarkResult `json:"result"`
+}
+
+func packSummaryResult(bj *BenchmarkJob) *BenchJobInfo {
+	emptySlice := make([]*StatIndex, 0)
+	details := make([]*CaseResult, 0, len(bj.Result.Details))
+	for _, r := range bj.Result.Details {
+		details = append(details, &CaseResult{
+			Name:    r.Name,
+			Summary: r.Summary,
+			Stages:  emptySlice,
+		})
+	}
+
+	job := &BenchJobInfo{
+		BasicInfo: BasicInfo{
+			ID:         bj.ID,
+			CreateTime: bj.CreateTime,
+			Status:     bj.Status,
+			Meta:       bj.Meta,
+		},
+		Result: &BenchmarkResult{
+			Cases:   bj.Result.Cases,
+			Message: bj.Result.Message,
+			Details: details,
+		},
+	}
+
+	return job
+}
+
+// handler
 type BenchmarkHandler struct {
 	rdr *render.Render
 	svr *Server
@@ -40,19 +85,20 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := NewBenchmarkJob(hdl.svr)
-	if err = job.ParseFromRequstJSON(data); err != nil {
+	meta, err := NewBenchmarkMetaFromJSON(data)
+	if err != nil {
 		log.Errorf("invalid json data - %s", data)
 		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("post data json incorrect : %s", err.Error()))
 		return
 	}
 
-	if !job.Valid() {
+	if !meta.Valid() {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "not an valid request, params required !")
 		return
 	}
 
-	if err = hdl.svr.AddJob(job); err != nil {
+	job, err := hdl.svr.CreateJob(meta)
+	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, "job creating failed !")
 		return
 	}
@@ -78,30 +124,67 @@ func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Requ
 }
 
 func (hdl *BenchmarkHandler) ShowHistory(w http.ResponseWriter, r *http.Request) {
-	his := hdl.svr.GetHistoryJobs(defHistoryShowCount)
+	datas := hdl.svr.GetHistoryJobs(defHistoryShowCount)
 
-	// hisCount := len(objHis)
-	// strHis := make([]string, 0, hisCount)
-	// for i := 0; i < len(objHis); i++ {
-	// 	strHis = append(strHis, objHis[i].DumpToJson())
-	// }
+	his := make([]*BasicInfo, 0, len(datas))
+	for _, job := range datas {
+		hisJob := &BasicInfo{
+			ID:         job.ID,
+			Status:     job.Status,
+			CreateTime: job.CreateTime,
+			Meta:       job.Meta,
+		}
+		his = append(his, hisJob)
+	}
 
 	hdl.rdr.JSON(w, http.StatusOK, his)
 	return
 }
 
 func (hdl *BenchmarkHandler) QueryJob(w http.ResponseWriter, r *http.Request) {
+	inDetail := len(r.URL.Query().Get("detail")) > 0
 	jobID, err := ParseInt64(mux.Vars(r)["id"])
 	if err != nil {
 		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
 		return
 	}
 
-	if job := hdl.svr.GetJob(jobID); job != nil {
-		hdl.rdr.JSON(w, http.StatusOK, job)
+	job := hdl.svr.GetJob(jobID)
+	if job == nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
+		return
 	}
 
+	var resp interface{} = job
+	if !inDetail {
+		resp = packSummaryResult(job)
+	}
+	hdl.rdr.JSON(w, http.StatusOK, resp)
+
 	return
+}
+
+func (hdl *BenchmarkHandler) GetJobs(w http.ResponseWriter, r *http.Request) {
+	vals := strings.Split(mux.Vars(r)["ids"], ",")
+	ids := make([]int, 0, len(vals))
+	for _, v := range vals {
+		if jobID, err := ParseInt64(v); err != nil {
+			continue
+		} else {
+			ids = append(ids, int(jobID))
+		}
+	}
+
+	sort.Ints(ids)
+
+	jobs := make([]*BenchmarkJob, 0, len(ids))
+	for _, jobID := range ids {
+		if job := hdl.svr.GetJob(int64(jobID)); job != nil {
+			jobs = append(jobs, job)
+		}
+	}
+
+	hdl.rdr.JSON(w, http.StatusOK, jobs)
 }
 
 func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
@@ -120,9 +203,9 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	success := hdl.svr.AbortJob(jobID, note)
-	if !success {
-		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("cannot abort : %s", FormatInt64(jobID)))
+	err = hdl.svr.AbortJob(jobID, note)
+	if err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -131,22 +214,3 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 	hdl.rdr.JSON(w, http.StatusOK, "ok")
 	return
 }
-
-/*
-func (hdl *BenchmarkHandler) QueryResult(w http.ResponseWriter, r *http.Request) {
-	jobID, err := ParseInt64(mux.Vars(r)["id"])
-	if err != nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, InvalidMsgJobID)
-		return
-	}
-
-	job := hdl.svr.GetJob(jobID)
-	if job == nil {
-		hdl.rdr.JSON(w, http.StatusBadRequest, fmt.Sprintf("job not found : %s", FormatInt64(jobID)))
-		return
-	}
-
-	hdl.rdr.JSON(w, http.StatusOK, job.ExportResultInfo())
-	return
-}
-*/

@@ -11,6 +11,12 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+
+	"golang.org/x/net/context"
+)
+
+const (
+	databaseAutoRetry int = 1
 )
 
 func ParseInt64(val string) (int64, error) {
@@ -40,13 +46,19 @@ func ReadJson(r io.ReadCloser, data interface{}) error {
 	return nil
 }
 
-func ExecCmd(command string, output io.Writer) bool {
+func ExecCmd(command string, ctx context.Context, output io.Writer) bool {
 	// ps : Just return success or not ~
 	args := strings.Split(command, " ")
 	bin := args[0]
 	args = args[1:]
 
-	cmd := exec.Command(bin, args...)
+	var cmd *exec.Cmd
+	if ctx == nil {
+		cmd = exec.Command(bin, args...)
+	} else {
+		cmd = exec.CommandContext(ctx, bin, args...)
+	}
+
 	data, e := cmd.CombinedOutput()
 	if output != nil {
 		output.Write(data)
@@ -58,11 +70,6 @@ func ExecCmd(command string, output io.Writer) bool {
 }
 
 func Download(resourceUrl string, localPath string) (int64, error) {
-	setup := func() {
-
-	}
-	setup()
-
 	// local prepare
 	os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
 	f, err := os.Create(localPath)
@@ -88,4 +95,11 @@ func Download(resourceUrl string, localPath string) (int64, error) {
 	res.Body.Close()
 
 	return bytes, err
+}
+
+func FileExists(filePath string) bool {
+	if _, err := os.Stat(filePath); err != nil {
+		return false
+	}
+	return true
 }
