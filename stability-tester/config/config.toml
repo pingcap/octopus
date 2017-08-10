@@ -27,6 +27,11 @@ lantency = 30
 range = 5
 """
 
+[scheduler]
+# pd = ["http://127.0.0.1:2379"]
+# shuffle-leader = false
+# shuffle-region = false
+
 [suite]
 names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
 concurrency = 10000

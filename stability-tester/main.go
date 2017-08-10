@@ -120,6 +120,8 @@ func main() {
 	// Run all nemeses in background.
 	go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
 
+	go config.RunConfigScheduler(&cfg.Scheduler)
+
 	sig := <-sc
 	log.Infof("Got signal [%d] to exit.", sig)
 
