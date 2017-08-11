@@ -9,14 +9,15 @@ import (
 	"path"
 	"syscall"
 
-	log "github.com/ngaut/log"
+	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/suite"
+	_ "github.com/pingcap/octopus/benchbot/suite/sysbench"
 )
 
 var (
-	configFile = flag.String("c", "config.toml", "benchbot configuration file")
+	configFile = flag.String("c", "benchbot.toml", "benchbot configuration file")
 )
 
 const (
@@ -24,8 +25,7 @@ const (
 )
 
 func initLogger(cfg *backend.ServerConfig) error {
-	err := os.MkdirAll(cfg.Dir, os.ModePerm)
-	if err != nil {
+	if err := os.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
 		return err
 	}
 
@@ -44,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = initLogger(cfg); err != nil {
+	if err := initLogger(cfg); err != nil {
 		fmt.Printf("failed to init logger: %s\n", err)
 		os.Exit(1)
 	}

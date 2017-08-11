@@ -2,57 +2,55 @@ package suite
 
 import (
 	"database/sql"
-	"fmt"
+	"sync"
 
 	"github.com/BurntSushi/toml"
-	"golang.org/x/net/context"
+
+	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
 type BenchCase interface {
-	String() string
-	Run(context.Context, *sql.DB) (*CaseResult, error)
+	Name() string
+	Run(*sql.DB) (*CaseResult, error)
 }
 
 type BenchSuite interface {
-	String() string
-	Run(context.Context, *sql.DB) ([]*CaseResult, error)
+	Name() string
+	Run(Cluster) ([]*CaseResult, error)
 }
 
-type BenchSuiteConfig struct {
+type BenchSuiteConfigs struct {
 	Suites map[string]toml.Primitive
 }
 
 func NewBenchSuites(fpath string) ([]BenchSuite, error) {
-	benchCfg := new(BenchSuiteConfig)
-	meta, err := toml.DecodeFile(fpath, benchCfg)
+	cfgs := new(BenchSuiteConfigs)
+	meta, err := toml.DecodeFile(fpath, cfgs)
 	if err != nil {
 		return nil, err
 	}
 
-	suites := make([]BenchSuite, 0, 10)
-	for name, value := range benchCfg.Suites {
-		switch name {
-		case "simple-ops":
-			cfg := new(SimpleOpsConfig)
-			if err := meta.PrimitiveDecode(value, cfg); err != nil {
-				return nil, err
-			}
-			suites = append(suites, NewSimpleOpsSuite(cfg))
-		case "simple-oltp":
-			cfg := new(SimpleOLTPConfig)
-			if err := meta.PrimitiveDecode(value, cfg); err != nil {
-				return nil, err
-			}
-			suites = append(suites, NewSimpleOLTPSuite(cfg))
-		case "block-write":
-			cfg := new(BlockWriteConfig)
-			if err := meta.PrimitiveDecode(value, cfg); err != nil {
-				return nil, err
-			}
-			suites = append(suites, NewBlockWriteSuite(cfg))
-		default:
-			return nil, fmt.Errorf("unknown bench suite %s", name)
+	suites := make([]BenchSuite, 0)
+	for name, value := range cfgs.Suites {
+		if builder, ok := benchSuiteBuilders[name]; ok {
+			suites = append(suites, builder(meta, value))
 		}
 	}
 	return suites, nil
+}
+
+type BenchSuiteBuilder func(toml.MetaData, toml.Primitive) BenchSuite
+
+var (
+	benchSuiteMutex    sync.Mutex
+	benchSuiteBuilders map[string]BenchSuiteBuilder
+)
+
+func RegisterBenchSuite(name string, builder BenchSuiteBuilder) {
+	benchSuiteMutex.Lock()
+	defer benchSuiteMutex.Unlock()
+	if benchSuiteBuilders == nil {
+		benchSuiteBuilders = make(map[string]BenchSuiteBuilder)
+	}
+	benchSuiteBuilders[name] = builder
 }
