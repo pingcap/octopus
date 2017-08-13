@@ -212,5 +212,5 @@ func (job *BenchmarkJob) updateStatus(status string) {
 	defer job.mux.Unlock()
 
 	job.Status = status
-	log.Infof("[job-%d] %s", status)
+	log.Infof("[job-%d] %s", job.ID, status)
 }

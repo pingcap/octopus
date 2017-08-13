@@ -69,11 +69,7 @@ func NewClusterManager(ctx context.Context, cfg *AnsibleConfig) (*ClusterManager
 		return nil, err
 	}
 
-	cm := &ClusterManager{
-		ctx:      ctx,
-		clusters: make([]*clusterResource, 0),
-	}
-
+	cm := &ClusterManager{ctx: ctx}
 	for _, dsn := range cfg.Clusters {
 		res := &clusterResource{
 			free: true,

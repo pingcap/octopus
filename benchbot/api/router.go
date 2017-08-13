@@ -16,7 +16,7 @@ func httpRequestMiddleware(h http.Handler, svr *Server) http.Handler {
 		start := time.Now()
 		h.ServeHTTP(w, r)
 		cost := time.Since(start).Seconds()
-		log.Debugf("HTTPRequst - %s - %s - %s (%.3f sec)", r.RemoteAddr, r.Method, r.URL, cost)
+		log.Infof("HTTPRequst - %s - %s - %s (%.3f sec)", r.RemoteAddr, r.Method, r.URL, cost)
 	})
 }
 

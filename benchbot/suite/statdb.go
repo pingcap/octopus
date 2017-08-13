@@ -46,13 +46,18 @@ func newStatStmt(stmt *sql.Stmt, stat *StatManager) *StatStmt {
 //
 // Wrapper for DB (*sql.db)
 //
-func (s *StatDB) Result() *StatResult {
-	return s.stat.Result()
+func (s *StatDB) Start() {
+	s.stat.Start()
 }
 
 func (s *StatDB) Close() error {
 	// NOTE: we don't close the db here.
+	s.stat.Close()
 	return nil
+}
+
+func (s *StatDB) Result() *StatResult {
+	return s.stat.Result()
 }
 
 func (s *StatDB) Prepare(query string) (*StatStmt, error) {

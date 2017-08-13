@@ -48,19 +48,10 @@ func NewJobSet(dbFile string) (*JobSet, error) {
 		return nil, err
 	}
 
-	jobsList, err := selectAll(db)
-	if err != nil {
+	js := &JobSet{db: db}
+	if err := js.loadAll(); err != nil {
+		db.Close()
 		return nil, err
-	}
-	jobs := make(map[int64]*BenchmarkJob)
-	for _, job := range jobsList {
-		jobs[job.ID] = job
-	}
-
-	js := &JobSet{
-		db:       db,
-		jobs:     jobs,
-		jobsList: jobsList,
 	}
 	js.ctx, js.cancel = context.WithCancel(context.Background())
 
@@ -74,7 +65,7 @@ func (js *JobSet) sync() {
 	for {
 		select {
 		case <-time.After(time.Second * 60):
-			js.updateAll()
+			js.saveAll()
 		case <-js.ctx.Done():
 			return
 		}
@@ -84,7 +75,7 @@ func (js *JobSet) sync() {
 func (js *JobSet) Close() {
 	js.cancel()
 	js.wg.Wait()
-	js.updateAll()
+	js.saveAll()
 	js.db.Close()
 }
 
@@ -168,7 +159,27 @@ func (js *JobSet) update(job *BenchmarkJob) error {
 	return err
 }
 
-func (js *JobSet) updateAll() error {
+func (js *JobSet) loadAll() error {
+	stmt := fmt.Sprintf("SELECT * FROM `%s`", jobsTableName)
+	rows, err := js.db.Query(stmt)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	js.jobs = make(map[int64]*BenchmarkJob)
+	for rows.Next() {
+		job, err := formatJob(rows)
+		if err != nil {
+			return err
+		}
+		js.jobs[job.ID] = job
+		js.jobsList = append(js.jobsList, job)
+	}
+	return nil
+}
+
+func (js *JobSet) saveAll() error {
 	js.mux.Lock()
 	defer js.mux.Unlock()
 
@@ -179,25 +190,6 @@ func (js *JobSet) updateAll() error {
 	}
 
 	return nil
-}
-
-func selectAll(db *sql.DB) ([]*BenchmarkJob, error) {
-	stmt := fmt.Sprintf("SELECT * FROM `%s`", jobsTableName)
-	rows, err := db.Query(stmt)
-	defer rows.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	list := make([]*BenchmarkJob, 0)
-	for rows.Next() {
-		job, err := formatJob(rows)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, job)
-	}
-	return list, nil
 }
 
 func formatJob(r *sql.Rows) (*BenchmarkJob, error) {

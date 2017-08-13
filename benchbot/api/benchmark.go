@@ -84,7 +84,7 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("new bench job : id = %d / user = %s", job.ID, job.Meta.Creator)
+	log.Infof("new bench job: id = %d / user = %s", job.ID, job.Meta.Creator)
 	resp := map[string]interface{}{"id": job.ID}
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 }
@@ -141,7 +141,6 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("bench job aborted : id = %d \n", jobID)
 	hdl.rdr.JSON(w, http.StatusOK, "OK")
 }
 

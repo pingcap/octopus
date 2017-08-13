@@ -11,10 +11,10 @@ import (
 )
 
 func RunBenchCase(c BenchCase, db *sql.DB) (*CaseResult, error) {
-	log.Infof("[case:%s] start", c.Name())
+	log.Infof("[case:%s] run", c.Name())
 	res, err := c.Run(db)
 	if err != nil {
-		log.Errorf("[case:%s] error: %s", c.Name(), err)
+		log.Errorf("[case:%s] err: %s", c.Name(), err)
 		return nil, err
 	}
 	log.Infof("[case:%s] end: %s", c.Name(), res.Stat.FormatJSON())
@@ -37,6 +37,7 @@ type BenchFunc func(*rand.Rand) (OPKind, error)
 
 func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*CaseResult, error) {
 	stat := NewStatManager()
+	stat.Start()
 
 	wg := sync.WaitGroup{}
 	avgRequests := int(math.Ceil(float64(numRequests) / float64(numThreads)))
@@ -62,6 +63,7 @@ func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*C
 	}
 	wg.Wait()
 
+	stat.Close()
 	return NewCaseResult(c.Name(), stat.Result()), nil
 }
 
@@ -69,6 +71,7 @@ type SQLBenchFunc func(*StatDB, *rand.Rand) error
 
 func ParallelSQLBench(c BenchCase, exec SQLBenchFunc, numThreads, numRequests int, db *sql.DB) (*CaseResult, error) {
 	stdb := NewStatDB(db)
+	stdb.Start()
 
 	wg := sync.WaitGroup{}
 	avgRequests := int(math.Ceil(float64(numRequests) / float64(numThreads)))
@@ -91,5 +94,6 @@ func ParallelSQLBench(c BenchCase, exec SQLBenchFunc, numThreads, numRequests in
 	}
 	wg.Wait()
 
+	stdb.Close()
 	return NewCaseResult(c.Name(), stdb.Result()), nil
 }
