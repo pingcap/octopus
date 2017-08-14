@@ -15,7 +15,6 @@ package sysbench
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -24,7 +23,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/octopus/benchbot/common"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 	. "github.com/pingcap/octopus/benchbot/suite"
@@ -114,7 +112,7 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 			f1Eof = true
 		}
 
-		if !scanner1.Scan() {
+		if !scanner2.Scan() {
 			f2Eof = true
 		}
 
@@ -173,7 +171,11 @@ func (s *TPCHSuite) resultFile(resultName string, index int) string {
 
 func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 	start := time.Now()
-	for i := 0; i < 23; i++ {
+	for i := 1; i < 23; i++ {
+		if i == 15 {
+			// skip view test
+			continue
+		}
 		mysqlOut := s.resultFile("mysql_r", i)
 		tidbOut := s.resultFile("tidb_r", i)
 		tp, diffs, err := s.diffFiles(mysqlOut, tidbOut)
@@ -186,7 +188,7 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 		}
 		err = fmt.Errorf("[tpch failed]: Query:%d %v", i, diffTypeToString(tp))
 		stat.Record(OPRead, err, time.Since(start))
-		log.Error("%v\n", err)
+		log.Errorf("%v\n", err)
 		for _, diff := range diffs {
 			log.Errorf("Query:%d Result Unmatch (Line, Column):(%v, %v)\n", i, diff.line, diff.column)
 		}
@@ -197,17 +199,16 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	stat := NewStatManager()
 	stat.Start()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
-	output, err := common.ExecCmd(ctx, cmd)
-	if err != nil {
-		err = fmt.Errorf("err:%v, output:%v", err, output)
-		return nil, errors.Trace(err)
-	}
-	return nil, nil
+	// ctx, cancel := context.WithCancel(context.Background())
+	// defer cancel()
+	// cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
+	// output, err := common.ExecCmd(ctx, cmd)
+	// if err != nil {
+	// 	err = fmt.Errorf("err:%v, output:%v", err, output)
+	// 	return nil, errors.Trace(err)
+	// }
 
-	err = s.checkAnswers(stat)
+	err := s.checkAnswers(stat)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
