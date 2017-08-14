@@ -13,15 +13,28 @@
 
 package sysbench
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/juju/errors"
+	"github.com/ngaut/log"
+)
 
 func TestTPCH(t *testing.T) {
 	cfg := &TPCHConfig{
 		Host:       "127.0.0.1",
 		Port:       4000,
-		ScriptsDir: "tpch_scripts",
+		ScriptsDir: "../../../tpch_scripts",
 	}
 	tpchSuite := NewTPCHSuite(cfg)
-	tpchSuite.Run(nil)
+	caseResults, err := tpchSuite.Run(nil)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
 
+	for _, caseResult := range caseResults {
+		if caseResult.Stat.Error > 0 {
+			log.Fatalf("tpch failed!")
+		}
+	}
 }

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/common"
 
@@ -167,7 +168,7 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 }
 
 func (s *TPCHSuite) resultFile(resultName string, index int) string {
-	return fmt.Sprintf("%s/check_answers/%s/q%d.out", s.cfg.ScriptsDir, resultName, index)
+	return fmt.Sprintf("%s/%s/q%d.out", s.cfg.ScriptsDir, resultName, index)
 }
 
 func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
@@ -177,7 +178,7 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 		tidbOut := s.resultFile("tidb_r", i)
 		tp, diffs, err := s.diffFiles(mysqlOut, tidbOut)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		if tp == fileEqual {
 			stat.Record(OPRead, nil, time.Since(start))
@@ -199,14 +200,16 @@ func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
-	_, err := common.ExecCmd(ctx, cmd)
+	output, err := common.ExecCmd(ctx, cmd)
 	if err != nil {
-		return nil, err
+		err = fmt.Errorf("err:%v, output:%v", err, output)
+		return nil, errors.Trace(err)
 	}
+	return nil, nil
 
 	err = s.checkAnswers(stat)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	stat.Close()
