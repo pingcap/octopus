@@ -18,7 +18,7 @@ all: build check test
 build: tidb-benchbot stability-tester ycsb
 
 tidb-benchbot:
-	$(GOBUILD) -o bin/tidb-benchbot benchbot/main.go
+	$(GOBUILD) -o bin/tidb-benchbot benchbot/*.go
 
 tidb-stability:
 	$(GOBUILD) -o bin/tidb-stability-tester stability-tester/*.go
