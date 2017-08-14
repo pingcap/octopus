@@ -45,9 +45,9 @@ const (
 type YCSBConfig struct {
 	Databases   []string `toml:"databases"`
 	Workloads   []string `toml:"workloads"`
-	NumThreads  int      `toml:"NumThreads"`
-	NumInitials int      `toml:"NumInitials"`
-	NumRequests int      `toml:"NumRequests"`
+	NumThreads  int      `toml:"num_threads"`
+	NumInitials int      `toml:"num_initials"`
+	NumRequests int      `toml:"num_requests"`
 }
 
 type YCSBSuite struct {
