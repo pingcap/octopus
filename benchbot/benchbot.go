@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/suite"
 	_ "github.com/pingcap/octopus/benchbot/suite/sysbench"
+	_ "github.com/pingcap/octopus/benchbot/suite/ycsb"
 )
 
 var (
