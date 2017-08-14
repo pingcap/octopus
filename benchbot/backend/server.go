@@ -108,10 +108,10 @@ func (svr *Server) Status() *Status {
 func (svr *Server) AddJob(meta *BenchmarkMeta) (*BenchmarkJob, error) {
 	job := NewBenchmarkJob()
 	job.Meta = meta
+	svr.jobs.AddJob(job)
 
 	select {
 	case svr.pendingJobs <- job:
-		svr.jobs.AddJob(job)
 	default:
 		return nil, errors.New("pending jobs limit exceeded")
 	}

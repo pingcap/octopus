@@ -1,6 +1,8 @@
 package suite
 
 import (
+	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -19,28 +21,9 @@ const (
 	OPRollback
 )
 
-type StatOps struct {
-	Read   float64
-	Write  float64
-	Commit float64
-}
-
-func (s *StatOps) Record(op OPKind) {
-	switch op {
-	case OPRead:
-		s.Read++
-	case OPWrite:
-		s.Write++
-	case OPCommit:
-		s.Commit++
-	}
-}
-
 type StatResult struct {
 	Qps       float64
 	Eps       float64
-	Tps       float64
-	Ops       StatOps
 	Total     float64
 	Error     float64
 	Duration  float64
@@ -52,15 +35,13 @@ func (s *StatResult) Record(op OPKind, err error) {
 	if err != nil {
 		s.Error++
 	}
-	s.Ops.Record(op)
 }
 
 func (s *StatResult) Update(d time.Duration, h StatHistogram) {
-	s.Duration = d.Seconds()
+	s.Duration = roundF64(d.Seconds())
 	s.Histogram = h
-	s.Qps = s.Total / s.Duration
-	s.Eps = s.Error / s.Duration
-	s.Tps = s.Ops.Commit / s.Duration
+	s.Qps = roundF64(s.Total / s.Duration)
+	s.Eps = roundF64(s.Error / s.Duration)
 }
 
 func (s *StatResult) FormatJSON() string {
@@ -80,11 +61,16 @@ type StatHistogram struct {
 
 func NewStatHistogram(h *hdrhistogram.Histogram, percent float64) StatHistogram {
 	return StatHistogram{
-		AvgMs:        h.Mean(),
-		MaxMs:        float64(h.Max()),
-		Percentile:   percent,
-		PercentileMs: float64(h.ValueAtQuantile(percent)),
+		AvgMs:        roundF64(h.Mean()),
+		MaxMs:        roundF64(float64(h.Max())),
+		Percentile:   roundF64(percent),
+		PercentileMs: roundF64(float64(h.ValueAtQuantile(percent))),
 	}
+}
+
+func roundF64(f float64) float64 {
+	v, _ := strconv.ParseFloat(fmt.Sprintf("%0.3f", f), 64)
+	return v
 }
 
 type StatManager struct {
