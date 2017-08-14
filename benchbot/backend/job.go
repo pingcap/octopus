@@ -105,7 +105,7 @@ func (job *BenchmarkJob) Run(suites []BenchSuite, clusters *ClusterManager) erro
 	if err != nil {
 		return err
 	}
-	defer cluster.Close()
+	defer cluster.Stop()
 
 	if err := job.run(suites, cluster); err != nil {
 		return err
