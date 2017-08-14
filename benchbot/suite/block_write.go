@@ -11,11 +11,13 @@ import (
 	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
-type BlockWriteConfig struct {
-	NumThreads   int `toml:"num_threads"`
-	NumRequests  int `toml:"num_requests"`
-	MinBlockSize int `toml:"min_block_size"`
-	MaxBlockSize int `toml:"max_block_size"`
+func init() {
+	builder := func(meta toml.MetaData, value toml.Primitive) BenchSuite {
+		cfg := new(BlockWriteConfig)
+		meta.PrimitiveDecode(value, cfg)
+		return NewBlockWriteSuite(cfg)
+	}
+	RegisterBenchSuite("block-write", builder)
 }
 
 const (
@@ -27,13 +29,11 @@ const (
 	)`
 )
 
-func init() {
-	builder := func(meta toml.MetaData, value toml.Primitive) BenchSuite {
-		cfg := new(BlockWriteConfig)
-		meta.PrimitiveDecode(value, cfg)
-		return NewBlockWriteSuite(cfg)
-	}
-	RegisterBenchSuite("block-write", builder)
+type BlockWriteConfig struct {
+	NumThreads   int `toml:"num_threads"`
+	NumRequests  int `toml:"num_requests"`
+	MinBlockSize int `toml:"min_block_size"`
+	MaxBlockSize int `toml:"max_block_size"`
 }
 
 type BlockWriteSuite struct {
