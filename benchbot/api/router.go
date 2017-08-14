@@ -13,10 +13,10 @@ import (
 
 func httpRequestMiddleware(h http.Handler, svr *Server) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s := time.Now()
+		start := time.Now()
 		h.ServeHTTP(w, r)
-		cost := time.Now().Sub(s).Seconds()
-		log.Debugf("HttpRequst - %s - %s - %s (%.3f sec)", r.RemoteAddr, r.Method, r.URL, cost)
+		cost := time.Since(start).Seconds()
+		log.Infof("HTTPRequst - %s - %s - %s (%.3f sec)", r.RemoteAddr, r.Method, r.URL, cost)
 	})
 }
 
@@ -27,15 +27,11 @@ func CreateRouter(svr *Server) http.Handler {
 
 	r := mux.NewRouter()
 	hdl := newBenchmarkHandler(svr, rdr)
-	// benchmark running request
 	r.HandleFunc("/bench/plan", hdl.Plan).Methods("POST")
-	// benchmark job
-	r.HandleFunc("/bench/job/{id}", hdl.QueryJob).Methods("GET")
+	r.HandleFunc("/bench/jobs", hdl.ListJobs).Methods("GET")
+	r.HandleFunc("/bench/job/{id}", hdl.GetJob).Methods("GET")
 	r.HandleFunc("/bench/job/{id}", hdl.AbortJob).Methods("DELETE")
-	r.HandleFunc("/bench/jobs/{ids}", hdl.GetJobs).Methods("GET")
-	// benchmark summary
 	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
-	r.HandleFunc("/bench/history", hdl.ShowHistory).Methods("GET")
 
 	return httpRequestMiddleware(r, svr)
 }

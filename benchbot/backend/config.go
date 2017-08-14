@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 
 	"github.com/BurntSushi/toml"
+
+	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
 const (
@@ -12,24 +14,28 @@ const (
 	defaultAnsibleDir = "ansible"
 )
 
-type ClusterDSN struct {
-	Name         string `toml:"name"`
-	Host         string `toml:"host"`
-	Port         int    `toml:"port"`
-	DB           string `toml:"db"`
-	AuthUser     string `toml:"user"`
-	AuthPassword string `toml:"password"`
-}
-
-type AnsibleConfig struct {
-	Dir      string       `toml:"dir"`
-	Clusters []ClusterDSN `toml:"clusters"`
-}
-
 type ServerConfig struct {
-	Port    int           `toml:"port"`
-	Dir     string        `toml:"dir"`
-	Ansible AnsibleConfig `toml:"ansible"`
+	Port    int            `toml:"port"`
+	Dir     string         `toml:"dir"`
+	Ansible *AnsibleConfig `toml:"ansible"`
+}
+
+func (cfg *ServerConfig) adjust() {
+	adjustInt(&cfg.Port, defaultPort)
+	adjustStr(&cfg.Dir, defaultDir)
+	adjustStr(&cfg.Ansible.Dir, defaultAnsibleDir)
+}
+
+func adjustInt(i *int, defVal int) {
+	if *i == 0 {
+		*i = defVal
+	}
+}
+
+func adjustStr(s *string, defVal string) {
+	if len(*s) == 0 {
+		*s = defVal
+	}
 }
 
 func ParseConfig(filePath string) (*ServerConfig, error) {
@@ -45,33 +51,4 @@ func ParseConfig(filePath string) (*ServerConfig, error) {
 	cfg.adjust()
 
 	return cfg, nil
-}
-
-func NewServerConfig() *ServerConfig {
-	cfg := new(ServerConfig)
-	cfg.adjust()
-	return cfg
-}
-
-func (svrCfg *ServerConfig) adjust() {
-	adjustInt(&svrCfg.Port, defaultPort)
-	adjustStr(&svrCfg.Dir, defaultDir)
-
-	svrCfg.Ansible.adjust()
-}
-
-func (ansCfg *AnsibleConfig) adjust() {
-	adjustStr(&ansCfg.Dir, defaultAnsibleDir)
-}
-
-func adjustInt(num *int, defVal int) {
-	if *num == 0 {
-		*num = defVal
-	}
-}
-
-func adjustStr(sz *string, defVal string) {
-	if len(*sz) == 0 {
-		*sz = defVal
-	}
 }

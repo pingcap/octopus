@@ -2,48 +2,41 @@ package suite
 
 import (
 	"database/sql"
-	"golang.org/x/net/context"
-
-	_ "sync"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 type StatDB struct {
 	db   *sql.DB
-	stat *statisticManager
+	stat *StatManager
 }
 
 type StatTx struct {
 	tx   *sql.Tx
-	stat *statisticManager
+	stat *StatManager
 }
 
 type StatStmt struct {
 	stmt *sql.Stmt
-	stat *statisticManager
-}
-
-type StatResult struct {
-	summary *StatIndex
-	stages  []*StatIndex
+	stat *StatManager
 }
 
 func NewStatDB(db *sql.DB) *StatDB {
-	stdb := new(StatDB)
-	stdb.db = db
-	stdb.stat = newStatisticManager()
-	stdb.stat.start()
-	return stdb
+	return &StatDB{
+		db:   db,
+		stat: NewStatManager(),
+	}
 }
 
-func newStatTx(tx *sql.Tx, stat *statisticManager) *StatTx {
+func newStatTx(tx *sql.Tx, stat *StatManager) *StatTx {
 	return &StatTx{
 		tx:   tx,
 		stat: stat,
 	}
 }
 
-func newStatStmt(stmt *sql.Stmt, stat *statisticManager) *StatStmt {
+func newStatStmt(stmt *sql.Stmt, stat *StatManager) *StatStmt {
 	return &StatStmt{
 		stmt: stmt,
 		stat: stat,
@@ -51,293 +44,200 @@ func newStatStmt(stmt *sql.Stmt, stat *statisticManager) *StatStmt {
 }
 
 //
-// wrapper for DB (*sql.db)
+// Wrapper for DB (*sql.db)
 //
-func (stdb *StatDB) Stat() *StatResult {
-	return &StatResult{
-		summary: stdb.stat.getSummary(),
-		stages:  stdb.stat.getStages(),
-	}
+func (s *StatDB) Start() {
+	s.stat.Start()
 }
 
-func (stdb *StatDB) Close() error {
-	// NOTICE : here do not close the db in real !!!
-	stdb.stat.close()
+func (s *StatDB) Close() error {
+	// NOTE: we don't close the db here.
+	s.stat.Close()
 	return nil
 }
 
-func (stdb *StatDB) Prepare(query string) (*StatStmt, error) {
-	stmt, err := stdb.db.Prepare(query)
+func (s *StatDB) Result() *StatResult {
+	return s.stat.Result()
+}
+
+func (s *StatDB) Prepare(query string) (*StatStmt, error) {
+	stmt, err := s.db.Prepare(query)
 	if err != nil {
 		return nil, err
 	}
-	return newStatStmt(stmt, stdb.stat), nil
+	return newStatStmt(stmt, s.stat), nil
 }
 
-func (stdb *StatDB) PrepareContext(ctx context.Context, query string) (*StatStmt, error) {
-	stmt, err := stdb.db.PrepareContext(ctx, query)
+func (s *StatDB) PrepareContext(ctx context.Context, query string) (*StatStmt, error) {
+	stmt, err := s.db.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	return newStatStmt(stmt, stdb.stat), nil
+	return newStatStmt(stmt, s.stat), nil
 }
 
-func (stdb *StatDB) Begin() (*StatTx, error) {
-	s := time.Now()
-
-	tx, err := stdb.db.Begin()
-	stdb.stat.record(&dbop{
-		class:   opTxBegin,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(), // TODO .. record latency ?
-	})
-
+func (s *StatDB) Begin() (*StatTx, error) {
+	start := time.Now()
+	tx, err := s.db.Begin()
+	s.stat.Record(OPBegin, err, time.Since(start))
 	if err != nil {
 		return nil, err
 	}
-
-	return newStatTx(tx, stdb.stat), nil
+	return newStatTx(tx, s.stat), nil
 }
 
-func (stdb *StatDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*StatTx, error) {
-	s := time.Now()
-
-	tx, err := stdb.db.BeginTx(ctx, opts)
-	stdb.stat.record(&dbop{
-		class:   opTxBegin,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(), // TODO .. record latency ?
-	})
-
+func (s *StatDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*StatTx, error) {
+	start := time.Now()
+	tx, err := s.db.BeginTx(ctx, opts)
+	s.stat.Record(OPBegin, err, time.Since(start))
 	if err != nil {
 		return nil, err
 	}
-
-	return newStatTx(tx, stdb.stat), nil
+	return newStatTx(tx, s.stat), nil
 }
 
-func (stdb *StatDB) Exec(query string, args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := stdb.db.Exec(query, args...)
-	stdb.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) Exec(query string, args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.db.Exec(query, args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (stdb *StatDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := stdb.db.ExecContext(ctx, query, args...)
-	stdb.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.db.ExecContext(ctx, query, args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (stdb *StatDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := stdb.db.Query(query, args...)
-	stdb.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.db.Query(query, args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (stdb *StatDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := stdb.db.QueryContext(ctx, query, args...)
-	stdb.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (stdb *StatDB) QueryRow(query string, args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := stdb.db.QueryRow(query, args...)
-	stdb.stat.record(&dbop{
-		class:   opRead,
-		err:     false, // TODO ... error occours until scan()
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) QueryRow(query string, args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.db.QueryRow(query, args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
 
-func (stdb *StatDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := stdb.db.QueryRowContext(ctx, query, args...)
-	stdb.stat.record(&dbop{
-		class:   opRead,
-		err:     false, // TODO ... error occours until scan()
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.db.QueryRowContext(ctx, query, args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
 
 //
-// wrapper for Trasaction (*sql.Tx)
+// Wrapper for Trasaction (*sql.Tx)
 //
-func (sttx *StatTx) Commit() error {
-	s := time.Now()
-	err := sttx.tx.Commit()
-	sttx.stat.record(&dbop{
-		class:   opTxCommit,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) Commit() error {
+	start := time.Now()
+	err := s.tx.Commit()
+	s.stat.Record(OPCommit, err, time.Since(start))
 	return err
 }
 
-func (sttx *StatTx) Rollback() error {
-	s := time.Now()
-	err := sttx.tx.Rollback()
-	sttx.stat.record(&dbop{
-		class:   opTxRollback,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) Rollback() error {
+	start := time.Now()
+	err := s.tx.Rollback()
+	s.stat.Record(OPRollback, err, time.Since(start))
 	return err
 }
 
-func (sttx *StatTx) Exec(query string, args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := sttx.tx.Exec(query, args...)
-	sttx.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) Exec(query string, args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.tx.Exec(query, args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (sttx *StatTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := sttx.tx.ExecContext(ctx, query, args...)
-	sttx.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.tx.ExecContext(ctx, query, args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (sttx *StatTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := sttx.tx.Query(query, args...)
-	sttx.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.tx.Query(query, args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (sttx *StatTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := sttx.tx.QueryContext(ctx, query, args...)
-	sttx.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.tx.QueryContext(ctx, query, args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (sttx *StatTx) QueryRow(query string, args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := sttx.tx.QueryRow(query, args...)
-	sttx.stat.record(&dbop{
-		class:   opRead,
-		err:     false,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) QueryRow(query string, args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.tx.QueryRow(query, args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
 
-func (sttx *StatTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := sttx.tx.QueryRowContext(ctx, query, args...)
-	sttx.stat.record(&dbop{
-		class:   opRead,
-		err:     false,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.tx.QueryRowContext(ctx, query, args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
 
 //
-// wrapper for Statement (*sql.Stmt)
+// Wrapper for Statement (*sql.Stmt)
 //
-func (ss *StatStmt) Exec(args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := ss.stmt.Exec(args...)
-	ss.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) Exec(args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.stmt.Exec(args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (ss *StatStmt) ExecContext(ctx context.Context, args ...interface{}) (sql.Result, error) {
-	s := time.Now()
-	res, err := ss.stmt.ExecContext(ctx, args...)
-	ss.stat.record(&dbop{
-		class:   opWrite,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) ExecContext(ctx context.Context, args ...interface{}) (sql.Result, error) {
+	start := time.Now()
+	res, err := s.stmt.ExecContext(ctx, args...)
+	s.stat.Record(OPWrite, err, time.Since(start))
 	return res, err
 }
 
-func (ss *StatStmt) Query(args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := ss.stmt.Query(args...)
-	ss.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) Query(args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.stmt.Query(args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (ss *StatStmt) QueryContext(ctx context.Context, args ...interface{}) (*sql.Rows, error) {
-	s := time.Now()
-	rows, err := ss.stmt.QueryContext(ctx, args...)
-	ss.stat.record(&dbop{
-		class:   opRead,
-		err:     err != nil,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) QueryContext(ctx context.Context, args ...interface{}) (*sql.Rows, error) {
+	start := time.Now()
+	rows, err := s.stmt.QueryContext(ctx, args...)
+	s.stat.Record(OPRead, err, time.Since(start))
 	return rows, err
 }
 
-func (ss *StatStmt) QueryRow(args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := ss.stmt.QueryRow(args...)
-	ss.stat.record(&dbop{
-		class:   opRead,
-		err:     false,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) QueryRow(args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.stmt.QueryRow(args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
 
-func (ss *StatStmt) QueryRowContext(ctx context.Context, args ...interface{}) *sql.Row {
-	s := time.Now()
-	row := ss.stmt.QueryRowContext(ctx, args...)
-	ss.stat.record(&dbop{
-		class:   opRead,
-		err:     false,
-		latency: time.Now().Sub(s).Seconds(),
-	})
+func (s *StatStmt) QueryRowContext(ctx context.Context, args ...interface{}) *sql.Row {
+	start := time.Now()
+	row := s.stmt.QueryRowContext(ctx, args...)
+	s.stat.Record(OPRead, nil, time.Since(start))
 	return row
 }
