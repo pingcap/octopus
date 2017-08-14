@@ -17,7 +17,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"github.com/pingcap/tidb/kv"
 	"golang.org/x/net/context"
 )
 
@@ -46,10 +45,6 @@ func RegisterSuite(name string, f SuiteMaker) error {
 	suites[name] = f
 	return nil
 }
-
-// Because TiDB use prefix `m`, `t`, to avoid the conflict with TiDB,
-// here we use `#` prefix.
-const mvccPrefix = "#"
 
 // InitSuite initializes all special suites.
 func InitSuite(ctx context.Context, cfg *config.Config) []Case {

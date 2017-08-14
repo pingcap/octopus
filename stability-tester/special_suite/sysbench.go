@@ -43,6 +43,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"golang.org/x/net/context"
 	"time"
@@ -107,25 +108,25 @@ func (s *SysbenchCase) Execute(ctx context.Context) error {
 
 // String implements fmt.Stringer interface.
 func (s *SysbenchCase) String() string {
-	return "bank"
+	return "sysbench"
 }
 
 func (s *SysbenchCase) prepare() error {
 	var err error
 	createDBArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"create database IF NOT EXISTS sbtest"`, s.host, s.port, s.user)
-	fmt.Println("prepare command: ", createDBArgs)
+	log.Infof("prepare command: %s", createDBArgs)
 	cmdCreate := exec.Command("/bin/sh", "-c", createDBArgs)
 	if err = cmdCreate.Run(); err != nil {
-		fmt.Println("create database failed", err)
+		log.Errorf("create database failed: %v", err)
 		return err
 	}
 
-	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/oltp.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on prepare`,
+	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on prepare`,
 		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize)
-	fmt.Println("prepare command: ", cmdStr)
+	log.Infof("prepare command: %s", cmdStr)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	if err := cmd.Run(); err != nil {
-		fmt.Println("run sysbench prepare failed", err)
+		log.Errorf("run sysbench prepare failed: %v", err)
 		return err
 	}
 
@@ -136,9 +137,9 @@ func (s *SysbenchCase) run() error {
 	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 run`,
 		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	fmt.Println("run command: ", cmdStr)
+	log.Infof("run command: %s", cmdStr)
 	if err := cmd.Run(); err != nil {
-		fmt.Println("run sysbench run failed", err)
+		log.Errorf("run sysbench run failed: %v", err)
 		return err
 	}
 
