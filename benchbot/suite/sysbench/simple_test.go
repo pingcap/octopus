@@ -1,13 +1,11 @@
 package sysbench
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/ngaut/log"
 
 	. "github.com/pingcap/octopus/benchbot/common"
-	. "github.com/pingcap/octopus/benchbot/suite"
 )
 
 func TestSysbenchSimple(t *testing.T) {
@@ -18,10 +16,6 @@ func TestSysbenchSimple(t *testing.T) {
 		NumTables:   4,
 		NumThreads:  3,
 		NumRequests: 40,
-	}
-
-	for i := 0; i < cfg.TableSize; i++ {
-		DropTable(db, fmt.Sprintf("%s_%d", sysbenchTableName, i))
 	}
 
 	s := NewSysbenchSimpleSuite(cfg)

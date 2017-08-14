@@ -69,7 +69,7 @@ func (s *BlockWriteSuite) run(db *sql.DB) ([]*CaseResult, error) {
 }
 
 func (s *BlockWriteSuite) prepare(db *sql.DB) error {
-	return CreateTable(db, blockWriteTableName, blockWriteTableSchema)
+	return RecreateTable(db, blockWriteTableName, blockWriteTableSchema)
 }
 
 type BlockWriteCase struct {
@@ -89,10 +89,10 @@ func (c *BlockWriteCase) Name() string {
 }
 
 func (c *BlockWriteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *BlockWriteCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *BlockWriteCase) execute(db *StatDB, rander *rand.Rand) error {
 	blockID := atomic.AddUint64(&c.blockID, 1)
 	blockSize := rander.Intn(c.cfg.MaxBlockSize-c.cfg.MinBlockSize) + c.cfg.MinBlockSize
 	blockData := RandomAsciiBytes(rander, blockSize)

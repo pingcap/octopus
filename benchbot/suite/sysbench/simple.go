@@ -87,10 +87,10 @@ func (c *SysbenchSelectCase) Name() string {
 }
 
 func (c *SysbenchSelectCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *SysbenchSelectCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchSelectCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	id := rander.Intn(c.cfg.TableSize) + 1
 
@@ -116,10 +116,10 @@ func (c *SysbenchInsertCase) Name() string {
 }
 
 func (c *SysbenchInsertCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *SysbenchInsertCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchInsertCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	columnK := rander.Intn(c.cfg.TableSize)
 	columnC := RandomAsciiBytes(rander, sysbenchColumnCSize)
@@ -147,10 +147,10 @@ func (c *SysbenchDeleteCase) Name() string {
 }
 
 func (c *SysbenchDeleteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *SysbenchDeleteCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchDeleteCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	id := rander.Intn(c.cfg.TableSize) + 1
 

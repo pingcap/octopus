@@ -10,7 +10,6 @@ import (
 
 func TestBlockWrite(t *testing.T) {
 	db := MustConnectTestDB()
-	DropTable(db, blockWriteTableName)
 
 	cfg := &BlockWriteConfig{
 		NumThreads:   3,

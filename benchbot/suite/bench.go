@@ -48,7 +48,7 @@ func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*C
 
 		go func(id, requests int) {
 			rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
-			for i := 0; i < requests; id++ {
+			for i := 0; i < requests; i++ {
 				start := time.Now()
 				op, err := exec(rander)
 				if err != nil {
