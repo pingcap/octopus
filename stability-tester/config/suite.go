@@ -82,3 +82,20 @@ type MVCCSuiteConfig struct {
 	Concurrency int            `toml:"concurrency"`
 	Bank        BankCaseConfig `toml:"bank"`
 }
+
+// SpecialSuiteConfig is the configuration for all special test cases
+type SpecialSuiteConfig struct {
+	// Names contains all cases to be run later
+	Name     []string       `toml:"names"`
+	Sysbench SysbenchConfig `toml:"sysbench"`
+}
+
+// SysbenchConfig is for sysbench test case
+type SysbenchConfig struct {
+	TableCount int      `toml:"table_count"`
+	TableSize  int      `toml:"table_size"`
+	Threads    int      `toml:"threads"`
+	MaxTime    int      `toml:"max_time"`
+	Interval   Duration `toml:"interval"`
+	DBName     string   `toml:"database"`
+}
