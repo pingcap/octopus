@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/mvcc_suite"
 	"github.com/pingcap/octopus/stability-tester/nemesis"
+	"github.com/pingcap/octopus/stability-tester/special_suite"
 	"github.com/pingcap/octopus/stability-tester/suite"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/kv"
@@ -101,6 +102,11 @@ func main() {
 		suiteCases := suite.InitSuite(ctx, cfg, db)
 		// Run suites.
 		go suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
+
+		// Initialize special suites
+		specialSuites := special_suite.InitSuite(ctx, cfg)
+		// Run special suites
+		go special_suite.RunSuite(ctx, specialSuites)
 	}
 
 	// Create the TiKV storage and run MVCC cases

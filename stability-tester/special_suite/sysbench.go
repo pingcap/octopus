@@ -59,7 +59,6 @@ type SysbenchCase struct {
 	port     int
 	user     string
 	password string
-	ctx      context.Context
 }
 
 // NewSysbenchCase returns the SysbenchCase.
@@ -73,9 +72,8 @@ func NewSysbenchCase(cfg *config.Config) Case {
 	}
 }
 
-// InitSuite implements Case Initialize interface.
-func (s *SysbenchCase) InitSuite(ctx context.Context) error {
-	s.ctx = ctx
+// Initialize implements Case Initialize interface.
+func (s *SysbenchCase) Initialize() error {
 	err := s.clean()
 	if err != nil {
 		return err
@@ -84,11 +82,12 @@ func (s *SysbenchCase) InitSuite(ctx context.Context) error {
 }
 
 // Execute implements Case Execute interface.
-func (s *SysbenchCase) Execute() error {
-	ticker := time.NewTicker(s.cfg.Interval)
+func (s *SysbenchCase) Execute(ctx context.Context) error {
+	ticker := time.NewTicker(s.cfg.Interval.Duration)
+	defer ticker.Stop()
 	for {
 		select {
-		case <-s.ctx.Done():
+		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 			if err := s.prepare(); err != nil {
@@ -121,7 +120,7 @@ func (s *SysbenchCase) prepare() error {
 		return err
 	}
 
-	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench/oltp.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on prepare`,
+	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/oltp.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on prepare`,
 		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize)
 	fmt.Println("prepare command: ", cmdStr)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
@@ -134,7 +133,7 @@ func (s *SysbenchCase) prepare() error {
 }
 
 func (s *SysbenchCase) run() error {
-	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench/oltp.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 run`,
+	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 run`,
 		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	fmt.Println("run command: ", cmdStr)

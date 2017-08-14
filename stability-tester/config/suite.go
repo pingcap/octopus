@@ -86,7 +86,7 @@ type MVCCSuiteConfig struct {
 // SpecialSuiteConfig is the configuration for all special test cases
 type SpecialSuiteConfig struct {
 	// Names contains all cases to be run later
-	Name     []string       `toml:"names"`
+	Names    []string       `toml:"names"`
 	Sysbench SysbenchConfig `toml:"sysbench"`
 }
 

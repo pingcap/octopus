@@ -26,10 +26,10 @@ type Case interface {
 	// Initialize initializes the case.
 	// Because the initialization may take a lot of time,
 	// we may output the process periodicity.
-	Initialize(ctx context.Context) error
+	Initialize() error
 
 	// Execute executes the case once.
-	Execute() error
+	Execute(ctx context.Context) error
 
 	// String implements fmt.Stringer interface.
 	String() string
@@ -52,7 +52,7 @@ func RegisterSuite(name string, f SuiteMaker) error {
 const mvccPrefix = "#"
 
 // InitSuite initializes all special suites.
-func InitSuite(ctx context.Context, cfg *config.Config, db kv.Storage) []Case {
+func InitSuite(ctx context.Context, cfg *config.Config) []Case {
 	suiteCases := make([]Case, 0, len(cfg.SpecialSuite.Names))
 
 	// Create all cases and initialize them.
@@ -63,7 +63,7 @@ func InitSuite(ctx context.Context, cfg *config.Config, db kv.Storage) []Case {
 			continue
 		}
 		suiteCase := suiteM(cfg)
-		err := suiteCase.Initialize(ctx)
+		err := suiteCase.Initialize()
 		if err != nil {
 			log.Fatal(err)
 		}
