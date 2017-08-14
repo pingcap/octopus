@@ -36,5 +36,7 @@ func TestTPCH(t *testing.T) {
 		if caseResult.Stat.Error > 0 {
 			log.Fatalf("tpch failed!")
 		}
+
+		log.Infof("tpch elasped:%v", caseResult.Stat.Duration)
 	}
 }
