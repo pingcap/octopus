@@ -1,0 +1,3 @@
+c_name	c_custkey	o_orderkey	o_orderdate	o_totalprice	sum(l_quantity)
+Customer#000000268	268	6882	1997-04-09	504135.76	303.00
+Customer#000000998	998	29158	1995-10-21	394709.10	305.00
