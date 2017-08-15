@@ -8,6 +8,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+
+	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
 func RunBenchCase(c BenchCase, db *sql.DB) (*CaseResult, error) {
@@ -29,6 +31,25 @@ func RunBenchCases(cases []BenchCase, db *sql.DB) ([]*CaseResult, error) {
 			return nil, err
 		}
 		results = append(results, res)
+	}
+	return results, nil
+}
+
+func RunBenchCasesWithReset(cases []BenchCase, cluster Cluster) ([]*CaseResult, error) {
+	results := make([]*CaseResult, 0, len(cases))
+	for _, c := range cases {
+		if err := cluster.Start(); err != nil {
+			return nil, err
+		}
+		db := cluster.Accessor()
+		caseRes, caseErr := RunBenchCase(c, db)
+		if err := cluster.Reset(); err != nil {
+			return nil, err
+		}
+		if caseErr != nil {
+			return nil, caseErr
+		}
+		results = append(results, caseRes)
 	}
 	return results, nil
 }

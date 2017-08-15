@@ -74,23 +74,7 @@ func (s *YCSBSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 		}
 	}
 
-	results := make([]*CaseResult, 0, len(cases))
-	for _, c := range cases {
-		res, err := runYCSBCase(c, cluster)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, res)
-	}
-	return results, nil
-}
-
-func runYCSBCase(c BenchCase, cluster Cluster) (*CaseResult, error) {
-	if err := cluster.Start(); err != nil {
-		return nil, err
-	}
-	defer cluster.Reset()
-	return RunBenchCase(c, cluster.Accessor())
+	return RunBenchCasesWithReset(cases, cluster)
 }
 
 type YCSBCase struct {

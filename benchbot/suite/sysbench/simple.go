@@ -54,6 +54,7 @@ func (s *SysbenchSimpleSuite) run(db *sql.DB) ([]*CaseResult, error) {
 	}
 
 	cases := []BenchCase{
+		NewSysbenchCountCase(s),
 		NewSysbenchSelectCase(s),
 		NewSysbenchDeleteCase(s),
 		NewSysbenchInsertCase(s),
@@ -68,6 +69,41 @@ func (s *SysbenchSimpleSuite) prepare(db *sql.DB) error {
 		s.tables = tables
 	}
 	return err
+}
+
+type SysbenchCountCase struct {
+	cfg    *SysbenchSimpleConfig
+	tables []string
+}
+
+func NewSysbenchCountCase(s *SysbenchSimpleSuite) *SysbenchCountCase {
+	return &SysbenchCountCase{
+		cfg:    s.cfg,
+		tables: s.tables,
+	}
+}
+
+func (c *SysbenchCountCase) Name() string {
+	return "sysbench-count"
+}
+
+func (c *SysbenchCountCase) Run(db *sql.DB) (*CaseResult, error) {
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+}
+
+func (c *SysbenchCountCase) execute(db *StatDB, rander *rand.Rand) error {
+	table := c.tables[rander.Intn(len(c.tables))]
+
+	var count int
+	stmt := fmt.Sprintf("SELECT count(*) FROM `%s`", table)
+	if err := db.QueryRow(stmt).Scan(&count); err != nil {
+		return err
+	}
+
+	if count != c.cfg.TableSize {
+		return fmt.Errorf("expect count %d, found %d", c.cfg.TableSize, count)
+	}
+	return nil
 }
 
 type SysbenchSelectCase struct {
