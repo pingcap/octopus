@@ -123,7 +123,7 @@ func (s *SysbenchCase) prepare() error {
 }
 
 func (s *SysbenchCase) run() error {
-	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 --db-driver=mysql run`,
+	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=600 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 --db-driver=mysql run`,
 		s.cfg.LuaPath, s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	log.Infof("run command: %s", cmdStr)
