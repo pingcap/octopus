@@ -20,13 +20,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/octopus/benchbot/common"
-	"golang.org/x/net/context"
+	"github.com/BurntSushi/toml"
+	"github.com/juju/errors"
 	"github.com/pingcap/octopus/benchbot/common"
 	"golang.org/x/net/context"
 
 	log "github.com/Sirupsen/logrus"
 	. "github.com/pingcap/octopus/benchbot/cluster"
+)
 
 func init() {
 	builder := func(meta toml.MetaData, value toml.Primitive) BenchSuite {
