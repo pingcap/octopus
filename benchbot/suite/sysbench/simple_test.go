@@ -11,10 +11,13 @@ func TestSysbenchSimple(t *testing.T) {
 	db := MustConnectTestDB()
 
 	cfg := &SysbenchSimpleConfig{
-		TableSize:   10,
-		NumTables:   4,
-		NumThreads:  3,
-		NumRequests: 40,
+		TableSize:  10,
+		NumTables:  4,
+		NumThreads: 3,
+		NumCounts:  10,
+		NumSelects: 20,
+		NumInserts: 20,
+		NumDeletes: 20,
 	}
 
 	s := NewSysbenchSimpleSuite(cfg)

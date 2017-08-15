@@ -96,7 +96,7 @@ func main() {
 		syscall.SIGQUIT)
 
 	sig := <-sc
-	log.Infof("Got signal [%d] to exit.", sig)
+	logrus.Infof("Got signal %d to exit.", sig)
 
 	svr.Close()
 }

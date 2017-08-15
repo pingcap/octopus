@@ -21,10 +21,13 @@ func init() {
 }
 
 type SysbenchSimpleConfig struct {
-	TableSize   int `toml:"table_size"`
-	NumTables   int `toml:"num_tables"`
-	NumThreads  int `toml:"num_threads"`
-	NumRequests int `toml:"num_requests"`
+	TableSize  int `toml:"table_size"`
+	NumTables  int `toml:"num_tables"`
+	NumThreads int `toml:"num_threads"`
+	NumCounts  int `toml:"num_counts"`
+	NumSelects int `toml:"num_selects"`
+	NumInserts int `toml:"num_inserts"`
+	NumDeletes int `toml:"num_deletes"`
 }
 
 type SysbenchSimpleSuite struct {
@@ -88,7 +91,7 @@ func (c *SysbenchCountCase) Name() string {
 }
 
 func (c *SysbenchCountCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumCounts, db)
 }
 
 func (c *SysbenchCountCase) execute(db *StatDB, rander *rand.Rand) error {
@@ -123,7 +126,7 @@ func (c *SysbenchSelectCase) Name() string {
 }
 
 func (c *SysbenchSelectCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumSelects, db)
 }
 
 func (c *SysbenchSelectCase) execute(db *StatDB, rander *rand.Rand) error {
@@ -152,7 +155,7 @@ func (c *SysbenchInsertCase) Name() string {
 }
 
 func (c *SysbenchInsertCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumInserts, db)
 }
 
 func (c *SysbenchInsertCase) execute(db *StatDB, rander *rand.Rand) error {
@@ -183,7 +186,7 @@ func (c *SysbenchDeleteCase) Name() string {
 }
 
 func (c *SysbenchDeleteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumDeletes, db)
 }
 
 func (c *SysbenchDeleteCase) execute(db *StatDB, rander *rand.Rand) error {
