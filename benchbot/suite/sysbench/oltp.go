@@ -85,10 +85,10 @@ func (c *SysbenchOLTPCase) Name() string {
 }
 
 func (c *SysbenchOLTPCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *SysbenchOLTPCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchOLTPCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 
 	tx, err := db.Begin()

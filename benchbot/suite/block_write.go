@@ -11,11 +11,13 @@ import (
 	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
-type BlockWriteConfig struct {
-	NumThreads   int `toml:"num_threads"`
-	NumRequests  int `toml:"num_requests"`
-	MinBlockSize int `toml:"min_block_size"`
-	MaxBlockSize int `toml:"max_block_size"`
+func init() {
+	builder := func(meta toml.MetaData, value toml.Primitive) BenchSuite {
+		cfg := new(BlockWriteConfig)
+		meta.PrimitiveDecode(value, cfg)
+		return NewBlockWriteSuite(cfg)
+	}
+	RegisterBenchSuite("block-write", builder)
 }
 
 const (
@@ -27,13 +29,11 @@ const (
 	)`
 )
 
-func init() {
-	builder := func(meta toml.MetaData, value toml.Primitive) BenchSuite {
-		cfg := new(BlockWriteConfig)
-		meta.PrimitiveDecode(value, cfg)
-		return NewBlockWriteSuite(cfg)
-	}
-	RegisterBenchSuite("block-write", builder)
+type BlockWriteConfig struct {
+	NumThreads   int `toml:"num_threads"`
+	NumRequests  int `toml:"num_requests"`
+	MinBlockSize int `toml:"min_block_size"`
+	MaxBlockSize int `toml:"max_block_size"`
 }
 
 type BlockWriteSuite struct {
@@ -69,7 +69,7 @@ func (s *BlockWriteSuite) run(db *sql.DB) ([]*CaseResult, error) {
 }
 
 func (s *BlockWriteSuite) prepare(db *sql.DB) error {
-	return CreateTable(db, blockWriteTableName, blockWriteTableSchema)
+	return RecreateTable(db, blockWriteTableName, blockWriteTableSchema)
 }
 
 type BlockWriteCase struct {
@@ -89,10 +89,10 @@ func (c *BlockWriteCase) Name() string {
 }
 
 func (c *BlockWriteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
 }
 
-func (c *BlockWriteCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *BlockWriteCase) execute(db *StatDB, rander *rand.Rand) error {
 	blockID := atomic.AddUint64(&c.blockID, 1)
 	blockSize := rander.Intn(c.cfg.MaxBlockSize-c.cfg.MinBlockSize) + c.cfg.MinBlockSize
 	blockData := RandomAsciiBytes(rander, blockSize)

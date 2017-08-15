@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
+
+	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
 func RunBenchCase(c BenchCase, db *sql.DB) (*CaseResult, error) {
@@ -33,6 +35,25 @@ func RunBenchCases(cases []BenchCase, db *sql.DB) ([]*CaseResult, error) {
 	return results, nil
 }
 
+func RunBenchCasesWithReset(cases []BenchCase, cluster Cluster) ([]*CaseResult, error) {
+	results := make([]*CaseResult, 0, len(cases))
+	for _, c := range cases {
+		if err := cluster.Start(); err != nil {
+			return nil, err
+		}
+		db := cluster.Accessor()
+		caseRes, caseErr := RunBenchCase(c, db)
+		if err := cluster.Reset(); err != nil {
+			return nil, err
+		}
+		if caseErr != nil {
+			return nil, caseErr
+		}
+		results = append(results, caseRes)
+	}
+	return results, nil
+}
+
 type BenchFunc func(*rand.Rand) (OPKind, error)
 
 func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*CaseResult, error) {
@@ -48,7 +69,7 @@ func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*C
 
 		go func(id, requests int) {
 			rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
-			for i := 0; i < requests; id++ {
+			for i := 0; i < requests; i++ {
 				start := time.Now()
 				op, err := exec(rander)
 				if err != nil {

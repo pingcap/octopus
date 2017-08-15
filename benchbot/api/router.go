@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/unrolled/render"
 
-	"github.com/ngaut/log"
 	. "github.com/pingcap/octopus/benchbot/backend"
 )
 
