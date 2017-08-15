@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/common"
 
@@ -98,11 +99,11 @@ type lineDiff struct {
 func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err error) {
 	scanner1, err := getFileScanner(f1)
 	if err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 	scanner2, err := getFileScanner(f2)
 	if err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	f1Eof, f2Eof := false, false
@@ -147,11 +148,11 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 	}
 
 	if err = scanner1.Err(); err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	if err = scanner2.Err(); err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	// file length is not equal
@@ -193,23 +194,34 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 }
 
 func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
+	err := cluster.Start()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer cluster.Close()
+	return s.run()
+}
+
+func (s *TPCHSuite) run() ([]*CaseResult, error) {
 	stat := NewStatManager()
 	stat.Start()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
-	_, err := common.ExecCmd(ctx, cmd)
+	output, err := common.ExecCmd(ctx, cmd)
 	if err != nil {
-		return nil, err
+		err = fmt.Errorf("err:%v, output:%v", err, output)
+		return nil, errors.Trace(err)
 	}
 
 	err = s.checkAnswers(stat)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	stat.Close()
 	res := []*CaseResult{}
 	res = append(res, NewCaseResult(s.Name(), stat.Result()))
+
 	return res, nil
 }

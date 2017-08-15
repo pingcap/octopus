@@ -13,7 +13,12 @@
 
 package suite
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/juju/errors"
+	"github.com/ngaut/log"
+)
 
 func TestTPCH(t *testing.T) {
 	cfg := &TPCHConfig{
@@ -22,6 +27,14 @@ func TestTPCH(t *testing.T) {
 		ScriptsDir: "../../tpch_scripts",
 	}
 	tpchSuite := NewTPCHSuite(cfg)
-	tpchSuite.Run(nil)
+	caseResults, err := tpchSuite.run()
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
 
+	for _, caseResult := range caseResults {
+		if caseResult.Stat.Error > 0 {
+			log.Fatal("tpch failed!")
+		}
+	}
 }
