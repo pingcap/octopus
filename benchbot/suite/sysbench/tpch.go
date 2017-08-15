@@ -15,6 +15,7 @@ package sysbench
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -22,10 +23,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	"github.com/pingcap/octopus/benchbot/common"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 	. "github.com/pingcap/octopus/benchbot/suite"
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -199,16 +201,16 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	stat := NewStatManager()
 	stat.Start()
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
-	// cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
-	// output, err := common.ExecCmd(ctx, cmd)
-	// if err != nil {
-	// 	err = fmt.Errorf("err:%v, output:%v", err, output)
-	// 	return nil, errors.Trace(err)
-	// }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
+	output, err := common.ExecCmd(ctx, cmd)
+	if err != nil {
+		err = fmt.Errorf("err:%v, output:%v", err, output)
+		return nil, errors.Trace(err)
+	}
 
-	err := s.checkAnswers(stat)
+	err = s.checkAnswers(stat)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

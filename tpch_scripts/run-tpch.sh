@@ -5,6 +5,10 @@ run() {
 CURDIR=$(cd `dirname $0`; pwd)
 OUTDIR=$CURDIR/$1
 
+if [ -e $OUTDIR ]; then
+  rm -rf $OUTDIR
+fi 
+
 if [ ! -d $OUTDIR ]; then
   mkdir -p $OUTDIR
 fi
