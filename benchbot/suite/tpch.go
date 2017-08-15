@@ -15,17 +15,19 @@ package suite
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/BurntSushi/toml"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/octopus/benchbot/common"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
+	"github.com/pingcap/octopus/benchbot/common"
 )
 
 func init() {
@@ -98,11 +100,11 @@ type lineDiff struct {
 func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err error) {
 	scanner1, err := getFileScanner(f1)
 	if err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 	scanner2, err := getFileScanner(f2)
 	if err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	f1Eof, f2Eof := false, false
@@ -112,7 +114,7 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 			f1Eof = true
 		}
 
-		if !scanner1.Scan() {
+		if !scanner2.Scan() {
 			f2Eof = true
 		}
 
@@ -147,11 +149,11 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 	}
 
 	if err = scanner1.Err(); err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	if err = scanner2.Err(); err != nil {
-		return diffNone, nil, err
+		return diffNone, nil, errors.Trace(err)
 	}
 
 	// file length is not equal
@@ -166,12 +168,16 @@ func (s *TPCHSuite) diffFiles(f1, f2 string) (tp DiffType, diffs []lineDiff, err
 }
 
 func (s *TPCHSuite) resultFile(resultName string, index int) string {
-	return fmt.Sprintf("%s/check_answers/%s/q%d.out", s.cfg.ScriptsDir, resultName, index)
+	return fmt.Sprintf("%s/%s/q%d.out", s.cfg.ScriptsDir, resultName, index)
 }
 
 func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 	start := time.Now()
-	for i := 0; i < 23; i++ {
+	for i := 1; i < 23; i++ {
+		if i == 15 {
+			// skip view test
+			continue
+		}
 		mysqlOut := s.resultFile("mysql_r", i)
 		tidbOut := s.resultFile("tidb_r", i)
 		tp, diffs, err := s.diffFiles(mysqlOut, tidbOut)
@@ -184,7 +190,7 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 		}
 		err = fmt.Errorf("[tpch failed]: Query:%d %v", i, diffTypeToString(tp))
 		stat.Record(OPRead, err, time.Since(start))
-		log.Error("%v\n", err)
+		log.Errorf("%v\n", err)
 		for _, diff := range diffs {
 			log.Errorf("Query:%d Result Unmatch (Line, Column):(%v, %v)\n", i, diff.line, diff.column)
 		}
@@ -193,23 +199,34 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 }
 
 func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
+	err := cluster.Start()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer cluster.Close()
+	return s.run()
+}
+
+func (s *TPCHSuite) run() ([]*CaseResult, error) {
 	stat := NewStatManager()
 	stat.Start()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmd := fmt.Sprintf("bash %s/run-tpch.sh tidb_r %s %d", s.cfg.ScriptsDir, s.cfg.Host, s.cfg.Port)
-	_, err := common.ExecCmd(ctx, cmd)
+	output, err := common.ExecCmd(ctx, cmd)
 	if err != nil {
-		return nil, err
+		err = fmt.Errorf("err:%v, output:%v", err, output)
+		return nil, errors.Trace(err)
 	}
 
 	err = s.checkAnswers(stat)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	stat.Close()
 	res := []*CaseResult{}
 	res = append(res, NewCaseResult(s.Name(), stat.Result()))
+
 	return res, nil
 }
