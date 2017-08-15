@@ -14,7 +14,6 @@ func TestSysbenchSimple(t *testing.T) {
 		TableSize:  10,
 		NumTables:  4,
 		NumThreads: 3,
-		NumCounts:  10,
 		NumSelects: 20,
 		NumInserts: 20,
 		NumDeletes: 20,
