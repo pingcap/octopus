@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 )
 
 func TestTPCH(t *testing.T) {

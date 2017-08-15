@@ -20,14 +20,13 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
-
-	. "github.com/pingcap/octopus/benchbot/cluster"
 	"github.com/pingcap/octopus/benchbot/common"
+	"golang.org/x/net/context"
+
+	log "github.com/Sirupsen/logrus"
+	. "github.com/pingcap/octopus/benchbot/cluster"
 )
 
 func init() {
@@ -227,6 +226,6 @@ func (s *TPCHSuite) run() ([]*CaseResult, error) {
 	stat.Close()
 	res := []*CaseResult{}
 	res = append(res, NewCaseResult(s.Name(), stat.Result()))
-
+	log.Infof("[case:%s] end:%v", s.Name(), stat.Result().FormatJSON())
 	return res, nil
 }
