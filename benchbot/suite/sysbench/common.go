@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 
 	. "github.com/pingcap/octopus/benchbot/suite"
 )
@@ -30,7 +30,7 @@ func prepare(db *sql.DB, tableSize, numTables, numThreads int) ([]string, error)
 	tables := make([]string, 0, numTables)
 	for i := 0; i < numTables; i++ {
 		tableName := fmt.Sprintf("%s_%d", sysbenchTableName, i)
-		if err := CreateTable(db, tableName, sysbenchTableSchema); err != nil {
+		if err := RecreateTable(db, tableName, sysbenchTableSchema); err != nil {
 			return nil, err
 		}
 		tables = append(tables, tableName)

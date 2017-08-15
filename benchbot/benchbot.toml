@@ -1,5 +1,6 @@
 port = 20170
 dir = "."
+log_dir = "logs"
 
 [ansible]
 dir = "ansible"
@@ -27,9 +28,22 @@ num_requests = 100000
 [suites.sysbench-simple]
 num_tables = 10
 num_threads = 100
-num_requests = 100000
+num_selects = 100000
+num_inserts = 100000
+num_deletes = 100000
 
 [suites.tpch]
 host = "127.0.0.1"
 port = 4000
 scripts_dir = "tpch_scripts"
+
+[suites.ycsb]
+databases = [
+    "raw://127.0.0.1:2379",
+    "txn://127.0.0.1:2379",
+    "tidb://root@tcp(127.0.0.1:4000)/",
+]
+workloads = ["a", "b"]
+num_threads = 100
+num_initials = 100000
+num_requests = 100000

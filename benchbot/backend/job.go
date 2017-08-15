@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 	"golang.org/x/net/context"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"

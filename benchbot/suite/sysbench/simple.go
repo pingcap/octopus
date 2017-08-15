@@ -21,10 +21,12 @@ func init() {
 }
 
 type SysbenchSimpleConfig struct {
-	TableSize   int `toml:"table_size"`
-	NumTables   int `toml:"num_tables"`
-	NumThreads  int `toml:"num_threads"`
-	NumRequests int `toml:"num_requests"`
+	TableSize  int `toml:"table_size"`
+	NumTables  int `toml:"num_tables"`
+	NumThreads int `toml:"num_threads"`
+	NumSelects int `toml:"num_selects"`
+	NumInserts int `toml:"num_inserts"`
+	NumDeletes int `toml:"num_deletes"`
 }
 
 type SysbenchSimpleSuite struct {
@@ -64,10 +66,23 @@ func (s *SysbenchSimpleSuite) run(db *sql.DB) ([]*CaseResult, error) {
 
 func (s *SysbenchSimpleSuite) prepare(db *sql.DB) error {
 	tables, err := prepare(db, s.cfg.TableSize, s.cfg.NumTables, s.cfg.NumThreads)
-	if err == nil {
-		s.tables = tables
+	if err != nil {
+		return err
 	}
-	return err
+
+	for _, table := range tables {
+		var count int
+		stmt := fmt.Sprintf("SELECT count(*) FROM `%s`", table)
+		if err := db.QueryRow(stmt).Scan(&count); err != nil {
+			return err
+		}
+		if count != s.cfg.TableSize {
+			return fmt.Errorf("expect count %d, found %d", s.cfg.TableSize, count)
+		}
+	}
+
+	s.tables = tables
+	return nil
 }
 
 type SysbenchSelectCase struct {
@@ -87,10 +102,10 @@ func (c *SysbenchSelectCase) Name() string {
 }
 
 func (c *SysbenchSelectCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumSelects, db)
 }
 
-func (c *SysbenchSelectCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchSelectCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	id := rander.Intn(c.cfg.TableSize) + 1
 
@@ -116,10 +131,10 @@ func (c *SysbenchInsertCase) Name() string {
 }
 
 func (c *SysbenchInsertCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumInserts, db)
 }
 
-func (c *SysbenchInsertCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchInsertCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	columnK := rander.Intn(c.cfg.TableSize)
 	columnC := RandomAsciiBytes(rander, sysbenchColumnCSize)
@@ -147,10 +162,10 @@ func (c *SysbenchDeleteCase) Name() string {
 }
 
 func (c *SysbenchDeleteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.Execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumDeletes, db)
 }
 
-func (c *SysbenchDeleteCase) Execute(db *StatDB, rander *rand.Rand) error {
+func (c *SysbenchDeleteCase) execute(db *StatDB, rander *rand.Rand) error {
 	table := c.tables[rander.Intn(len(c.tables))]
 	id := rander.Intn(c.cfg.TableSize) + 1
 

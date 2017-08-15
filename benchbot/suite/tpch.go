@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/benchbot/common"
@@ -27,6 +29,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	. "github.com/pingcap/octopus/benchbot/cluster"
+	"github.com/pingcap/octopus/benchbot/common"
 )
 
 func init() {

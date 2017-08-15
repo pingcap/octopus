@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
-	"github.com/ngaut/log"
 	"github.com/unrolled/render"
 
 	. "github.com/pingcap/octopus/benchbot/backend"
