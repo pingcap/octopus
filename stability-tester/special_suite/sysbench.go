@@ -1,52 +1,27 @@
-/*
- * 1) prepare
- * sysbench --test=./sysbench/insert.lua --mysql-host=${host} --mysql-port=${port} --mysql-user=${user}
- * --mysql-password=${passwd} --oltp-tables-count=10 --oltp-table-size=10000000 --rand-init=on prepare
- *
- * 2) run
- * sysbench --test=./sysbench/insert.lua --mysql-host=${host} --mysql-port=${port} --mysql-user=${user}
- * --mysql-password=${passwd} --oltp-tables-count=10 --oltp-table-size=10000000 --num-threads=${threads}
- * --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=600 --percentile=99
- * --max-requests=1000000000 run
- *
- *
- * OLTP test statistics:
- *   queries performed:
- *       read:                            2101540
- *       write:                           600440
- *       other:                           300220
- *       total:                           3002200
- *   transactions:                        150110 (2501.72 per sec.)
- *   read/write requests:                 2701980 (45030.91 per sec.)
- *   other operations:                    300220 (5003.43 per sec.)
- *   ignored errors:                      0      (0.00 per sec.)
- *   reconnects:                          0      (0.00 per sec.)
- *
- * General statistics:
- *   total time:                          60.0028s
- *   total number of events:              150110
- *   total time taken by event execution: 479.8373s
- *   response time:
- *        min:                                  1.06ms
- *        avg:                                  3.20ms
- *        max:                                306.37ms
- *        approx.  99 percentile:              13.83ms
- *
- * Threads fairness:
- *   events (avg/stddev):           18763.7500/272.53
- *   execution time (avg/stddev):   59.9797/0.00
- */
+// Copyright 2017 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package special_suite
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"golang.org/x/net/context"
-	"time"
 )
 
 func init() {
@@ -84,6 +59,10 @@ func (s *SysbenchCase) Initialize() error {
 
 // Execute implements Case Execute interface.
 func (s *SysbenchCase) Execute(ctx context.Context) error {
+	err := s.runAction()
+	if err != nil {
+		return err
+	}
 	ticker := time.NewTicker(s.cfg.Interval.Duration)
 	defer ticker.Stop()
 	for {
@@ -91,14 +70,8 @@ func (s *SysbenchCase) Execute(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := s.prepare(); err != nil {
-				return err
-			}
-			time.Sleep(2 * time.Second)
-			if err := s.run(); err != nil {
-				return err
-			}
-			if err := s.clean(); err != nil {
+			err := s.runAction()
+			if err != nil {
 				return err
 			}
 		}
@@ -111,6 +84,20 @@ func (s *SysbenchCase) String() string {
 	return "sysbench"
 }
 
+func (s *SysbenchCase) runAction() error {
+	if err := s.prepare(); err != nil {
+		return err
+	}
+	time.Sleep(10 * time.Second)
+	if err := s.run(); err != nil {
+		return err
+	}
+	if err := s.clean(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *SysbenchCase) prepare() error {
 	var err error
 	createDBArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"create database IF NOT EXISTS sbtest"`, s.host, s.port, s.user)
@@ -121,12 +108,14 @@ func (s *SysbenchCase) prepare() error {
 		return err
 	}
 
-	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on prepare`,
-		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize)
-	log.Infof("prepare command: %s", cmdStr)
+	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on --db-driver=mysql prepare`,
+		s.cfg.LuaPath, s.host, s.port, s.user, s.password, s.cfg.TableCount, 0)
+	log.Infof("create tables command: %s", cmdStr)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
+	var out bytes.Buffer
+	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		log.Errorf("run sysbench prepare failed: %v", err)
+		log.Errorf("%s\n", out.String())
 		return err
 	}
 
@@ -134,12 +123,15 @@ func (s *SysbenchCase) prepare() error {
 }
 
 func (s *SysbenchCase) run() error {
-	cmdStr := fmt.Sprintf(`sysbench --test=./sysbench_lua/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 run`,
-		s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
+	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=60 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 --db-driver=mysql run`,
+		s.cfg.LuaPath, s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	log.Infof("run command: %s", cmdStr)
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		log.Errorf("run sysbench run failed: %v", err)
+		log.Errorf("%s\n", out.String())
 		return err
 	}
 

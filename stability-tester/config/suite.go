@@ -98,4 +98,5 @@ type SysbenchConfig struct {
 	MaxTime    int      `toml:"max_time"`
 	Interval   Duration `toml:"interval"`
 	DBName     string   `toml:"database"`
+	LuaPath    string   `toml:"lua_path"`
 }

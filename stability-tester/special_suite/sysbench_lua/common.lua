@@ -19,10 +19,11 @@ function create_insert(table_id)
 
    i = table_id
 
-   print("Creating table 'sbtest" .. i .. "'...")
+   log_info("Creating table 'sbtest" .. i .. "'...")
+
    if ((db_driver == "mysql") or (db_driver == "attachsql")) then
       query = [[
-CREATE TABLE sbtest]] .. i .. [[ (
+CREATE TABLE IF NOT EXISTS sbtest]] .. i .. [[ (
 id INTEGER UNSIGNED NOT NULL ]] ..
 ((oltp_auto_inc and "AUTO_INCREMENT") or "") .. [[,
 k INTEGER UNSIGNED DEFAULT '0' NOT NULL,
@@ -35,7 +36,7 @@ pad CHAR(60) DEFAULT '' NOT NULL,
 
    elseif (db_driver == "pgsql") then
       query = [[
-CREATE TABLE sbtest]] .. i .. [[ (
+CREATE TABLE IF NOT EXISTS sbtest]] .. i .. [[ (
 id SERIAL NOT NULL,
 k INTEGER DEFAULT '0' NOT NULL,
 c CHAR(120) DEFAULT '' NOT NULL,
@@ -45,7 +46,7 @@ pad CHAR(60) DEFAULT '' NOT NULL,
 
    elseif (db_driver == "drizzle") then
       query = [[
-CREATE TABLE sbtest (
+CREATE TABLE IF NOT EXISTS sbtest (
 id INTEGER NOT NULL ]] .. ((oltp_auto_inc and "AUTO_INCREMENT") or "") .. [[,
 k INTEGER DEFAULT '0' NOT NULL,
 c CHAR(120) DEFAULT '' NOT NULL,
@@ -53,7 +54,7 @@ pad CHAR(60) DEFAULT '' NOT NULL,
 ]] .. index_name .. [[ (id)
 ) ]]
    else
-      print("Unknown database driver: " .. db_driver)
+      log_error("Unknown database driver: " .. db_driver)
       return 1
    end
 
@@ -61,7 +62,7 @@ pad CHAR(60) DEFAULT '' NOT NULL,
 
    db_query("CREATE INDEX k_" .. i .. " on sbtest" .. i .. "(k)")
 
-   print("Inserting " .. oltp_table_size .. " records into 'sbtest" .. i .. "'")
+   log_info("Inserting " .. oltp_table_size .. " records into 'sbtest" .. i .. "'")
 
    if (oltp_auto_inc) then
       db_bulk_insert_init("INSERT INTO sbtest" .. i .. "(k, c, pad) VALUES")
@@ -88,8 +89,7 @@ pad CHAR(60) DEFAULT '' NOT NULL,
    end
 
    db_bulk_insert_done()
-
-
+   
 end
 
 
@@ -116,22 +116,22 @@ function cleanup()
    set_vars()
 
    for i = 1,oltp_tables_count do
-   print("Dropping table 'sbtest" .. i .. "'...")
-   db_query("DROP TABLE sbtest".. i )
+      log_info("Dropping table 'sbtest" .. i .. "'...")
+      db_query("DROP TABLE sbtest".. i )
    end
 end
 
 function set_vars()
-   oltp_table_size = oltp_table_size or 10000
-   oltp_range_size = oltp_range_size or 100
-   oltp_tables_count = oltp_tables_count or 1
-   oltp_point_selects = oltp_point_selects or 10
-   oltp_simple_ranges = oltp_simple_ranges or 1
-   oltp_sum_ranges = oltp_sum_ranges or 1
-   oltp_order_ranges = oltp_order_ranges or 1
-   oltp_distinct_ranges = oltp_distinct_ranges or 1
-   oltp_index_updates = oltp_index_updates or 1
-   oltp_non_index_updates = oltp_non_index_updates or 1
+   oltp_table_size = tonumber(oltp_table_size or 10000)
+   oltp_range_size = tonumber(oltp_range_size or 100)
+   oltp_tables_count = tonumber(oltp_tables_count or 1)
+   oltp_point_selects = tonumber(oltp_point_selects or 10)
+   oltp_simple_ranges = tonumber(oltp_simple_ranges or 1)
+   oltp_sum_ranges = tonumber(oltp_sum_ranges or 1)
+   oltp_order_ranges = tonumber(oltp_order_ranges or 1)
+   oltp_distinct_ranges = tonumber(oltp_distinct_ranges or 1)
+   oltp_index_updates = tonumber(oltp_index_updates or 1)
+   oltp_non_index_updates = tonumber(oltp_non_index_updates or 1)
 
    if (oltp_auto_inc == 'off') then
       oltp_auto_inc = false
@@ -151,4 +151,25 @@ function set_vars()
       oltp_skip_trx = false
    end
 
+   print_lock = 0
 end
+
+
+function log_info(msg)
+   prefix = os.date("%Y/%m/%d %H:%M:%S [info] ")
+   while print_lock > 0 do
+   end
+   print_lock = 1
+   print(prefix .. msg)
+   print_lock = 0
+end
+
+function log_error(msg)
+   prefix = os.date("%Y/%m/%d %H:%M:%S [error] ")
+   while print_lock > 0 do
+   end
+   print_lock = 1
+   print(prefix .. msg)
+   print_lock = 0
+end
+
