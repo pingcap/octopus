@@ -1,9 +1,8 @@
 package suite
 
 import (
+	"log"
 	"testing"
-
-	"github.com/ngaut/log"
 
 	. "github.com/pingcap/octopus/benchbot/common"
 )

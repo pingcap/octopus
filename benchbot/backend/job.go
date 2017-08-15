@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 	"golang.org/x/net/context"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
@@ -105,7 +105,7 @@ func (job *BenchmarkJob) Run(suites []BenchSuite, clusters *ClusterManager) erro
 	if err != nil {
 		return err
 	}
-	defer cluster.Stop()
+	defer cluster.Close()
 
 	if err := job.run(suites, cluster); err != nil {
 		return err

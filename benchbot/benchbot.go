@@ -9,7 +9,9 @@ import (
 	"path"
 	"syscall"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/ngaut/log"
+
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/suite"
@@ -22,18 +24,34 @@ var (
 )
 
 const (
-	logFileName string = "benchbot.log"
+	serverLogFileName string = "server.log"
+	clientLogFileName string = "client.log"
 )
 
 func initLogger(cfg *backend.ServerConfig) error {
 	if err := os.MkdirAll(cfg.Dir, os.ModePerm); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(cfg.LogDir, os.ModePerm); err != nil {
+		return err
+	}
 
-	logFilepath := path.Join(cfg.Dir, logFileName)
+	clientPath := path.Join(cfg.LogDir, clientLogFileName)
 	log.SetRotateByDay()
 	log.SetHighlighting(false)
-	return log.SetOutputByName(logFilepath)
+	if err := log.SetOutputByName(clientPath); err != nil {
+		return err
+	}
+
+	serverPath := path.Join(cfg.LogDir, serverLogFileName)
+	serverFile, err := os.OpenFile(serverPath, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		return err
+	}
+	logrus.SetOutput(serverFile)
+	logrus.SetLevel(logrus.InfoLevel)
+
+	return nil
 }
 
 func main() {

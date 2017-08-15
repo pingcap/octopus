@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 )
 
 func RunBenchCase(c BenchCase, db *sql.DB) (*CaseResult, error) {

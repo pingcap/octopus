@@ -11,18 +11,21 @@ import (
 const (
 	defaultPort       = 20170
 	defaultDir        = "."
+	defaultLogDir     = "logs"
 	defaultAnsibleDir = "ansible"
 )
 
 type ServerConfig struct {
 	Port    int            `toml:"port"`
 	Dir     string         `toml:"dir"`
+	LogDir  string         `toml:"log_dir"`
 	Ansible *AnsibleConfig `toml:"ansible"`
 }
 
 func (cfg *ServerConfig) adjust() {
 	adjustInt(&cfg.Port, defaultPort)
 	adjustStr(&cfg.Dir, defaultDir)
+	adjustStr(&cfg.LogDir, defaultLogDir)
 	adjustStr(&cfg.Ansible.Dir, defaultAnsibleDir)
 }
 

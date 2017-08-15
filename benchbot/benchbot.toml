@@ -1,5 +1,6 @@
 port = 20170
 dir = "."
+log_dir = "logs"
 
 [ansible]
 dir = "ansible"
