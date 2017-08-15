@@ -56,7 +56,6 @@ func (s *SysbenchSimpleSuite) run(db *sql.DB) ([]*CaseResult, error) {
 	}
 
 	cases := []BenchCase{
-		NewSysbenchCountCase(s),
 		NewSysbenchSelectCase(s),
 		NewSysbenchDeleteCase(s),
 		NewSysbenchInsertCase(s),
@@ -77,8 +76,8 @@ func (s *SysbenchSimpleSuite) prepare(db *sql.DB) error {
 		if err := db.QueryRow(stmt).Scan(&count); err != nil {
 			return err
 		}
-		if count != c.cfg.TableSize {
-			return fmt.Errorf("expect count %d, found %d", c.cfg.TableSize, count)
+		if count != s.cfg.TableSize {
+			return fmt.Errorf("expect count %d, found %d", s.cfg.TableSize, count)
 		}
 	}
 
