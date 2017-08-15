@@ -28,3 +28,8 @@ num_requests = 100000
 num_tables = 10
 num_threads = 100
 num_requests = 100000
+
+[suites.tpch]
+host = "127.0.0.1"
+port = 4000
+scripts_dir = "tpch_scripts"
