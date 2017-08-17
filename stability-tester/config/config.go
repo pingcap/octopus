@@ -51,7 +51,7 @@ type Config struct {
 	Nemeses      NemesesConfig      `toml:"nemeses"`
 	Suite        SuiteConfig        `toml:"suite"`
 	MVCC         MVCCSuiteConfig    `toml:"mvcc"`
-	SpecialSuite SpecialSuiteConfig `toml:"special_suite"`
+	SerialSuite SerialSuiteConfig `toml:"serial_suite"`
 	Scheduler    SchedulerConfig    `toml:"scheduler"`
 
 	Metric MetricConfig `toml:"metric"`

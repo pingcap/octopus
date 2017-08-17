@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package special_suite
+package serial_suite
 
 import (
 	"github.com/juju/errors"
@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// Case is a special test case for running cluster.
+// Case is a serial test case for running cluster.
 type Case interface {
 	// Initialize initializes the case.
 	// Because the initialization may take a lot of time,
@@ -46,12 +46,12 @@ func RegisterSuite(name string, f SuiteMaker) error {
 	return nil
 }
 
-// InitSuite initializes all special suites.
+// InitSuite initializes all serial suites.
 func InitSuite(ctx context.Context, cfg *config.Config) []Case {
-	suiteCases := make([]Case, 0, len(cfg.SpecialSuite.Names))
+	suiteCases := make([]Case, 0, len(cfg.SerialSuite.Names))
 
 	// Create all cases and initialize them.
-	for _, name := range cfg.SpecialSuite.Names {
+	for _, name := range cfg.SerialSuite.Names {
 		suiteM, ok := suites[name]
 		if !ok {
 			log.Warnf("Not found this Suite Case: %s", name)
@@ -69,7 +69,7 @@ func InitSuite(ctx context.Context, cfg *config.Config) []Case {
 	return suiteCases
 }
 
-// RunSuite runs all special suites.
+// RunSuite runs all serial suites.
 func RunSuite(ctx context.Context, suiteCases []Case) {
 	if len(suiteCases) == 0 {
 		return

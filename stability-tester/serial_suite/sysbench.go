@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package special_suite
+package serial_suite
 
 import (
 	"bytes"
@@ -40,7 +40,7 @@ type SysbenchCase struct {
 // NewSysbenchCase returns the SysbenchCase.
 func NewSysbenchCase(cfg *config.Config) Case {
 	return &SysbenchCase{
-		cfg:      &cfg.SpecialSuite.Sysbench,
+		cfg:      &cfg.SerialSuite.Sysbench,
 		host:     cfg.Host,
 		port:     cfg.Port,
 		user:     cfg.User,

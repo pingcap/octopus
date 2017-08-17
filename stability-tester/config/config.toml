@@ -74,10 +74,10 @@ concurrency = 10
 num_accounts = 10000
 interval = "1s"
 
-[special_suite]
+[serial_suite]
 names = ["sysbench"]
 
-[special_suite.sysbench] 
+[serial_suite.sysbench] 
 table_count = 8
 table_size = 1000000
 threads = 8 

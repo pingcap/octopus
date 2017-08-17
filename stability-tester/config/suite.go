@@ -83,8 +83,9 @@ type MVCCSuiteConfig struct {
 	Bank        BankCaseConfig `toml:"bank"`
 }
 
-// SpecialSuiteConfig is the configuration for all special test cases
-type SpecialSuiteConfig struct {
+// SerialSuiteConfig is the configuration for all serial test cases
+//SerialSuite is suitable for some cases that only need one goroutine to run
+type SerialSuiteConfig struct {
 	// Names contains all cases to be run later
 	Names    []string       `toml:"names"`
 	Sysbench SysbenchConfig `toml:"sysbench"`
