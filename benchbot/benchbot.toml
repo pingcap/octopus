@@ -19,18 +19,8 @@ num_requests = 100000
 min_block_size = 3000
 max_block_size = 4000
 
-[suites.sysbench-oltp]
-table_size = 100000
-num_tables = 10
-num_threads = 100
-num_requests = 100000
-
-[suites.sysbench-simple]
-num_tables = 10
-num_threads = 100
-num_selects = 100000
-num_inserts = 100000
-num_deletes = 100000
+[suites.sysbench]
+scripts_dir = "sysbench"
 
 [suites.tpch]
 host = "127.0.0.1"

@@ -13,7 +13,7 @@ type rawKV struct {
 }
 
 func (c *rawKV) Close() error {
-	return nil
+	return c.db.Close()
 }
 
 func (c *rawKV) ReadRow(id uint64) (bool, error) {
