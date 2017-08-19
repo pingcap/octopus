@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/toml"
+	log "github.com/Sirupsen/logrus"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 )
@@ -33,6 +34,7 @@ func NewBenchSuites(fpath string) ([]BenchSuite, error) {
 	suites := make([]BenchSuite, 0)
 	for name, value := range cfgs.Suites {
 		if builder, ok := benchSuiteBuilders[name]; ok {
+			log.Infof("add bench suite %s", name)
 			suites = append(suites, builder(meta, value))
 		}
 	}
