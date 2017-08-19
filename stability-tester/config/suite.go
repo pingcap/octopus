@@ -82,3 +82,22 @@ type MVCCSuiteConfig struct {
 	Concurrency int            `toml:"concurrency"`
 	Bank        BankCaseConfig `toml:"bank"`
 }
+
+// SerialSuiteConfig is the configuration for all serial test cases
+//SerialSuite is suitable for some cases that only need one goroutine to run
+type SerialSuiteConfig struct {
+	// Names contains all cases to be run later
+	Names    []string       `toml:"names"`
+	Sysbench SysbenchConfig `toml:"sysbench"`
+}
+
+// SysbenchConfig is for sysbench test case
+type SysbenchConfig struct {
+	TableCount int      `toml:"table_count"`
+	TableSize  int      `toml:"table_size"`
+	Threads    int      `toml:"threads"`
+	MaxTime    int      `toml:"max_time"`
+	Interval   Duration `toml:"interval"`
+	DBName     string   `toml:"database"`
+	LuaPath    string   `toml:"lua_path"`
+}

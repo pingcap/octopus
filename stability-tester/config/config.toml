@@ -74,6 +74,18 @@ concurrency = 10
 num_accounts = 10000
 interval = "1s"
 
+[serial_suite]
+names = ["sysbench"]
+
+[serial_suite.sysbench] 
+table_count = 8
+table_size = 1000000
+threads = 8 
+max_time = 1800 
+interval = "1h"
+database = "sbtest"
+lua_path = "./sysbench_lua"
+
 [metric]
 job = "stability_test"
 address = ""
