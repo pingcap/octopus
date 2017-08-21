@@ -64,7 +64,7 @@ func NewStatHistogram(h *hdrhistogram.Histogram, percent float64) StatHistogram 
 		AvgMs:        roundF64(h.Mean()),
 		MaxMs:        roundF64(float64(h.Max())),
 		Percentile:   roundF64(percent),
-		PercentileMs: roundF64(float64(h.ValueAtQuantile(percent))),
+		PercentileMs: roundF64(float64(h.ValueAtQuantile(percent * 100))),
 	}
 }
 
@@ -98,7 +98,7 @@ func (s *StatManager) Close() {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	s.stat.Update(time.Since(s.start), NewStatHistogram(s.hist, 95))
+	s.stat.Update(time.Since(s.start), NewStatHistogram(s.hist, 0.95))
 }
 
 func (s *StatManager) Result() *StatResult {
