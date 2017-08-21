@@ -68,7 +68,7 @@ func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*C
 		endRequests = int(math.Min(float64(endRequests), float64(numRequests)))
 
 		go func(id, requests int) {
-			rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+			rander := rand.New(rand.NewSource(int64(id) + int64(time.Now().UnixNano())))
 			for i := 0; i < requests; i++ {
 				start := time.Now()
 				op, err := exec(rander)
@@ -102,7 +102,7 @@ func ParallelSQLBench(c BenchCase, exec SQLBenchFunc, numThreads, numRequests in
 		endRequests = int(math.Min(float64(endRequests), float64(numRequests)))
 
 		go func(id, requests int) {
-			rander := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+			rander := rand.New(rand.NewSource(int64(id) + int64(time.Now().UnixNano())))
 			for i := 0; i < requests; i++ {
 				if err := exec(stdb, rander); err != nil {
 					log.Errorf("[case:%s] exec: %s", c.Name(), err)

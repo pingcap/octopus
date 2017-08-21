@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
@@ -89,15 +91,6 @@ func (hdl *BenchmarkHandler) Plan(w http.ResponseWriter, r *http.Request) {
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 }
 
-func (hdl *BenchmarkHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
-	jobs := hdl.svr.ListJobs(defaultListJobsSize)
-	resp := make([]*BasicInfo, 0, len(jobs))
-	for _, job := range jobs {
-		resp = append(resp, NewBasicInfo(job))
-	}
-	hdl.rdr.JSON(w, http.StatusOK, resp)
-}
-
 func (hdl *BenchmarkHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 	inDetail := len(r.URL.Query().Get("detail")) > 0
 
@@ -144,7 +137,39 @@ func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 	hdl.rdr.JSON(w, http.StatusOK, "OK")
 }
 
-func (hdl *BenchmarkHandler) GetGlobalStatus(w http.ResponseWriter, r *http.Request) {
+func (hdl *BenchmarkHandler) GetJobs(w http.ResponseWriter, r *http.Request) {
+	vars := strings.Split(mux.Vars(r)["ids"], ",")
+	ids := make([]int, 0, len(vars))
+	for _, v := range vars {
+		if id, err := strconv.ParseInt(v, 10, 64); err != nil {
+			continue
+		} else {
+			ids = append(ids, int(id))
+		}
+	}
+
+	sort.Ints(ids)
+
+	jobs := make([]*BenchmarkJob, 0, len(ids))
+	for _, id := range ids {
+		if job := hdl.svr.GetJob(int64(id)); job != nil {
+			jobs = append(jobs, job)
+		}
+	}
+
+	hdl.rdr.JSON(w, http.StatusOK, jobs)
+}
+
+func (hdl *BenchmarkHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
+	jobs := hdl.svr.ListJobs(defaultListJobsSize)
+	resp := make([]*BasicInfo, 0, len(jobs))
+	for _, job := range jobs {
+		resp = append(resp, NewBasicInfo(job))
+	}
+	hdl.rdr.JSON(w, http.StatusOK, resp)
+}
+
+func (hdl *BenchmarkHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	status := hdl.svr.Status()
 	resp := map[string]interface{}{
 		"total_count":   status.TotalCount,
