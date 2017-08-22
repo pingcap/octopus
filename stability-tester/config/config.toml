@@ -1,131 +1,136 @@
 # if empty, disable TiDB SQL tests
-host = "10.2.1.2"
-port = 54000
+host = "172.16.10.49"
+port = 4000
 user = "root"
 password = ""
 
 # if empty, disable MVCC tests
 pd = ""
 
-[nemeses]
-wait = "1m"
-ranges = ["one"]
+#[nemeses]
+#wait = "5m"
+#ranges = ["one"]
 
-[nemeses.targets]
-pd = ["pd-2"]
-tikv = ["tikv-3", "tikv-4", "tikv-5", "tikv-6", "tikv-7"]
-tidb = ["tidb-2"]
+#[nemeses.targets]
+#pd = ["pd-1"]
+#tikv = ["tikv-1","tikv-2","tikv-3"]
+#tidb = ["tidb-1"]
 
-[nemeses.cfgs]
-kill = """
-wait = "30s"
-"""
-lantency = """
-wait = "1m"
-dev = "eth0"
-lantency = 30
-range = 5
-"""
+#[nemeses.cfgs]
+#kill = """
+#wait = "30s"
+#"""
+#lantency = """
+#wait = "1m"
+#dev = "eth0"
+#lantency = 30
+#range = 5
+#"""
+#[scheduler]
+#pd = ["http://172.16.10.100:12379","http://172.16.10.101:12379","http://172.16.10.102:12379"]
+#shuffle-leader = true
+#shuffle-region = false
 
-[scheduler]
-# pd = ["http://127.0.0.1:2379"]
-# shuffle-leader = false
-# shuffle-region = false
+#[suite]
+#names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
+#names = ["bank","bank2","ledger","crud"]
+#concurrency = 1000
 
-[suite]
-names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
-concurrency = 10000
+#[suite.bank]
+#num_accounts = 10000000
+#interval = "2s"
+#table_num = 1
 
-[suite.bank]
-num_accounts = 100000000
-interval = "2s"
-table_num = 1
+#[suite.bank2]
+#num_accounts = 100000
+#interval = "2s"
+#contention = "low"
 
-[suite.bank2]
-num_accounts = 100000000
-interval = "2s"
-contention = "low"
+#[suite.ledger]
+#num_accounts = 100
+#interval = "2s"
 
-[suite.ledger]
-num_accounts = 10
-interval = "2s"
+#[suite.crud]
+#user_count = 1000
+#post_count = 10000
+#update_users = 20
+#update_posts = 200
+#interval = "2s"
 
-[suite.crud]
-user_count = 1000
-post_count = 10000
-update_users = 20
-update_posts = 200
-interval = "2s"
+#[suite.log]
+#max_count = 100000000
+#delete_count = 100000
+#interval = "2s"
+#table_num = 1
 
-[suite.log]
-max_count = 100000000
-delete_count = 100000
-interval = "2s"
-table_num = 1
+#[suite.block_writer]
+#table_num = 1
 
-[suite.block_writer]
-table_num = 1
+# [mvcc]
+# names = ["bank"]
+# concurrency = 10
 
-[mvcc]
-names = ["bank"]
-concurrency = 10
+# [mvcc.bank]
+# num_accounts = 10000
+# interval = "1s"
+[serial_suite] 
+names = ["sqllogic"] 
 
-[mvcc.bank]
-num_accounts = 10000
-interval = "1s"
-
-[serial_suite]
-names = ["sysbench"]
-
-[serial_suite.sysbench] 
-table_count = 8
-table_size = 1000000
-threads = 8 
-max_time = 1800 
+ 
+#[serial_suite.sysbench]  
+#table_count = 8 
+#table_size = 1000000 
+#threads = 8  
+#max_time = 1800  
+#interval = "1h" 
+#database = "sbtest" 
+#lua_path = "./sysbench_lua" 
+[serial_suite.sqllogic]
+testpath = "/home/pingcap/lxc/GOPATH/src/github.com/pingcap/octopus/stability-tester/serial_suite/test"
+binpath = "/home/pingcap/lxc/GOPATH/src/github.com/pingcap/octopus/stability-tester/serial_suite/sqllogic"
+log_level = "error"
+skip_error = "false"
 interval = "1h"
-database = "sbtest"
-lua_path = "./sysbench_lua"
-
 [metric]
-job = "stability_test"
+job = "test"
 address = ""
 interval = "5s"
 
 [cluster.ssh]
 user = "pingcap"
 port = 22
+##############################
+[[cluster.services]]
+name = "pd-1"
+host = "172.16.10.49"
+type = "ansible"
+path = "/data1/new_test"
+
+
+##############################
+[[cluster.services]]
+name = "tikv-1"
+host = "172.16.10.50"
+type = "ansible"
+path = "/data1/new_test"
 
 [[cluster.services]]
-name = "pd-2"
-host = "10.2.1.2"
-type = "docker"
+name = "tikv-2"
+host = "172.16.10.61"
+type = "ansible"
+path = "/data1/new_test"
 
 [[cluster.services]]
 name = "tikv-3"
-host = "10.2.1.3"
-type = "docker"
+host = "172.16.10.62"
+type = "ansible"
+path = "/data1/new_test"
 
-[[cluster.services]]
-name = "tikv-4"
-host = "10.2.1.4"
-type = "docker"
 
+##############################
 [[cluster.services]]
-name = "tikv-5"
-host = "10.2.1.5"
-type = "docker"
+name = "tidb-1"
+host = "172.16.10.49"
+type = "ansible"
+path = "/data1/new_test"
 
-[[cluster.services]]
-name = "tikv-6"
-host = "10.2.1.6"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-7"
-host = "10.2.1.7"
-type = "docker"
-
-[[cluster.services]]
-name = "tidb1"
-host = "10.2.1.2"
-type = "docker"
