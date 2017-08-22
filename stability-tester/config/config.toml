@@ -86,6 +86,14 @@ interval = "1h"
 database = "sbtest"
 lua_path = "./sysbench_lua"
 
+#skip_error can be true when test
+[serial_suite.sqllogic]
+testpath = "./test"
+binpath = "./sqllogic_test"
+log_level = "info"
+skip_error = "true"
+interval = "2h"
+
 [metric]
 job = "stability_test"
 address = ""

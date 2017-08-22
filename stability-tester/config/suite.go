@@ -89,6 +89,7 @@ type SerialSuiteConfig struct {
 	// Names contains all cases to be run later
 	Names    []string       `toml:"names"`
 	Sysbench SysbenchConfig `toml:"sysbench"`
+	Sqllogic SqllogicConfig `toml:"sqllogic"`
 }
 
 // SysbenchConfig is for sysbench test case
@@ -101,3 +102,13 @@ type SysbenchConfig struct {
 	DBName     string   `toml:"database"`
 	LuaPath    string   `toml:"lua_path"`
 }
+
+//SqllogicConfig for sqllogic test
+type SqllogicConfig struct{
+        Testpath    string      `toml:"testpath"`
+        Binpath    string       `toml:"binpath"`
+        LogLevel   string       `toml:"log_level"`
+        SkipError  string       `toml:"skip_error"`
+	Interval   Duration     `toml:"interval"`
+}
+
