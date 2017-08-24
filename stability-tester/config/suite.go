@@ -87,9 +87,8 @@ type MVCCSuiteConfig struct {
 //SerialSuite is suitable for some cases that only need one goroutine to run
 type SerialSuiteConfig struct {
 	// Names contains all cases to be run later
-	Names        []string           `toml:"names"`
-	Sysbench     SysbenchConfig     `toml:"sysbench"`
-	Sqllogictest SqllogictestConfig `toml:"sqllogic_test"`
+	Names    []string       `toml:"names"`
+	Sysbench SysbenchConfig `toml:"sysbench"`
 }
 
 // SysbenchConfig is for sysbench test case
@@ -101,12 +100,4 @@ type SysbenchConfig struct {
 	Interval   Duration `toml:"interval"`
 	DBName     string   `toml:"database"`
 	LuaPath    string   `toml:"lua_path"`
-}
-
-// SqllogictestConfig is for sqllogic_test test case
-type SqllogictestConfig struct {
-	TestPath  string `toml:"test_path"`
-	SkipError bool   `toml:"skipError"`
-	Parallel  int    `toml:"parallel"`
-	DBName    string `toml:"database"`
 }
