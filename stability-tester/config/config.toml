@@ -56,7 +56,7 @@ num_accounts = 10000
 interval = "1s"
 
 [serial_suite]
-names = ["sysbench", "sqllogic_test"]
+names = ["sysbench"]
 
 [serial_suite.sysbench] 
 table_count = 8
@@ -66,13 +66,6 @@ max_time = 1800
 interval = "1h"
 database = "sbtest"
 lua_path = "./sysbench_lua"
-
-
-[serial_suite.sqllogic_test] 
-test_path = "./sqllogic_test"
-parallel = 8
-skipError = false
-database = "test"
 
 [metric]
 job = "stability_test"
