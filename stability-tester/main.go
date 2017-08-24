@@ -13,10 +13,8 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/octopus/stability-tester/cluster"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/mvcc_suite"
-	"github.com/pingcap/octopus/stability-tester/nemesis"
 	"github.com/pingcap/octopus/stability-tester/serial_suite"
 	"github.com/pingcap/octopus/stability-tester/suite"
 	"github.com/pingcap/tidb"
@@ -124,7 +122,7 @@ func main() {
 	}
 
 	// Run all nemeses in background.
-	go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
+	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
 
 	go config.RunConfigScheduler(&cfg.Scheduler)
 

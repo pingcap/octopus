@@ -7,25 +7,6 @@ password = ""
 # if empty, disable MVCC tests
 pd = ""
 
-[nemeses]
-wait = "1m"
-ranges = ["one"]
-
-[nemeses.targets]
-pd = ["pd-2"]
-tikv = ["tikv-3", "tikv-4", "tikv-5", "tikv-6", "tikv-7"]
-tidb = ["tidb-2"]
-
-[nemeses.cfgs]
-kill = """
-wait = "30s"
-"""
-lantency = """
-wait = "1m"
-dev = "eth0"
-lantency = 30
-range = 5
-"""
 
 [scheduler]
 # pd = ["http://127.0.0.1:2379"]
@@ -91,41 +72,4 @@ job = "stability_test"
 address = ""
 interval = "5s"
 
-[cluster.ssh]
-user = "pingcap"
-port = 22
 
-[[cluster.services]]
-name = "pd-2"
-host = "10.2.1.2"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-3"
-host = "10.2.1.3"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-4"
-host = "10.2.1.4"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-5"
-host = "10.2.1.5"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-6"
-host = "10.2.1.6"
-type = "docker"
-
-[[cluster.services]]
-name = "tikv-7"
-host = "10.2.1.7"
-type = "docker"
-
-[[cluster.services]]
-name = "tidb1"
-host = "10.2.1.2"
-type = "docker"

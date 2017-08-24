@@ -47,8 +47,8 @@ type Config struct {
 	Password string `toml:"password"`
 	PD       string `toml:"pd"`
 
-	Cluster     ClusterConfig     `toml:"cluster"`
-	Nemeses     NemesesConfig     `toml:"nemeses"`
+	// Cluster ClusterConfig `toml:"cluster"`
+	// Nemeses     NemesesConfig     `toml:"nemeses"`
 	Suite       SuiteConfig       `toml:"suite"`
 	MVCC        MVCCSuiteConfig   `toml:"mvcc"`
 	SerialSuite SerialSuiteConfig `toml:"serial_suite"`
@@ -65,7 +65,7 @@ func ParseConfig(path string) (*Config, error) {
 	}
 
 	// adjust Cluster.
-	cfg.Cluster.adjust()
+	// cfg.Cluster.adjust()
 
 	return cfg, nil
 }
