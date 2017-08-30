@@ -102,12 +102,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 			args := make([]string, batchSize)
 
 			for {
-				var (
-					startIndex int
-					ok         bool
-				)
-
-				startIndex, ok = <-ch
+				startIndex, ok := <-ch
 				if !ok {
 					return
 				}
