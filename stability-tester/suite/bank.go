@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	defaultVerifyTimeout = 20 * time.Minute
+	defaultVerifyTimeout = 24 * time.Hour
 )
 
 // BackCase is for concurrent balance transfer.
