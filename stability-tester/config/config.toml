@@ -18,12 +18,12 @@ names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
 concurrency = 10000
 
 [suite.bank]
-num_accounts = 100000000
+num_accounts = 10000000
 interval = "2s"
 table_num = 1
 
 [suite.bank2]
-num_accounts = 100000000
+num_accounts = 10000000
 interval = "2s"
 contention = "low"
 
@@ -58,17 +58,17 @@ interval = "1s"
 [serial_suite]
 names = ["sysbench", "sqllogic_test"]
 
-[serial_suite.sysbench] 
+[serial_suite.sysbench]
 table_count = 8
 table_size = 1000000
-threads = 8 
-max_time = 1800 
+threads = 8
+max_time = 1800
 interval = "1h"
 database = "sbtest"
 lua_path = "./sysbench_lua"
 
 
-[serial_suite.sqllogic_test] 
+[serial_suite.sqllogic_test]
 test_path = "./sqllogictest"
 parallel = 8
 skipError = true
