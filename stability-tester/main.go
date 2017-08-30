@@ -95,7 +95,7 @@ func main() {
 		sig := <-sc
 		log.Infof("Got signal [%d] to exit.", sig)
 		cancel()
-
+		wg.Wait()
 		if db != nil {
 			db.Close()
 		}
@@ -118,6 +118,7 @@ func main() {
 		go func() {
 			wg.Add(1)
 			defer wg.Done()
+			log.Info("run suits case")
 			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
 		}()
 
@@ -127,6 +128,7 @@ func main() {
 		go func() {
 			wg.Add(1)
 			defer wg.Done()
+			log.Info("run serial suits")
 			serial_suite.RunSuite(ctx, SerialSuites)
 		}()
 	}
@@ -145,6 +147,7 @@ func main() {
 		go func() {
 			wg.Add(1)
 			defer wg.Done()
+			log.Info("run mvcc suits")
 			mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
 		}()
 	}
@@ -153,5 +156,6 @@ func main() {
 	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
 
 	go config.RunConfigScheduler(&cfg.Scheduler)
+	time.Sleep(3 * time.Second)
 	wg.Wait()
 }

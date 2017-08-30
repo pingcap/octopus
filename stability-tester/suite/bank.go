@@ -56,6 +56,11 @@ func NewBankCase(cfg *config.Config) Case {
 // Initialize implements Case Initialize interface.
 func (c *BankCase) Initialize(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		err := c.initDB(ctx, db, i)
 		if err != nil {
 			return err
@@ -98,9 +103,12 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 			args := make([]string, batchSize)
 
 			for {
-				startIndex, ok := <-ch
-				if !ok {
+				var startIndex int
+				select {
+				case <-ctx.Done():
+					log.Info("exit bank initialization")
 					return
+				case startIndex = <-ch:
 				}
 
 				start := time.Now()
@@ -127,7 +135,12 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	}
 
 	for i := 0; i < jobCount; i++ {
-		ch <- i * batchSize
+		select {
+		case <-ctx.Done():
+			log.Info("exit bank initialization")
+			i = jobCount
+		case ch <- i * batchSize:
+		}
 	}
 
 	wg.Wait()
