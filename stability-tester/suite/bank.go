@@ -95,21 +95,27 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	// Insert batchSize values in one SQL.
 	batchSize := 100
 	jobCount := c.cfg.NumAccounts / batchSize
-
+	wg.Add(jobCount)
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.concurrency; i++ {
 		go func() {
-			wg.Add(1)
-			defer wg.Done()
 			args := make([]string, batchSize)
 
 			for {
-				var startIndex int
+				var (
+					startIndex int
+					ok         bool
+				)
+
+				startIndex, ok = <-ch
+				if !ok {
+					return
+				}
 				select {
 				case <-ctx.Done():
-					log.Info("exit bank initialization")
-					return
-				case startIndex = <-ch:
+					wg.Done()
+					continue
+				default:
 				}
 
 				start := time.Now()
@@ -129,17 +135,13 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 
 				log.Infof("[%s] insert %d accounts%s, takes %s", c, batchSize, index, time.Now().Sub(start))
+				wg.Done()
 			}
 		}()
 	}
 
 	for i := 0; i < jobCount; i++ {
-		select {
-		case <-ctx.Done():
-			log.Info("exit bank initialization")
-			i = jobCount
-		case ch <- i * batchSize:
-		}
+		ch <- i * batchSize
 	}
 
 	wg.Wait()
