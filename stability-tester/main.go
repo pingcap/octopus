@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -75,6 +76,7 @@ func main() {
 	var (
 		db    *sql.DB
 		store kv.Storage
+		wg    sync.WaitGroup
 	)
 
 	// Run all cases, and nemeses
@@ -89,6 +91,20 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
+	go func() {
+		sig := <-sc
+		log.Infof("Got signal [%d] to exit.", sig)
+		cancel()
+
+		if db != nil {
+			db.Close()
+		}
+
+		if store != nil {
+			store.Close()
+		}
+	}()
+
 	// Create the database and run TiDB cases
 	if len(cfg.Host) > 0 {
 		db, err = openDB(cfg)
@@ -99,12 +115,20 @@ func main() {
 		// Initialize suites.
 		suiteCases := suite.InitSuite(ctx, cfg, db)
 		// Run suites.
-		go suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
+		}()
 
 		// Initialize serial suites
 		SerialSuites := serial_suite.InitSuite(ctx, cfg)
 		// Run serial suites
-		go serial_suite.RunSuite(ctx, SerialSuites)
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+			serial_suite.RunSuite(ctx, SerialSuites)
+		}()
 	}
 
 	// Create the TiKV storage and run MVCC cases
@@ -118,24 +142,16 @@ func main() {
 		// Initialize suites.
 		suiteCases := mvcc_suite.InitSuite(ctx, cfg, store)
 		// Run suites.
-		go mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+			mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
+		}()
 	}
 
 	// Run all nemeses in background.
 	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
 
 	go config.RunConfigScheduler(&cfg.Scheduler)
-
-	sig := <-sc
-	log.Infof("Got signal [%d] to exit.", sig)
-
-	cancel()
-
-	if db != nil {
-		db.Close()
-	}
-
-	if store != nil {
-		store.Close()
-	}
+	wg.Wait()
 }

@@ -84,7 +84,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
         amount BIGINT NOT NULL,
         tso BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY(id))`)
-	time.Sleep(10*time.Second)
 	var wg sync.WaitGroup
 
 	// TODO: fix the error is NumAccounts can't be divided by batchSize.
