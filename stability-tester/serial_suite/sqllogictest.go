@@ -618,7 +618,7 @@ func doResult(resultChan chan *result, startTime time.Time) int64 {
 			printResultInfo("run", totalCount, errCount, startTime)
 		case msg, ok := <-resultChan:
 			if !ok {
-				fmt.Println("\nsqllogictest finished!")
+				log.Infof("\nsqllogictest finished!")
 				printResultInfo("final", totalCount, errCount, startTime)
 				return errCount
 			}
@@ -645,7 +645,7 @@ func printResultInfo(tag string, totalCount, errCount int64, startTime time.Time
 		qps = totalCount / seconds
 	}
 
-	fmt.Printf("[%s]total %d cases, failed %d, cost %d seconds, qps %d, start %s, now %s\n", tag, totalCount, errCount, seconds, qps, startTime, now)
+	log.Infof("[%s]total %d cases, failed %d, cost %d seconds, qps %d, start %s, now %s\n", tag, totalCount, errCount, seconds, qps, startTime, now)
 }
 
 func (v *value) Scan(src interface{}) error {
