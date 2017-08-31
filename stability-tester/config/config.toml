@@ -72,7 +72,7 @@ batch_size = 10
 concurrency = 32
 table_count = 16
 items = 100
-sleep_time = 1200
+sleep_time = 60
 
 [metric]
 job = "stability_test"

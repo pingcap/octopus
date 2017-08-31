@@ -20,14 +20,13 @@ type SuiteConfig struct {
 	// Names contains all cases to be run later.
 	Names []string `toml:"names"`
 	// Concurrency is the concurrency to run all cases.
-	Concurrency  int                    `toml:"concurrency"`
-	Bank         BankCaseConfig         `toml:"bank"`
-	Bank2        Bank2CaseConfig        `toml:"bank2"`
-	Ledger       LedgerConfig           `toml:"ledger"`
-	CRUD         CRUDCaseConfig         `toml:"crud"`
-	Log          LogCaseConfig          `toml:"log"`
-	BlockWriter  BlockWriterCaseConfig  `toml:"block_writer"`
-	ReclaimSpace ReclaimSpaceCaseConfig `toml:"reclaim_space"`
+	Concurrency int                   `toml:"concurrency"`
+	Bank        BankCaseConfig        `toml:"bank"`
+	Bank2       Bank2CaseConfig       `toml:"bank2"`
+	Ledger      LedgerConfig          `toml:"ledger"`
+	CRUD        CRUDCaseConfig        `toml:"crud"`
+	Log         LogCaseConfig         `toml:"log"`
+	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
 }
 
 // BankCaseConfig is for bank test case.
@@ -88,8 +87,9 @@ type MVCCSuiteConfig struct {
 //SerialSuite is suitable for some cases that only need one goroutine to run
 type SerialSuiteConfig struct {
 	// Names contains all cases to be run later
-	Names    []string       `toml:"names"`
-	Sysbench SysbenchConfig `toml:"sysbench"`
+	Names        []string               `toml:"names"`
+	Sysbench     SysbenchConfig         `toml:"sysbench"`
+	ReclaimSpace ReclaimSpaceCaseConfig `toml:"reclaim_space"`
 }
 
 // SysbenchConfig is for sysbench test case

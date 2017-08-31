@@ -15,6 +15,7 @@ package serial_suite
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -33,21 +34,22 @@ import (
 // ReclaimSpaceCase simulates a case which creates tables,
 // inserts data into tables and drops tables repeadedly.
 type ReclaimSpaceCase struct {
-	cfg       *config.ReclaimSpaceCaseConfig
-	host      string
-	port      int
-	user      string
-	password  string
-	pd        string
-	db        *sql.DB
-	store     kv.Storage
-	keyRanges []kv.KeyRange
+	cfg          *config.ReclaimSpaceCaseConfig
+	host         string
+	port         int
+	user         string
+	password     string
+	pd           string
+	db           *sql.DB
+	store        kv.Storage
+	pendingTasks []kv.KeyRange
+	maxTaskTS    uint64
 }
 
 // NewReclaimSpaceCase creates a ReclaimSpaceCase.
 func NewReclaimSpaceCase(cfg *config.Config) Case {
 	return &ReclaimSpaceCase{
-		cfg:      &cfg.Suite.ReclaimSpace,
+		cfg:      &cfg.SerialSuite.ReclaimSpace,
 		host:     cfg.Host,
 		port:     cfg.Port,
 		user:     cfg.User,
@@ -85,28 +87,32 @@ func (c *ReclaimSpaceCase) Execute(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			default:
+				log.Info("[reclaim space] createTable")
 				if err := c.createTable(); err != nil {
 					log.Errorf("[reclaim space] fail to create tables %v", err)
 				}
 
+				log.Info("[reclaim space] insertTable")
 				if err := c.insertTable(); err != nil {
 					log.Errorf("[reclaim space] insert err %v", err)
 				}
 
+				log.Info("[reclaim space] dropTable")
 				if err := c.dropTable(); err != nil {
 					log.Errorf("[reclaim space] fail to drop tables %v", err)
 				}
 
-				time.Sleep(time.Duration(c.cfg.SleepTime) * time.Second)
-
+				log.Info("[reclaim space] checkTableExist")
 				if err := c.checkTableExist(); err != nil {
 					log.Errorf("[reclaim space] fail to check table %v", err)
 				}
 
+				log.Info("[reclaim space] checkIndexExist")
 				if err := c.checkIndexExist(); err != nil {
 					log.Errorf("[reclaim space] fail to check index %v", err)
 				}
 
+				log.Info("[reclaim space] wait drop")
 				if err := c.checkIfDrop(); err != nil {
 					log.Errorf("[reclaim space] fail to drop tables in kv %v", err)
 				}
@@ -231,29 +237,41 @@ func (c *ReclaimSpaceCase) insert() error {
 	return nil
 }
 
-func (c *ReclaimSpaceCase) getKeyRanges() ([]kv.KeyRange, error) {
-	var keyRanges []kv.KeyRange
-	q := fmt.Sprintf(`SELECT start_key, end_key FROM MYSQL.GC_DELETE_RANGE`)
+func (c *ReclaimSpaceCase) loadPendingTasks() error {
+	c.maxTaskTS = 0
+	c.pendingTasks = nil
+
+	q := fmt.Sprintf(`SELECT start_key, end_key, ts FROM MYSQL.GC_DELETE_RANGE`)
 	rows, err := c.db.Query(q)
 	if err != nil {
-		return keyRanges, errors.Trace(err)
+		return errors.Trace(err)
 	}
-
 	for rows.Next() {
-		var startKey kv.Key
-		var endKey kv.Key
-		if err := rows.Scan(&startKey, &endKey); err != nil {
-			return keyRanges, errors.Trace(err)
+		var ts uint64
+		var startKey, endKey string
+		if err := rows.Scan(&startKey, &endKey, &ts); err != nil {
+			return errors.Trace(err)
 		}
-		keyRanges = append(keyRanges, kv.KeyRange{
-			StartKey: startKey,
-			EndKey:   endKey,
+		start, err := hex.DecodeString(startKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		end, err := hex.DecodeString(endKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if c.maxTaskTS < ts {
+			c.maxTaskTS = ts
+		}
+		c.pendingTasks = append(c.pendingTasks, kv.KeyRange{
+			StartKey: start,
+			EndKey:   end,
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return keyRanges, errors.Trace(err)
+		return errors.Trace(err)
 	}
-	return keyRanges, nil
+	return nil
 }
 
 func (c *ReclaimSpaceCase) dropTable() error {
@@ -263,29 +281,38 @@ func (c *ReclaimSpaceCase) dropTable() error {
 			return errors.Trace(err)
 		}
 	}
-	keyRanges, err := c.getKeyRanges()
+	err := c.loadPendingTasks()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.keyRanges = keyRanges
 	return nil
 }
 
+func (c *ReclaimSpaceCase) isRangeDropped() (bool, error) {
+	rows, err := c.db.Query(fmt.Sprintf(`SELECT * FROM MYSQL.GC_DELETE_RANGE WHERE ts <= %v limit 1`, c.maxTaskTS))
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer rows.Close()
+	return !rows.Next(), nil
+}
+
 func (c *ReclaimSpaceCase) checkIfDrop() error {
-	q := fmt.Sprintf(`SELECT * FROM MYSQL.GC_DELETE_RANGE`)
-	results, err := c.db.Exec(q)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	num, err := results.RowsAffected()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if num != 0 {
-		panic("[reclaim space] table not dropped from sys table")
+	// Wait until ranges are dropped.
+	for {
+		ok, err := c.isRangeDropped()
+		if ok {
+			break
+		}
+		if err != nil {
+			log.Warnf("[reclaim space] check drop err: %v", err)
+		}
+		log.Infof("[reclaim space] still not dropped")
+		time.Sleep(time.Duration(c.cfg.SleepTime) * time.Second)
 	}
 
-	for _, keyrange := range c.keyRanges {
+	// All records should be gone.
+	for _, keyrange := range c.pendingTasks {
 		sk := keyrange.StartKey
 		ek := keyrange.EndKey
 		err := kv.RunInNewTxn(c.store, false, func(txn kv.Transaction) error {
@@ -294,7 +321,7 @@ func (c *ReclaimSpaceCase) checkIfDrop() error {
 				return errors.Trace(err)
 			}
 			if it.Valid() && it.Key().Cmp(ek) != 1 {
-				panic("[reclaim space] table not dropped from kv store")
+				log.Fatalf("[reclaim space] table not dropped from kv store, start: %q, end: %q", sk, ek)
 			}
 			return nil
 		})
