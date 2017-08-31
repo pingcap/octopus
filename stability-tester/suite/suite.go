@@ -16,9 +16,9 @@ package suite
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 
-	"github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
@@ -29,7 +29,7 @@ type Case interface {
 	// Initialize initializes the case.
 	// Because the initialization may take a lot of time,
 	// we may output the process periodicity.
-	Initialize(ctx context.Context, db *sql.DB) error
+	Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error
 
 	// Execute executes the case once.
 	Execute(db *sql.DB, concurrentIndex int) error
@@ -41,7 +41,6 @@ type Case interface {
 type SuiteMaker func(cfg *config.Config) Case
 
 var suites = make(map[string]SuiteMaker)
-var Log *logrus.Logger
 
 func RegisterSuite(name string, f SuiteMaker) error {
 	if _, ok := suites[name]; ok {
@@ -64,18 +63,22 @@ func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.D
 }
 
 // InitCase is init case
-func InitCase(ctx context.Context, casename string, cfg *config.Config, db *sql.DB, log *logrus.Logger) Case {
-	Log = log
-	suiteM, ok := suites[casename]
-	if !ok {
-		log.Warnf("Not found this Suite Case: %s", casename)
-		return nil
-	}
-	suiteCase := suiteM(cfg)
-	err := suiteCase.Initialize(ctx, db)
-	if err != nil {
-		Log.Fatal(err)
-	}
+func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) Case {
+	// Create all cases and initialize them.
+	for _, name := range cfg.Suite.Names {
+		suiteM, ok := suites[name]
+		if !ok {
+			log.Warnf("Not found this Suite Case: %s", name)
+			continue
+		}
+		logger := newLogger(fmt.Sprintf("%s-stability-tester.log"), name)
+		suiteCase := suiteM(cfg)
+		err := suiteCase.Initialize(ctx, db, logger)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	return suiteCase
+		suiteCases = append(suiteCases, suiteCase)
+	}
+	return suiteCases
 }

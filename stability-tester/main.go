@@ -13,8 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/suite"
 	"golang.org/x/net/context"
@@ -38,19 +37,28 @@ func openDB(cfg *config.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+func initLog() {
+	if file, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY, 0666); err == nil {
+		log.SetOutput(file)
+	} else {
+		log.Info("failed to log to file, using default stderr")
+	}
+
+	if lvl, err := log.ParseLevel(*logLevel); err != nil {
+		log.SetLevel(lvl)
+	} else {
+		log.Info("failed to set log level, use info level")
+	}
+
+	log.SetLevel(log.InfoLevel)
+}
+
 func main() {
 	// Initialize the default random number source.
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	flag.Parse()
-
-	log.SetLevelByString(*logLevel)
-	log.SetHighlighting(false)
-	if len(*logFile) > 0 {
-		log.SetOutputByName(*logFile)
-		log.SetRotateByHour()
-	}
-	log.SetLevelByString(*logLevel)
+	initLog()
 
 	go func() {
 		if err := http.ListenAndServe(*pprofAddr, nil); err != nil {
@@ -91,7 +99,6 @@ func main() {
 		if store != nil {
 			store.Close()
 		}
-		os.Exit(0)
 	}()
 
 	// Create the database and run TiDB cases
@@ -100,32 +107,15 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		initchan := make(chan int)
-		for _, name := range cfg.Suite.Names {
-			go func(name string) {
-				Log := logrus.New()
-				logfile, err := os.OpenFile(name+"tidb-stability-tester.log", os.O_CREATE|os.O_RDWR, 0666)
-				if err != nil {
-					log.Fatal(err)
-					return
-				}
-				Log.Out = logfile
-				Log.SetLevel(logrus.InfoLevel)
-				// init case one by one
-				runcase := suite.InitCase(ctx, name, cfg, db, Log)
-				if runcase == nil {
-					suite.Log.Fatalf("can not init case [%s]", name)
-				}
-				<-initchan
-				// run case
-				suite.RunCase(ctx, runcase, cfg.Suite.Concurrency, db, Log)
-			}(name)
-		}
+		// init case one by one
+		suiteCases := suite.InitCase(ctx, cfg, db)
 
-		for i := 0; i < len(cfg.Suite.Names); i++ {
-			initchan <- i
-		}
-
+		// run case
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			suite.RunCase(ctx, suiteCases, db)
+		}()
 	}
 
 	wg.Wait()

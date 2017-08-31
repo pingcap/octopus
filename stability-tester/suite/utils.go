@@ -17,8 +17,10 @@ import (
 	"context"
 	"database/sql"
 	"math/rand"
+	"os"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 )
@@ -113,4 +115,14 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 		return nil, errors.Trace(err)
 	}
 	return
+}
+
+func newLogger(filename string) *log.Logger {
+	logger := log.New()
+	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+		logger.Out = file
+	} else {
+		log.Infof("failed to log to %s, using default stderr", filename)
+	}
+	return logger
 }

@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
@@ -30,9 +31,10 @@ import (
 // LedgerCase simulates a complete record of financial transactions over the
 // life of a bank (or other company).
 type LedgerCase struct {
-	cfg  *config.LedgerConfig
-	wg   sync.WaitGroup
-	stop int32
+	cfg    *config.LedgerConfig
+	wg     sync.WaitGroup
+	stop   int32
+	logger *log.Logger
 }
 
 // NewLedgerCase returns the case for test.
@@ -63,9 +65,10 @@ TRUNCATE TABLE ledger_accounts;
 `
 
 // Initialize creates the table for ledger test.
-func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
+func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	c.logger = logger
 	if _, err := db.Exec(stmtCreate); err != nil {
-		Log.Fatal(err)
+		c.logger.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -91,12 +94,12 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 					return err
 				})
 				if err != nil {
-					Log.Fatalf("exec %s err %s", query, err)
+					c.logger.Fatalf("exec %s err %s", query, err)
 				}
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
 			}
 		}()
-		Log.Infof("[%s] insert %d accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
+		c.logger.Infof("[%s] insert %d accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
@@ -154,7 +157,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 	defer tx.Rollback()
 
 	if err = c.doPosting(tx, req); err != nil {
-		Log.Errorf("[ledger] doPosting error: %v", err)
+		c.logger.Errorf("[ledger] doPosting error: %v", err)
 		return errors.Trace(err)
 	}
 
@@ -251,13 +254,13 @@ select sum(balance) total from
 
 	ledgerVerifyDuration.Observe(time.Since(start).Seconds())
 	if total != 0 {
-		Log.Errorf("[ledger] check total balance got %v", total)
+		c.logger.Errorf("[ledger] check total balance got %v", total)
 		atomic.StoreInt32(&c.stop, 1)
 		c.wg.Wait()
-		Log.Fatalf("[ledger] check total balance got %v", total)
+		c.logger.Fatalf("[ledger] check total balance got %v", total)
 	}
 
-	Log.Infof("verify ok, cost time: %v", time.Since(start))
+	c.logger.Infof("verify ok, cost time: %v", time.Since(start))
 	return nil
 }
 

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/twinj/uuid"
 )
@@ -29,8 +30,9 @@ const blockWriterBatchSize = 20
 
 // BlockWriterCase is for concurrent writing blocks.
 type BlockWriterCase struct {
-	cfg *config.BlockWriterCaseConfig
-	bws []*blockWriter
+	cfg    *config.BlockWriterCaseConfig
+	bws    []*blockWriter
+	logger *log.Logger
 }
 
 type blockWriter struct {
@@ -107,7 +109,7 @@ func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) {
 
 	if err != nil {
 		blockWriteFailedCounter.Inc()
-		Log.Errorf("[block writer] insert err %v", err)
+		c.logger.Errorf("[block writer] insert err %v", err)
 		return
 	}
 	bw.index = (bw.index + 1) % tableNum
@@ -122,7 +124,8 @@ func (bw *blockWriter) randomBlock() []byte {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
+func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
 		var s string
 		if i > 0 {

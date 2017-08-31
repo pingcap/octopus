@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -28,8 +29,9 @@ import (
 // in this case, we will continuously write data.
 // when the count of log entries is more than MaxCount,the specified number of logs are deleted.
 type LogCase struct {
-	cfg *config.LogCaseConfig
-	lws []*logWriter
+	cfg    *config.LogCaseConfig
+	lws    []*logWriter
+	logger *log.Logger
 }
 
 const logWriterBatchSize = 20
@@ -71,7 +73,8 @@ func (c *LogCase) initLogWrite(concurrency int) {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *LogCase) Initialize(ctx context.Context, db *sql.DB) error {
+func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
 		var s string
 		if i > 0 {
@@ -116,7 +119,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 	err := db.QueryRow(query).Scan(&count)
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("count").Inc()
-		Log.Errorf("[%s] select count err %v", c, err)
+		c.logger.Errorf("[%s] select count err %v", c, err)
 		return
 	}
 	logDurationVec.WithLabelValues("count").Observe(time.Since(start).Seconds())
@@ -128,7 +131,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 		_, err = db.Exec(sql)
 		if err != nil {
 			logFailedCounterVec.WithLabelValues("delete").Inc()
-			Log.Errorf("[%s] delete log err %v", c, err)
+			c.logger.Errorf("[%s] delete log err %v", c, err)
 			return
 		}
 		logDurationVec.WithLabelValues("delete").Observe(time.Since(start).Seconds())
@@ -180,7 +183,7 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) {
 
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("batch_insert").Inc()
-		Log.Errorf("[log] insert log err %v", err)
+		c.logger.Errorf("[log] insert log err %v", err)
 		return
 	}
 

@@ -20,12 +20,14 @@ import (
 	"math/rand"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
 //this case for test TiKV perform when write small datavery frequently
 type SmallWriterCase struct {
-	sws []*smallDataWriter
+	sws    []*smallDataWriter
+	logger *log.Logger
 }
 
 const smallWriterBatchSize = 20
@@ -56,7 +58,8 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
+func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	c.logger = logger
 	mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))")
 
 	return nil
@@ -86,7 +89,7 @@ func (sw *smallDataWriter) batchExecute(db *sql.DB) {
 
 		if err != nil {
 			smallWriteFailedCounter.Inc()
-			Log.Errorf("[small writer] insert err %v", err)
+			c.logger.Errorf("[small writer] insert err %v", err)
 			return
 		}
 		smallWriteDuration.Observe(time.Since(start).Seconds())
