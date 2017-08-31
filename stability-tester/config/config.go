@@ -49,10 +49,7 @@ type Config struct {
 
 	// Cluster ClusterConfig `toml:"cluster"`
 	// Nemeses     NemesesConfig     `toml:"nemeses"`
-	Suite       SuiteConfig       `toml:"suite"`
-	MVCC        MVCCSuiteConfig   `toml:"mvcc"`
-	SerialSuite SerialSuiteConfig `toml:"serial_suite"`
-	Scheduler   SchedulerConfig   `toml:"scheduler"`
+	Suite SuiteConfig `toml:"suite"`
 
 	Metric MetricConfig `toml:"metric"`
 }

@@ -7,29 +7,25 @@ password = ""
 # if empty, disable MVCC tests
 pd = ""
 
-
-[scheduler]
-# pd = ["http://127.0.0.1:2379"]
-# shuffle-leader = false
-# shuffle-region = false
-
 [suite]
-names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
-concurrency = 10000
+names = ["bank", "bank2", "ledger", "crud", "block_writer","log", "mvcc_bank", "sysbench", "sqllogic_test"]
 
 [suite.bank]
 num_accounts = 10000000
 interval = "2s"
 table_num = 1
+concurrency = 10000 
 
 [suite.bank2]
 num_accounts = 10000000
 interval = "2s"
 contention = "low"
+concurrency = 10000 
 
 [suite.ledger]
 num_accounts = 10
 interval = "2s"
+concurrency = 10000 
 
 [suite.crud]
 user_count = 1000
@@ -37,28 +33,25 @@ post_count = 10000
 update_users = 20
 update_posts = 200
 interval = "2s"
+concurrency = 10000 
 
 [suite.log]
 max_count = 100000000
 delete_count = 100000
 interval = "2s"
 table_num = 1
+concurrency = 10000 
 
 [suite.block_writer]
 table_num = 1
+concurrency = 10000 
 
-[mvcc]
-names = ["bank"]
-concurrency = 10
-
-[mvcc.bank]
+[suite.mvcc_bank]
 num_accounts = 10000
 interval = "1s"
+concurrency = 8
 
-[serial_suite]
-names = ["sysbench", "sqllogic_test"]
-
-[serial_suite.sysbench]
+[suite.sysbench]
 table_count = 8
 table_size = 1000000
 threads = 8
@@ -68,7 +61,7 @@ database = "sbtest"
 lua_path = "./sysbench_lua"
 
 
-[serial_suite.sqllogic_test]
+[suite.sqllogic_test]
 test_path = "./sqllogictest"
 parallel = 8
 skipError = true
