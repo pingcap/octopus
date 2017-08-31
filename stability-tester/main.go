@@ -15,12 +15,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"github.com/pingcap/octopus/stability-tester/mvcc_suite"
-	"github.com/pingcap/octopus/stability-tester/serial_suite"
 	"github.com/pingcap/octopus/stability-tester/suite"
-	"github.com/pingcap/tidb"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
 	"golang.org/x/net/context"
 )
 
@@ -73,14 +68,7 @@ func main() {
 	// Prometheus metrics
 	PushMetrics(cfg)
 
-	var (
-		db    *sql.DB
-		store kv.Storage
-		wg    sync.WaitGroup
-	)
-
-	// Run all cases, and nemeses
-	// Capture signal
+	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -103,6 +91,7 @@ func main() {
 		if store != nil {
 			store.Close()
 		}
+		os.Exit(0)
 	}()
 
 	// Create the database and run TiDB cases
@@ -115,43 +104,12 @@ func main() {
 		// Initialize suites.
 		suiteCases := suite.InitSuite(ctx, cfg, db)
 		// Run suites.
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			defer wg.Done()
 			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
 		}()
-
-		// Initialize serial suites
-		SerialSuites := serial_suite.InitSuite(ctx, cfg)
-		// Run serial suites
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-			serial_suite.RunSuite(ctx, SerialSuites)
-		}()
 	}
 
-	// Create the TiKV storage and run MVCC cases
-	if len(cfg.PD) > 0 {
-		tidb.RegisterStore("tikv", tikv.Driver{})
-		store, err = tidb.NewStore(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PD))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Initialize suites.
-		suiteCases := mvcc_suite.InitSuite(ctx, cfg, store)
-		// Run suites.
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-			mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
-		}()
-	}
-
-	// Run all nemeses in background.
-	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
-
-	go config.RunConfigScheduler(&cfg.Scheduler)
 	wg.Wait()
 }

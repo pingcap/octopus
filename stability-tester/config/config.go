@@ -21,12 +21,6 @@ import (
 	"github.com/juju/errors"
 )
 
-const (
-	defaultSSHUser = "pingcap"
-	defaultSSHPort = 22
-	defaultType    = "docker"
-)
-
 // Duration is for parsing duration to time.Duration in toml.
 type Duration struct {
 	time.Duration

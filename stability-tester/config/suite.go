@@ -20,13 +20,16 @@ type SuiteConfig struct {
 	// Names contains all cases to be run later.
 	Names []string `toml:"names"`
 	// Concurrency is the concurrency to run all cases.
-	Concurrency int                   `toml:"concurrency"`
-	Bank        BankCaseConfig        `toml:"bank"`
-	Bank2       Bank2CaseConfig       `toml:"bank2"`
-	Ledger      LedgerConfig          `toml:"ledger"`
-	CRUD        CRUDCaseConfig        `toml:"crud"`
-	Log         LogCaseConfig         `toml:"log"`
-	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
+	Concurrency  int                    `toml:"concurrency"`
+	Bank         BankCaseConfig         `toml:"bank"`
+	Bank2        Bank2CaseConfig        `toml:"bank2"`
+	Ledger       LedgerConfig           `toml:"ledger"`
+	CRUD         CRUDCaseConfig         `toml:"crud"`
+	Log          LogCaseConfig          `toml:"log"`
+	BlockWriter  BlockWriterCaseConfig  `toml:"block_writer"`
+	MVCCBank     BankCaseConfig         `toml:"mvcc_bank"`
+	Sysbench     SysbenchCaseConfig     `toml:"sysbench`
+	SqllogicTest SqllogicTestCaseConfig `toml:"sqllogic_test`
 }
 
 // BankCaseConfig is for bank test case.
@@ -35,6 +38,7 @@ type BankCaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
+	Concurrency int      `toml:"concurrency`
 }
 
 // Bank2CaseConfig is for bank2 test case.
@@ -43,12 +47,14 @@ type Bank2CaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	Contention  string   `toml:"contention"`
+	Concurrency int      `toml:"concurrency`
 }
 
 // LedgerConfig is for ledger test case.
 type LedgerConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
+	Concurrency int      `toml:"concurrency`
 }
 
 // CRUDCaseConfig is for CRUD test case.
@@ -60,6 +66,7 @@ type CRUDCaseConfig struct {
 	// Insert/delete posts every interval.
 	UpdatePosts int      `toml:"update_posts"`
 	Interval    Duration `toml:"interval"`
+	Concurrency int      `toml:"concurrency`
 }
 
 // LogCaseConfig is for Log test case
@@ -68,32 +75,17 @@ type LogCaseConfig struct {
 	DeleteCount int      `toml:"delete_count"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
+	Concurrency int      `toml:"concurrency`
 }
 
+// BlockWriterCaseConfig is for block write test case
 type BlockWriterCaseConfig struct {
-	TableNum int `toml:"table_num"`
+	TableNum    int `toml:"table_num"`
+	Concurrency int `toml:"concurrency`
 }
 
-// MVCCSuiteConfig is the configuration for all MVCC test cases.
-type MVCCSuiteConfig struct {
-	// Names contains all cases to be run later.
-	Names []string `toml:"names"`
-	// Concurrency is the concurrency to run all cases.
-	Concurrency int            `toml:"concurrency"`
-	Bank        BankCaseConfig `toml:"bank"`
-}
-
-// SerialSuiteConfig is the configuration for all serial test cases
-//SerialSuite is suitable for some cases that only need one goroutine to run
-type SerialSuiteConfig struct {
-	// Names contains all cases to be run later
-	Names        []string           `toml:"names"`
-	Sysbench     SysbenchConfig     `toml:"sysbench"`
-	Sqllogictest SqllogictestConfig `toml:"sqllogic_test"`
-}
-
-// SysbenchConfig is for sysbench test case
-type SysbenchConfig struct {
+// SysbenchCaseConfig is for sysbench test case
+type SysbenchCaseConfig struct {
 	TableCount int      `toml:"table_count"`
 	TableSize  int      `toml:"table_size"`
 	Threads    int      `toml:"threads"`
@@ -103,8 +95,8 @@ type SysbenchConfig struct {
 	LuaPath    string   `toml:"lua_path"`
 }
 
-// SqllogictestConfig is for sqllogic_test test case
-type SqllogictestConfig struct {
+// SqllogictestCaseConfig is for sqllogic_test test case
+type SqllogictestCaseConfig struct {
 	TestPath  string `toml:"test_path"`
 	SkipError bool   `toml:"skipError"`
 	Parallel  int    `toml:"parallel"`

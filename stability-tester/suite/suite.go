@@ -66,7 +66,6 @@ func InitSuite(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		suiteCases = append(suiteCases, suiteCase)
 	}
 
@@ -75,31 +74,44 @@ func InitSuite(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
 
 // RunSuite runs all suites.
 func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.DB) {
+	//	if len(suiteCases) == 0 {
+	//		return
+	//	}
+	//
+	//	var wg sync.WaitGroup
+	//	wg.Add(concurrency)
+	//
+	//	for i := 0; i < concurrency; i++ {
+	//		go func(i int) {
+	//			defer wg.Done()
+	//
+	//			for {
+	//				select {
+	//				case <-ctx.Done():
+	//					return
+	//				default:
+	//					for _, c := range suiteCases {
+	//						if err := c.Execute(db, i); err != nil {
+	//							log.Errorf("[%s] execute failed %v", c, err)
+	//						}
+	//					}
+	//				}
+	//			}
+	//		}(i)
+	//	}
+	//
+	//	wg.Wait()
 	if len(suiteCases) == 0 {
 		return
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(concurrency)
-
-	for i := 0; i < concurrency; i++ {
-		go func(i int) {
-			defer wg.Done()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					for _, c := range suiteCases {
-						if err := c.Execute(db, i); err != nil {
-							log.Errorf("[%s] execute failed %v", c, err)
-						}
-					}
-				}
+	for _, c := range suiteCases {
+		go func(c Case) {
+			if err := c.Execute(ctx); err != nil {
+				log.Fatalf("[%s] execute failed %v", c, err)
 			}
-		}(i)
+		}()
 	}
 
-	wg.Wait()
+	var wg sync.WaitGroup
 }
