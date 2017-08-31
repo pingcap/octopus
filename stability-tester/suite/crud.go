@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -58,6 +57,7 @@ func (c *CRUDCase) String() string {
 	return "crud"
 }
 
+// Execute is run test
 func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 	// CRUDCase does not support multithreading.
 	if index != 0 {
@@ -66,7 +66,7 @@ func (c *CRUDCase) Execute(db *sql.DB, index int) error {
 
 	var newUsers, deleteUsers, newPosts, newAuthors, deletePosts []int64
 	defer func() {
-		log.Infof("[crud] newUsers %v, deleteUsers %v, newPosts %v, newAuthors %v, deletePosts %v", newUsers, deleteUsers, newPosts, newAuthors, deletePosts)
+		Log.Infof("[crud] newUsers %v, deleteUsers %v, newPosts %v, newAuthors %v, deletePosts %v", newUsers, deleteUsers, newPosts, newAuthors, deletePosts)
 	}()
 
 	// Add new users.
@@ -155,7 +155,7 @@ func (c *CRUDCase) checkUserPostCount(db *sql.DB, id int64) error {
 	}
 
 	if count1 != count2 {
-		log.Fatalf("posts count not match %v != %v for user %v", count1, count2, id)
+		Log.Fatalf("posts count not match %v != %v for user %v", count1, count2, id)
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func (c *CRUDCase) checkAllPostCount(db *sql.DB) error {
 		return errors.Trace(err)
 	}
 	if count1 != count2 {
-		log.Fatalf("total posts count not match %v != %v", count1, count2)
+		Log.Fatalf("total posts count not match %v != %v", count1, count2)
 	}
 
 	return nil
@@ -261,7 +261,7 @@ func (c *CRUDCase) QueryInt64s(db *sql.DB, query string, args ...interface{}) ([
 	for rows.Next() {
 		var val int64
 		if err := rows.Scan(&val); err != nil {
-			log.Fatalf("failed to scan int64 result: %v", err)
+			Log.Fatalf("failed to scan int64 result: %v", err)
 		}
 		vals = append(vals, val)
 	}

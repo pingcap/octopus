@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -87,7 +86,7 @@ func (sw *smallDataWriter) batchExecute(db *sql.DB) {
 
 		if err != nil {
 			smallWriteFailedCounter.Inc()
-			log.Errorf("[small writer] insert err %v", err)
+			Log.Errorf("[small writer] insert err %v", err)
 			return
 		}
 		smallWriteDuration.Observe(time.Since(start).Seconds())

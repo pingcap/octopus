@@ -21,11 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
-// LogCase is for simulating writing log.
+// LogCase is for simulating writing Log.
 // in this case, we will continuously write data.
 // when the count of log entries is more than MaxCount,the specified number of logs are deleted.
 type LogCase struct {
@@ -117,7 +116,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 	err := db.QueryRow(query).Scan(&count)
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("count").Inc()
-		log.Errorf("[%s] select count err %v", c, err)
+		Log.Errorf("[%s] select count err %v", c, err)
 		return
 	}
 	logDurationVec.WithLabelValues("count").Observe(time.Since(start).Seconds())
@@ -129,7 +128,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 		_, err = db.Exec(sql)
 		if err != nil {
 			logFailedCounterVec.WithLabelValues("delete").Inc()
-			log.Errorf("[%s] delete log err %v", c, err)
+			Log.Errorf("[%s] delete log err %v", c, err)
 			return
 		}
 		logDurationVec.WithLabelValues("delete").Observe(time.Since(start).Seconds())
@@ -181,7 +180,7 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) {
 
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("batch_insert").Inc()
-		log.Errorf("[log] insert log err %v", err)
+		Log.Errorf("[log] insert log err %v", err)
 		return
 	}
 

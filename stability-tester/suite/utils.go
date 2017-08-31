@@ -21,7 +21,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 )
 
 const (
@@ -68,7 +67,7 @@ func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 func mustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
 	r, err := db.Exec(query, args...)
 	if err != nil {
-		log.Fatalf("exec %s err %v", query, err)
+		Log.Fatalf("exec %s err %v", query, err)
 	}
 	return r
 }
@@ -76,7 +75,7 @@ func mustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
 func mustQuery(db *sql.DB, query string, args ...interface{}) *sql.Rows {
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		log.Fatalf("query %s err %v", query, err)
+		Log.Fatalf("query %s err %v", query, err)
 	}
 	return rows
 }
@@ -105,7 +104,7 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 				return nil, errors.Trace(err)
 			}
 			if affected != q.expectAffectedRows {
-				log.Fatalf("expect affectedRows %v, but got %v, query %v", q.expectAffectedRows, affected, q)
+				Log.Fatalf("expect affectedRows %v, but got %v, query %v", q.expectAffectedRows, affected, q)
 			}
 		}
 	}

@@ -16,11 +16,11 @@ package suite
 import (
 	"context"
 	"database/sql"
-	"sync"
+	"log"
 
+	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -41,6 +41,7 @@ type Case interface {
 type SuiteMaker func(cfg *config.Config) Case
 
 var suites = make(map[string]SuiteMaker)
+var Log *logrus.Logger
 
 func RegisterSuite(name string, f SuiteMaker) error {
 	if _, ok := suites[name]; ok {
@@ -50,61 +51,8 @@ func RegisterSuite(name string, f SuiteMaker) error {
 	return nil
 }
 
-// InitSuite initializes all suites.
-func InitSuite(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
-	suiteCases := make([]Case, 0, len(cfg.Suite.Names))
-
-	// Create all cases and initialize them.
-	for _, name := range cfg.Suite.Names {
-		suiteM, ok := suites[name]
-		if !ok {
-			log.Warnf("Not found this Suite Case: %s", name)
-			continue
-		}
-		suiteCase := suiteM(cfg)
-		err := suiteCase.Initialize(ctx, db)
-		if err != nil {
-			log.Fatal(err)
-		}
-		suiteCases = append(suiteCases, suiteCase)
-	}
-
-	return suiteCases
-}
-
 // RunSuite runs all suites.
 func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.DB) {
-	//	if len(suiteCases) == 0 {
-	//		return
-	//	}
-	//
-	//	var wg sync.WaitGroup
-	//	wg.Add(concurrency)
-	//
-	//	for i := 0; i < concurrency; i++ {
-	//		go func(i int) {
-	//			defer wg.Done()
-	//
-	//			for {
-	//				select {
-	//				case <-ctx.Done():
-	//					return
-	//				default:
-	//					for _, c := range suiteCases {
-	//						if err := c.Execute(db, i); err != nil {
-	//							log.Errorf("[%s] execute failed %v", c, err)
-	//						}
-	//					}
-	//				}
-	//			}
-	//		}(i)
-	//	}
-	//
-	//	wg.Wait()
-	if len(suiteCases) == 0 {
-		return
-	}
-
 	for _, c := range suiteCases {
 		go func(c Case) {
 			if err := c.Execute(ctx); err != nil {
@@ -113,5 +61,21 @@ func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.D
 		}()
 	}
 
-	var wg sync.WaitGroup
+}
+
+// InitCase is init case
+func InitCase(ctx context.Context, casename string, cfg *config.Config, db *sql.DB, log *logrus.Logger) Case {
+	Log = log
+	suiteM, ok := suites[casename]
+	if !ok {
+		log.Warnf("Not found this Suite Case: %s", casename)
+		return nil
+	}
+	suiteCase := suiteM(cfg)
+	err := suiteCase.Initialize(ctx, db)
+	if err != nil {
+		Log.Fatal(err)
+	}
+
+	return suiteCase
 }

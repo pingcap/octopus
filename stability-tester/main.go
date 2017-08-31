@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/suite"
@@ -20,11 +21,10 @@ import (
 )
 
 var (
-	configFile  = flag.String("c", "config.toml", "stability test config file")
-	clusterType = flag.String("cluster", "ssh", "cluster type: [ssh, docker-compose, k8s]")
-	pprofAddr   = flag.String("pprof", "0.0.0.0:16060", "pprof address")
-	logFile     = flag.String("log-file", "", "log file")
-	logLevel    = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
+	configFile = flag.String("c", "config.toml", "stability test config file")
+	pprofAddr  = flag.String("pprof", "0.0.0.0:16060", "pprof address")
+	logFile    = flag.String("log-file", "", "log file")
+	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
@@ -100,15 +100,32 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		initchan := make(chan int)
+		for _, name := range cfg.Suite.Names {
+			go func(name string) {
+				Log := logrus.New()
+				logfile, err := os.OpenFile(name+"tidb-stability-tester.log", os.O_CREATE|os.O_RDWR, 0666)
+				if err != nil {
+					log.Fatal(err)
+					return
+				}
+				Log.Out = logfile
+				Log.SetLevel(logrus.InfoLevel)
+				// init case one by one
+				runcase := suite.InitCase(ctx, name, cfg, db, Log)
+				if runcase == nil {
+					suite.Log.Fatalf("can not init case [%s]", name)
+				}
+				<-initchan
+				// run case
+				suite.RunCase(ctx, runcase, cfg.Suite.Concurrency, db, Log)
+			}(name)
+		}
 
-		// Initialize suites.
-		suiteCases := suite.InitSuite(ctx, cfg, db)
-		// Run suites.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
-		}()
+		for i := 0; i < len(cfg.Suite.Names); i++ {
+			initchan <- i
+		}
+
 	}
 
 	wg.Wait()

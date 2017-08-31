@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -100,10 +99,11 @@ TRUNCATE TABLE bank2_transaction_leg;
 	}
 	ch := make(chan Job)
 	for i := 0; i < insertConcurrency; i++ {
+		start := time.Now()
+		var execInsert []string
 		go func() {
 			defer wg.Done()
 			for job := range ch {
-				start := time.Now()
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%d, %d, "account %d")`, i, initialBalance, i))
@@ -115,11 +115,12 @@ TRUNCATE TABLE bank2_transaction_leg;
 					return err
 				})
 				if err != nil {
-					log.Fatalf("exec %s err %s", query, err)
+					Log.Fatalf("exec %s err %s", query, err)
 				}
-				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
+				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
 			}
 		}()
+		Log.Infof("[%s] insert %s accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
@@ -142,7 +143,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 		return err
 	})
 	if err != nil {
-		log.Fatalf("[%s] insert system account err: %v", c, err)
+		Log.Fatalf("[%s] insert system account err: %v", c, err)
 	}
 
 	c.startVerify(ctx, db)
@@ -176,7 +177,7 @@ func (c *Bank2Case) verify(db *sql.DB) {
 
 	var tso uint64
 	if err = tx.QueryRow("SELECT @@tidb_current_ts").Scan(&tso); err == nil {
-		log.Infof("SELECT SUM(balance) to verify use tso %d", tso)
+		Log.Infof("SELECT SUM(balance) to verify use tso %d", tso)
 	}
 
 	var total int64
@@ -190,10 +191,10 @@ func (c *Bank2Case) verify(db *sql.DB) {
 
 	expectTotal := (int64(c.cfg.NumAccounts) * initialBalance) * 2
 	if total != expectTotal {
-		log.Errorf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
+		Log.Errorf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
 		atomic.StoreInt32(&c.stop, 1)
 		c.wg.Wait()
-		log.Fatalf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
+		Log.Fatalf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
 	}
 }
 
@@ -227,7 +228,7 @@ func (c *Bank2Case) moveMoney(db *sql.DB) {
 	start := time.Now()
 	if err := c.execTransaction(db, from, to, amount); err != nil {
 		bank2VerifyFailedCounter.Inc()
-		log.Errorf("[bank2] move money err %v", err)
+		Log.Errorf("[bank2] move money err %v", err)
 		return
 	}
 	bank2VerifyDuration.Observe(time.Since(start).Seconds())
@@ -262,7 +263,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 		case to:
 			toBalance = balance
 		default:
-			log.Fatalf("[%s] got unexpected account %d", c, id)
+			Log.Fatalf("[%s] got unexpected account %d", c, id)
 		}
 		count++
 	}
@@ -272,7 +273,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 	}
 
 	if count != 2 {
-		log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
+		Log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
 	}
 
 	if fromBalance < amount {
@@ -305,7 +306,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 	}
 
 	err = tx.Commit()
-	log.Infof("[bank2] %d(%d) transfer %d to %d(%d) err: %v", from, fromBalance, amount, to, toBalance, err)
+	Log.Infof("[bank2] %d(%d) transfer %d to %d(%d) err: %v", from, fromBalance, amount, to, toBalance, err)
 	return nil
 }
 
