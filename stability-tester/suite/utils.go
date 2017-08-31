@@ -58,7 +58,8 @@ func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			log.Warn("ctx cancel")
+			return nil
 		case <-time.After(interval):
 		}
 	}
