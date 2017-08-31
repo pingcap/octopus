@@ -13,7 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
+	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/pingcap/octopus/stability-tester/suite"
 	"github.com/pingcap/tidb/kv"
@@ -21,11 +22,11 @@ import (
 )
 
 var (
-	configFile  = flag.String("c", "config.toml", "stability test config file")
-	clusterType = flag.String("cluster", "ssh", "cluster type: [ssh, docker-compose, k8s]")
-	pprofAddr   = flag.String("pprof", "0.0.0.0:16060", "pprof address")
-	logFile     = flag.String("log-file", "", "log file")
-	logLevel    = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
+	configFile = flag.String("c", "config.toml", "stability test config file")
+	// clusterType = flag.String("cluster", "ssh", "cluster type: [ssh, docker-compose, k8s]")
+	pprofAddr = flag.String("pprof", "0.0.0.0:16060", "pprof address")
+	logFile   = flag.String("log-file", "", "log file")
+	logLevel  = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
@@ -44,6 +45,14 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	flag.Parse()
+
+	log.SetLevelByString(*logLevel)
+	log.SetHighlighting(false)
+	if len(*logFile) > 0 {
+		log.SetOutputByName(*logFile)
+		log.SetRotateByHour()
+	}
+	log.SetLevelByString(*logLevel)
 
 	go func() {
 		if err := http.ListenAndServe(*pprofAddr, nil); err != nil {
@@ -102,18 +111,22 @@ func main() {
 		initchan := make(chan int)
 		for _, name := range cfg.Suite.Names {
 			go func(name string) {
-				log := log.New()
+				Log := logrus.New()
 				logfile, err := os.OpenFile(name+"tidb-stability-tester.log", os.O_CREATE|os.O_RDWR, 0666)
 				if err != nil {
+					log.Fatal(err)
 					return
 				}
-				log.Out = logfile
-				log.Level(*logLevel)
+				Log.Out = logfile
+				Log.SetLevel(logrus.InfoLevel)
 				// init case one by one
-				runcase := suite.InitCase(ctx, name, cfg, db)
+				runcase := suite.InitCase(ctx, name, cfg, db, Log)
+				if runcase == nil {
+					suite.Log.Fatalf("can not init case [%s]", name)
+				}
 				<-initchan
 				// run case
-				suite.RunCase(ctx, runcase, cfg.Suite.Concurrency, db)
+				suite.RunCase(ctx, runcase, cfg.Suite.Concurrency, db, Log)
 			}(name)
 		}
 
@@ -123,6 +136,7 @@ func main() {
 
 	}
 
-	go config.RunConfigScheduler(&cfg.Scheduler)
+	//go config.RunConfigScheduler(&cfg.Scheduler)
+
 	wg.Wait()
 }

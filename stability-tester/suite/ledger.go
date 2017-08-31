@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -66,7 +65,7 @@ TRUNCATE TABLE ledger_accounts;
 // Initialize creates the table for ledger test.
 func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := db.Exec(stmtCreate); err != nil {
-		log.Fatal(err)
+		Log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
@@ -76,10 +75,11 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	}
 	ch := make(chan Job)
 	for i := 0; i < insertConcurrency; i++ {
+		start := time.Now()
+		var execInsert []string
 		go func() {
 			defer wg.Done()
 			for job := range ch {
-				start := time.Now()
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%v, 0, "acc%v", 0, 0)`, rand.Int63(), i))
@@ -91,11 +91,12 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 					return err
 				})
 				if err != nil {
-					log.Fatalf("exec %s err %s", query, err)
+					Log.Fatalf("exec %s err %s", query, err)
 				}
-				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
+				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
 			}
 		}()
+		Log.Infof("[%s] insert %d accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
@@ -153,7 +154,7 @@ func (c *LedgerCase) Execute(db *sql.DB, index int) error {
 	defer tx.Rollback()
 
 	if err = c.doPosting(tx, req); err != nil {
-		log.Errorf("[ledger] doPosting error: %v", err)
+		Log.Errorf("[ledger] doPosting error: %v", err)
 		return errors.Trace(err)
 	}
 
@@ -250,13 +251,13 @@ select sum(balance) total from
 
 	ledgerVerifyDuration.Observe(time.Since(start).Seconds())
 	if total != 0 {
-		log.Errorf("[ledger] check total balance got %v", total)
+		Log.Errorf("[ledger] check total balance got %v", total)
 		atomic.StoreInt32(&c.stop, 1)
 		c.wg.Wait()
-		log.Fatalf("[ledger] check total balance got %v", total)
+		Log.Fatalf("[ledger] check total balance got %v", total)
 	}
 
-	log.Infof("verify ok, cost time: %v", time.Since(start))
+	Log.Infof("verify ok, cost time: %v", time.Since(start))
 	return nil
 }
 

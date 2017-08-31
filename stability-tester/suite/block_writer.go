@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/twinj/uuid"
 )
@@ -108,7 +107,7 @@ func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) {
 
 	if err != nil {
 		blockWriteFailedCounter.Inc()
-		log.Errorf("[block writer] insert err %v", err)
+		Log.Errorf("[block writer] insert err %v", err)
 		return
 	}
 	bw.index = (bw.index + 1) % tableNum

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -94,6 +93,8 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.concurrency; i++ {
+		start := time.Now()
+		var execInsert []string
 		go func() {
 			args := make([]string, batchSize)
 
@@ -102,8 +103,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				if !ok {
 					return
 				}
-
-				start := time.Now()
 
 				for i := 0; i < batchSize; i++ {
 					args[i] = fmt.Sprintf("(%d, %d)", startIndex+i, 1000)
@@ -116,14 +115,14 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				err := runWithRetry(ctx, 100, 3*time.Second, insertF)
 				if err != nil {
-					log.Fatalf("exec %s err %s", query, err)
+					Log.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
 
-				log.Infof("[%s] insert %d accounts%s, takes %s", c, batchSize, index, time.Now().Sub(start))
-
+				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
 				wg.Done()
 			}
 		}()
+		Log.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
 	}
 
 	for i := 0; i < jobCount; i++ {
@@ -149,16 +148,16 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 			case <-ticker.C:
 				err := c.verify(db, index)
 				if err != nil {
-					log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
+					Log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
 					if time.Now().Sub(start) > defaultVerifyTimeout {
 						atomic.StoreInt32(&c.stopped, 1)
-						log.Info("stop bank execute")
+						Log.Info("stop bank execute")
 						c.wg.Wait()
-						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
+						Log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
 					}
 				} else {
 					start = time.Now()
-					log.Infof("[%s] verify success in %s", c, time.Now())
+					Log.Infof("[%s] verify success in %s", c, time.Now())
 				}
 			case <-ctx.Done():
 				return
@@ -197,19 +196,19 @@ func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	case err == sql.ErrNoRows:
 		return true
 	case err != nil:
-		log.Fatal(err)
+		Log.Fatal(err)
 	}
 
 	query = fmt.Sprintf("select count(*) as count from accounts%s", index)
 	err = db.QueryRow(query).Scan(&count)
 	if err != nil {
-		log.Fatal(err)
+		Log.Fatal(err)
 	}
 	if count == c.cfg.NumAccounts {
 		return false
 	}
 
-	log.Infof("[%s] we need %d accounts%s but got %d, re-initialize the data again", c, c.cfg.NumAccounts, index, count)
+	Log.Infof("[%s] we need %d accounts%s but got %d, re-initialize the data again", c, c.cfg.NumAccounts, index, count)
 	mustExec(db, fmt.Sprintf("drop table if exists accounts%s", index))
 	mustExec(db, "DROP TABLE IF EXISTS record")
 	return true
@@ -232,23 +231,23 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	err = tx.QueryRow(query).Scan(&total)
 	if err != nil {
 		bankVerifyFailedCounter.Inc()
-		log.Errorf("[%s] select sum error %v", c, err)
+		Log.Errorf("[%s] select sum error %v", c, err)
 		return errors.Trace(err)
 	}
 	var tso uint64 = 0
 	if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("select sum(balance) to verify use tso %d", tso)
+	Log.Infof("select sum(balance) to verify use tso %d", tso)
 	tx.Commit()
 	bankVerifyDuration.Observe(time.Since(start).Seconds())
 
 	check := c.cfg.NumAccounts * 1000
 	if total != check {
-		log.Errorf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
+		Log.Errorf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
 		atomic.StoreInt32(&c.stopped, 1)
 		c.wg.Wait()
-		log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
+		Log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
 	}
 
 	return nil
@@ -314,10 +313,10 @@ func (c *BankCase) execTransaction(db *sql.DB, from, to int, amount int, index s
 		case to:
 			toBalance = balance
 		default:
-			log.Fatalf("[%s] got unexpected account %d", c, id)
+			Log.Fatalf("[%s] got unexpected account %d", c, id)
 		}
 
-		count += 1
+		count++
 	}
 
 	if err = rows.Err(); err != nil {
@@ -325,7 +324,7 @@ func (c *BankCase) execTransaction(db *sql.DB, from, to int, amount int, index s
 	}
 
 	if count != 2 {
-		log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
+		Log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
 	}
 
 	var update string
@@ -349,16 +348,16 @@ INSERT INTO record (from_id, to_id, from_balance, to_balance, amount, tso)
     VALUES (%d, %d, %d, %d, %d, %d)`, from, to, fromBalance, toBalance, amount, tso)); err != nil {
 			return err
 		}
-		log.Infof("[bank] exec pre: %s\n", update)
+		Log.Infof("[bank] exec pre: %s\n", update)
 	}
 
 	err = tx.Commit()
 	if fromBalance >= amount {
 		if err != nil {
-			log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
+			Log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
 		}
 		if err == nil {
-			log.Infof("[bank] exec commit success: %s\n", update)
+			Log.Infof("[bank] exec commit success: %s\n", update)
 		}
 	}
 	return err

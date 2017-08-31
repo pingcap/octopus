@@ -49,9 +49,9 @@ type Config struct {
 
 	// Cluster ClusterConfig `toml:"cluster"`
 	// Nemeses     NemesesConfig     `toml:"nemeses"`
-	Suite SuiteConfig `toml:"suite"`
-
-	Metric MetricConfig `toml:"metric"`
+	Suite     SuiteConfig     `toml:"suite"`
+	Scheduler SchedulerConfig `toml:"scheduler"`
+	Metric    MetricConfig    `toml:"metric"`
 }
 
 // ParseConfig parses the configuration file.
