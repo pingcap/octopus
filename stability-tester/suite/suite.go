@@ -103,3 +103,43 @@ func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.D
 
 	wg.Wait()
 }
+
+
+func InitCase(ctx context.Context,casename string, cfg *config.Config, db *sql.DB) Case {
+	suiteM, ok := suites[casename]
+	if !ok {
+		log.Warnf("Not found this Suite Case: %s", casename)
+		continue
+	}
+	suiteCase := suiteM(cfg)
+	err := suiteCase.Initialize(ctx, db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return suiteCase
+}
+
+
+func RunCase(ctx context.Context, case Case, concurrency int, db *sql.DB) {
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(i int) {
+			defer wg.Done()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err := case.Execute(db, i); err != nil {
+						log.Errorf("[%s] execute failed %v", c, err)
+					}
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}

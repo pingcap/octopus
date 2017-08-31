@@ -13,14 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"github.com/pingcap/octopus/stability-tester/mvcc_suite"
-	"github.com/pingcap/octopus/stability-tester/serial_suite"
 	"github.com/pingcap/octopus/stability-tester/suite"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
 	"golang.org/x/net/context"
 )
 
@@ -48,14 +44,6 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	flag.Parse()
-
-	log.SetLevelByString(*logLevel)
-	log.SetHighlighting(false)
-	if len(*logFile) > 0 {
-		log.SetOutputByName(*logFile)
-		log.SetRotateByHour()
-	}
-	log.SetLevelByString(*logLevel)
 
 	go func() {
 		if err := http.ListenAndServe(*pprofAddr, nil); err != nil {
@@ -111,46 +99,29 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// Initialize suites.
-		suiteCases := suite.InitSuite(ctx, cfg, db)
-		// Run suites.
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
-		}()
-
-		// Initialize serial suites
-		SerialSuites := serial_suite.InitSuite(ctx, cfg)
-		// Run serial suites
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-			serial_suite.RunSuite(ctx, SerialSuites)
-		}()
-	}
-
-	// Create the TiKV storage and run MVCC cases
-	if len(cfg.PD) > 0 {
-		tidb.RegisterStore("tikv", tikv.Driver{})
-		store, err = tidb.NewStore(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PD))
-		if err != nil {
-			log.Fatal(err)
+		initchan := make(chan int)
+		for _, name := range cfg.Suite.Names {
+			go func(name string) {
+				log := log.New()
+				logfile, err := os.OpenFile(name+"tidb-stability-tester.log", os.O_CREATE|os.O_RDWR, 0666)
+				if err != nil {
+					return
+				}
+				log.Out = logfile
+				log.Level(*logLevel)
+				// init case one by one
+				runcase := suite.InitCase(ctx, name, cfg, db)
+				<-initchan
+				// run case
+				suite.RunCase(ctx, runcase, cfg.Suite.Concurrency, db)
+			}(name)
 		}
 
-		// Initialize suites.
-		suiteCases := mvcc_suite.InitSuite(ctx, cfg, store)
-		// Run suites.
-		go func() {
-			wg.Add(1)
-			defer wg.Done()
-			mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
-		}()
-	}
+		for i := 0; i < len(cfg.Suite.Names); i++ {
+			initchan <- i
+		}
 
-	// Run all nemeses in background.
-	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
+	}
 
 	go config.RunConfigScheduler(&cfg.Scheduler)
 	wg.Wait()
