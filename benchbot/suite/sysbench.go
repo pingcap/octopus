@@ -100,7 +100,7 @@ func (c *SysbenchCase) Run(*sql.DB) (*CaseResult, error) {
 	histogram := StatHistogram{
 		AvgMs:        avgMs,
 		MaxMs:        maxMs,
-		Percentile:   95,
+		Percentile:   0.95,
 		PercentileMs: percentileMs,
 	}
 	stat := &StatResult{
