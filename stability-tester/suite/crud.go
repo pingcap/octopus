@@ -72,11 +72,9 @@ func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return
 				default:
-					if err := c.ExecuteCrud(db, i); err != nil {
-						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
-						return err
-					}
-
+				}
+				if err := c.ExecuteCrud(db, i); err != nil {
+					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
 				}
 			}
 		}(i)

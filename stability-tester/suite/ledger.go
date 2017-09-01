@@ -89,10 +89,13 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 				}
 
 				query := fmt.Sprintf(`INSERT INTO ledger_accounts (posting_group_id, amount,account_id, causality_id, balance) VALUES %s`, strings.Join(args, ","))
-				err := runWithRetry(ctx, 100, 3*time.Second, func() error {
+				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
 					_, err := db.Exec(query)
 					return err
 				})
+				if isCancel {
+					execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
+				}
 				if err != nil {
 					c.logger.Fatalf("exec %s err %s", query, err)
 				}
@@ -139,9 +142,9 @@ func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return
 				default:
-					if err := c.ExecuteLedger(db); err != nil {
-						c.logger.Errorf("[%s] exec failed %v", c.String(), err)
-					}
+				}
+				if err := c.ExecuteLedger(db); err != nil {
+					c.logger.Errorf("[%s] exec failed %v", c.String(), err)
 				}
 			}
 		}(i)

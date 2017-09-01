@@ -80,10 +80,9 @@ func (c *SmallWriterCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return nil
 				default:
-					if err := c.sws[i].batchExecute(db); err != nil {
-						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
-						return err
-					}
+				}
+				if err := c.sws[i].batchExecute(db); err != nil {
+					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
 				}
 			}
 		}(i)
