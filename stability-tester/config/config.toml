@@ -88,7 +88,7 @@ lua_path = "./sysbench_lua"
 
 #skip_error can be true when test
 [serial_suite.sqllogic]
-testpath = "./sqllogic_test"
+testpath = "./sqllogic_testfile"
 binpath = "./sqllogic_test"
 log_level = "info"
 skip_error = "true"
