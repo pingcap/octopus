@@ -20,13 +20,15 @@ import (
 	"math/rand"
 	"time"
 
+	"sync"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"sync"
 )
 
 //this case for test TiKV perform when write small datavery frequently
 type SmallWriterCase struct {
+	cfg    config.SmallWriterCaseConfig
 	sws    []*smallDataWriter
 	logger *log.Logger
 }
@@ -42,9 +44,11 @@ type smallDataWriter struct {
 
 //NewSmallWriterCase returns the smallWriterCase.
 func NewSmallWriterCase(cfg *config.Config) Case {
-	c := &SmallWriterCase{}
+	c := &SmallWriterCase{
+		cfg: cfg.Suite.SmallWriter,
+	}
 
-	c.initSmallDataWriter(cfg.Suite.Concurrency)
+	c.initSmallDataWriter(c.cfg.Concurrency)
 	return c
 }
 
@@ -78,12 +82,12 @@ func (c *SmallWriterCase) Execute(ctx context.Context, db *sql.DB) error {
 			for {
 				select {
 				case <-ctx.Done():
-					return nil
+					return
 				default:
-					if err := c.sws[i].batchExecute(db); err != nil {
-						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
-						return err
-					}
+				}
+				if err := c.sws[i].batchExecute(db); err != nil {
+					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
+					return
 				}
 			}
 		}(i)
@@ -98,7 +102,7 @@ func (c *SmallWriterCase) String() string {
 }
 
 // Insert values.
-func (sw *smallDataWriter) batchExecute(db *sql.DB) {
+func (sw *smallDataWriter) batchExecute(db *sql.DB) error {
 	var err error
 	for i := 0; i < smallWriterBatchSize; i++ {
 		start := time.Now()
@@ -110,11 +114,11 @@ func (sw *smallDataWriter) batchExecute(db *sql.DB) {
 
 		if err != nil {
 			smallWriteFailedCounter.Inc()
-			sw.logger.Errorf("[small writer] insert err %v", err)
-			return
+			return fmt.Errorf("[small writer] insert err %v", err)
 		}
 		smallWriteDuration.Observe(time.Since(start).Seconds())
 	}
+	return nil
 }
 
 func init() {

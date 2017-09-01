@@ -21,9 +21,10 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"sync"
 )
 
 // LogCase is for simulating writing Log.
@@ -210,6 +211,7 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) error {
 
 	lw.index = (lw.index + 1) % tableNum
 	logDurationVec.WithLabelValues("batch_insert").Observe(time.Since(start).Seconds())
+	return nil
 }
 
 func init() {

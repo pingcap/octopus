@@ -76,7 +76,10 @@ func main() {
 	// Prometheus metrics
 	PushMetrics(cfg)
 
-	var wg sync.WaitGroup
+	var (
+		wg sync.WaitGroup
+		db *sql.DB
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -95,10 +98,6 @@ func main() {
 		if db != nil {
 			db.Close()
 		}
-
-		if store != nil {
-			store.Close()
-		}
 	}()
 
 	// Create the database and run TiDB cases
@@ -116,7 +115,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			suite.RunCase(ctx, suiteCases, db)
+			suite.RunSuite(ctx, suiteCases, db)
 		}()
 	}
 

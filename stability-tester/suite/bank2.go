@@ -105,6 +105,11 @@ TRUNCATE TABLE bank2_transaction_leg;
 		go func() {
 			defer wg.Done()
 			for job := range ch {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%d, %d, "account %d")`, i, initialBalance, i))
@@ -116,7 +121,6 @@ TRUNCATE TABLE bank2_transaction_leg;
 					return err
 				})
 				if isCancel {
-					execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.begin))
 					return
 				}
 				if err != nil {
@@ -134,14 +138,17 @@ TRUNCATE TABLE bank2_transaction_leg;
 		if end > c.cfg.NumAccounts {
 			end = c.cfg.NumAccounts + 1
 		}
-		ch <- Job{
-			begin: begin,
-			end:   end,
+		select {
+		case <-ctx.Done():
+		case ch <- Job{begin: begin, end: end}:
 		}
 	}
 	close(ch)
 	wg.Wait()
 
+	select {
+	case <-ctx.Done():
+	}
 	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, c.cfg.NumAccounts*initialBalance)
 	err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
 		_, err := db.Exec(query)

@@ -22,7 +22,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
-	"sync"
 )
 
 // Case is a test case for running cluster.
@@ -33,7 +32,7 @@ type Case interface {
 	Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error
 
 	// Execute executes the case once.
-	Execute(db *sql.DB, concurrentIndex int) error
+	Execute(ctx context.Context, db *sql.DB) error
 
 	// String implements fmt.Stringer interface.
 	String() string
@@ -47,7 +46,8 @@ func RegisterSuite(name string, f SuiteMaker) error {
 	if _, ok := suites[name]; ok {
 		return errors.Errorf("%s is already registerd", name)
 	}
-	suites[name] = f
+	suites[name] =
+		f
 	return nil
 }
 

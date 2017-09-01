@@ -79,7 +79,7 @@ func mustExec(db *sql.DB, query string, args ...interface{}) (sql.Result, error)
 func mustQuery(db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		return r, fmt.Errorf("exec %s err %v", query, err)
+		return nil, fmt.Errorf("exec %s err %v", query, err)
 	}
 	return rows, nil
 }
@@ -119,7 +119,7 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 	return
 }
 
-func newlogger(filename string) *log.Logger {
+func newLogger(filename string) *log.Logger {
 	logger := log.New()
 	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		logger.Out = file

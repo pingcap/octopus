@@ -128,7 +128,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, insertF)
 				if isCancel {
-					execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex))
 					return
 				}
 

@@ -74,7 +74,7 @@ func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 					if err := c.ExecuteCrud(db, i); err != nil {
 						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
-						return err
+						return
 					}
 
 				}
@@ -178,7 +178,7 @@ func (c *CRUDCase) checkUserPostCount(db *sql.DB, id int64) error {
 		}
 		return nil
 	}
-	if err := runWithRetry(context.Background(), 3, 10*time.Second, checkF); err != nil {
+	if err, _ := runWithRetry(context.Background(), 3, 10*time.Second, checkF); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -268,7 +268,7 @@ func (c *CRUDCase) checkAllPostCount(db *sql.DB) error {
 		}
 		return nil
 	}
-	if err := runWithRetry(context.Background(), 3, 10*time.Second, checkF); err != nil {
+	if err, _ := runWithRetry(context.Background(), 3, 10*time.Second, checkF); err != nil {
 		return errors.Trace(err)
 	}
 	if count1 != count2 {

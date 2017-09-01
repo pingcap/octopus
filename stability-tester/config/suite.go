@@ -30,6 +30,7 @@ type SuiteConfig struct {
 	MVCCBank     BankCaseConfig         `toml:"mvcc_bank"`
 	Sysbench     SysbenchCaseConfig     `toml:"sysbench`
 	SqllogicTest SqllogicTestCaseConfig `toml:"sqllogic_test`
+	SmallWriter  SmallWriterCaseConfig  `toml:"small_writer"`
 }
 
 // BankCaseConfig is for bank test case.
@@ -101,4 +102,9 @@ type SqllogicTestCaseConfig struct {
 	SkipError bool   `toml:"skipError"`
 	Parallel  int    `toml:"parallel"`
 	DBName    string `toml:"database"`
+}
+
+// SmallWriterCase is for small write test case
+type SmallWriterCaseConfig struct {
+	Concurrency int `toml:"concurrency"`
 }
