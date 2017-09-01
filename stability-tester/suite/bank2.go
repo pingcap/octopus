@@ -103,6 +103,11 @@ TRUNCATE TABLE bank2_transaction_leg;
 		go func() {
 			defer wg.Done()
 			for job := range ch {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				start := time.Now()
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
@@ -128,21 +133,28 @@ TRUNCATE TABLE bank2_transaction_leg;
 		if end > c.cfg.NumAccounts {
 			end = c.cfg.NumAccounts + 1
 		}
-		ch <- Job{
-			begin: begin,
-			end:   end,
+		select {
+		case <-ctx.Done():
+		case ch <- Job{begin: begin, end: end}:
 		}
 	}
+
 	close(ch)
 	wg.Wait()
 
-	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, c.cfg.NumAccounts*initialBalance)
-	err = runWithRetry(ctx, 100, 3*time.Second, func() error {
-		_, err := db.Exec(query)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("[%s] insert system account err: %v", c, err)
+	select {
+	case <-ctx.Done():
+	default:
+		query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, c.cfg.NumAccounts*initialBalance)
+		err = runWithRetry(ctx, 100, 3*time.Second, func() error {
+			_, err := db.Exec(query)
+			return err
+		})
+		if err != nil {
+			log.Fatalf("[%s] insert system account err: %v", c, err)
+		}
+
+		c.startVerify(ctx, db)
 	}
 
 	c.startVerify(ctx, db)
