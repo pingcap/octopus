@@ -28,10 +28,11 @@ func CreateRouter(svr *Server) http.Handler {
 	r := mux.NewRouter()
 	hdl := newBenchmarkHandler(svr, rdr)
 	r.HandleFunc("/bench/plan", hdl.Plan).Methods("POST")
-	r.HandleFunc("/bench/jobs", hdl.ListJobs).Methods("GET")
 	r.HandleFunc("/bench/job/{id}", hdl.GetJob).Methods("GET")
 	r.HandleFunc("/bench/job/{id}", hdl.AbortJob).Methods("DELETE")
-	r.HandleFunc("/bench/status", hdl.GetGlobalStatus).Methods("GET")
+	r.HandleFunc("/bench/jobs/{ids}", hdl.GetJobs).Methods("GET")
+	r.HandleFunc("/bench/status", hdl.GetStatus).Methods("GET")
+	r.HandleFunc("/bench/history", hdl.ListJobs).Methods("GET")
 
 	return httpRequestMiddleware(r, svr)
 }

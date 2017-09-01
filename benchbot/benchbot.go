@@ -15,7 +15,6 @@ import (
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/suite"
-	_ "github.com/pingcap/octopus/benchbot/suite/sysbench"
 	_ "github.com/pingcap/octopus/benchbot/suite/ycsb"
 )
 
@@ -44,7 +43,7 @@ func initLogger(cfg *backend.ServerConfig) error {
 	}
 
 	serverPath := path.Join(cfg.LogDir, serverLogFileName)
-	serverFile, err := os.OpenFile(serverPath, os.O_RDWR|os.O_CREATE, 0755)
+	serverFile, err := os.OpenFile(serverPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
 		return err
 	}
