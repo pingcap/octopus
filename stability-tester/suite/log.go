@@ -22,8 +22,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"sync"
 )
 
 // LogCase is for simulating writing Log.
@@ -45,6 +45,7 @@ type logWriter struct {
 	logDataBuffer []byte
 	values        []string
 	index         int
+	logger        *log.Logger
 }
 
 //NewLogCase returns the LogCase.
@@ -69,6 +70,7 @@ func (c *LogCase) initLogWrite(concurrency int) {
 			rand:          rand.New(source),
 			logDataBuffer: make([]byte, 1024),
 			values:        make([]string, logWriterBatchSize),
+			logger:        c.logger,
 		}
 	}
 }
@@ -81,10 +83,7 @@ func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		_, err := mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s))
-		if err != nil {
-			return errors.Trace(err)
-		}
+		mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s))
 	}
 
 	c.startCheck(ctx, db)
@@ -143,8 +142,26 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 }
 
 // Execute implements Case Execute interface.
-func (c *LogCase) Execute(db *sql.DB, index int) error {
-	c.lws[index].batchExecute(db, c.cfg.TableNum)
+func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	wg.Add(c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
+						log.Errorf("[%s] execute failed %v", c.String(), err)
+					}
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
 	return nil
 }
 
@@ -164,7 +181,7 @@ func (lw *logWriter) randomLogData() []byte {
 //
 // TODO: configure it from outside.
 
-func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) {
+func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) error {
 	// buffer values
 	for i := 0; i < logWriterBatchSize; i++ {
 		lw.values[i] = fmt.Sprintf("('%s')", lw.randomLogData())
@@ -187,8 +204,8 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) {
 
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("batch_insert").Inc()
-		c.logger.Errorf("[log] insert log err %v", err)
-		return
+		lw.logger.Errorf("[log] insert log err %v", err)
+		return err
 	}
 
 	lw.index = (lw.index + 1) % tableNum

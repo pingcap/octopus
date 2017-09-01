@@ -21,8 +21,8 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"sync"
 )
 
 //this case for test TiKV perform when write small datavery frequently
@@ -37,6 +37,7 @@ const smallWriterBatchSize = 20
 type smallDataWriter struct {
 	rand   *rand.Rand
 	values []string
+	logger *log.Logger
 }
 
 //NewSmallWriterCase returns the smallWriterCase.
@@ -54,6 +55,7 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 		c.sws[i] = &smallDataWriter{
 			rand:   rand.New(source),
 			values: make([]string, smallWriterBatchSize),
+			logger: c.logger,
 		}
 	}
 }
@@ -61,17 +63,32 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 // Initialize implements Case Initialize interface.
 func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
-	_, err := mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))")
-	if err != nil {
-		return errors.Trace(err)
-	}
+	mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))")
 
 	return nil
 }
 
 // Execute implements Case Execute interface.
-func (c *SmallWriterCase) Execute(db *sql.DB, index int) error {
-	c.sws[index].batchExecute(db)
+func (c *SmallWriterCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	wg.Add(c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				default:
+					if err := c.sws[i].batchExecute(db); err != nil {
+						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
+						return err
+					}
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 	return nil
 }
 
@@ -93,7 +110,7 @@ func (sw *smallDataWriter) batchExecute(db *sql.DB) {
 
 		if err != nil {
 			smallWriteFailedCounter.Inc()
-			c.logger.Errorf("[small writer] insert err %v", err)
+			sw.logger.Errorf("[small writer] insert err %v", err)
 			return
 		}
 		smallWriteDuration.Observe(time.Since(start).Seconds())
