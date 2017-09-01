@@ -128,7 +128,31 @@ type postingRequest struct {
 }
 
 // Execute implements Case Execute interface.
-func (c *LedgerCase) Execute(db *sql.DB, index int) error {
+func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	wg.Add(c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err := c.ExecuteLedger(db); err != nil {
+						c.logger.Errorf("[%s] exec failed %v", c.String(), err)
+					}
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	return nil
+}
+
+// ExecuteLedger is run case
+func (c *LedgerCase) ExecuteLedger(db *sql.DB) error {
 	if atomic.LoadInt32(&c.stop) != 0 {
 		return errors.New("ledger stopped")
 	}

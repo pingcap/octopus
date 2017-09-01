@@ -50,18 +50,9 @@ func NewCRUDCase(cfg *config.Config) Case {
 
 func (c *CRUDCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
-	_, err := mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts")
-	if err != nil {
-		errors.Trace(err)
-	}
-	_, err = mustExec(db, "CREATE TABLE crud_users (id BIGINT PRIMARY KEY, name VARCHAR(16), posts BIGINT)")
-	if err != nil {
-		errors.trace(err)
-	}
-	_, err = mustExec(db, "CREATE TABLE crud_posts (id BIGINT PRIMARY KEY, author BIGINT, title VARCHAR(128))")
-	if err != nil {
-		errors.trace(err)
-	}
+	mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts")
+	mustExec(db, "CREATE TABLE crud_users (id BIGINT PRIMARY KEY, name VARCHAR(16), posts BIGINT)")
+	mustExec(db, "CREATE TABLE crud_posts (id BIGINT PRIMARY KEY, author BIGINT, title VARCHAR(128))")
 	return nil
 }
 
@@ -69,8 +60,33 @@ func (c *CRUDCase) String() string {
 	return "crud"
 }
 
-// Execute is run test
-func (c *CRUDCase) Execute(db *sql.DB, index int) error {
+// Execute is accpte running command
+func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	wg.Add(c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err := c.ExecuteCrud(db, i); err != nil {
+						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
+						return err
+					}
+
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	return nil
+}
+
+// ExecuteCrud is run test
+func (c *CRUDCase) ExecuteCrud(db *sql.DB, index int) error {
 	// CRUDCase does not support multithreading.
 	if index != 0 {
 		return nil
