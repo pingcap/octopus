@@ -52,19 +52,20 @@ func randString(b []byte, r *rand.Rand) {
 	}
 }
 
-func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f func() error) (err error) {
+func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f func() error) (error, bool) {
+	var err error
 	for i := 0; i < retryCnt; i++ {
 		err = f()
 		if err == nil {
-			return nil
+			return nil, false
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, true
 		case <-time.After(interval):
 		}
 	}
-	return errors.Trace(err)
+	return errors.Trace(err), false
 }
 
 func mustExec(db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
@@ -118,7 +119,7 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 	return
 }
 
-func newlogger(filename string) *log.logger {
+func newlogger(filename string) *log.Logger {
 	logger := log.New()
 	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		logger.Out = file

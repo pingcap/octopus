@@ -38,7 +38,7 @@ type BankCaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
-	Concurrency int      `toml:"concurrency`
+	Concurrency int      `toml:"concurrency"`
 }
 
 // Bank2CaseConfig is for bank2 test case.
@@ -47,14 +47,14 @@ type Bank2CaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	Contention  string   `toml:"contention"`
-	Concurrency int      `toml:"concurrency`
+	Concurrency int      `toml:"concurrency"`
 }
 
 // LedgerConfig is for ledger test case.
 type LedgerConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
-	Concurrency int      `toml:"concurrency`
+	Concurrency int      `toml:"concurrency"`
 }
 
 // CRUDCaseConfig is for CRUD test case.
@@ -66,7 +66,7 @@ type CRUDCaseConfig struct {
 	// Insert/delete posts every interval.
 	UpdatePosts int      `toml:"update_posts"`
 	Interval    Duration `toml:"interval"`
-	Concurrency int      `toml:"concurrency`
+	Concurrency int      `toml:"concurrency"`
 }
 
 // LogCaseConfig is for Log test case
@@ -75,13 +75,13 @@ type LogCaseConfig struct {
 	DeleteCount int      `toml:"delete_count"`
 	Interval    Duration `toml:"interval"`
 	TableNum    int      `toml:"table_num"`
-	Concurrency int      `toml:"concurrency`
+	Concurrency int      `toml:"concurrency"`
 }
 
 // BlockWriterCaseConfig is for block write test case
 type BlockWriterCaseConfig struct {
 	TableNum    int `toml:"table_num"`
-	Concurrency int `toml:"concurrency`
+	Concurrency int `toml:"concurrency"`
 }
 
 // SysbenchCaseConfig is for sysbench test case
@@ -96,7 +96,7 @@ type SysbenchCaseConfig struct {
 }
 
 // SqllogictestCaseConfig is for sqllogic_test test case
-type SqllogictestCaseConfig struct {
+type SqllogicTestCaseConfig struct {
 	TestPath  string `toml:"test_path"`
 	SkipError bool   `toml:"skipError"`
 	Parallel  int    `toml:"parallel"`

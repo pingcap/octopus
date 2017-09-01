@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	defaultVerifyTimeout = 20 * time.Minute
+	defaultVerifyTimeout = 24 * time.Hour
 )
 
 // BackCase is for concurrent balance transfer.
@@ -39,14 +39,14 @@ type BankCase struct {
 	concurrency int
 	wg          sync.WaitGroup
 	stopped     int32
-	logger      log.Logger
+	logger      *log.Logger
 }
 
 // NewBankCase returns the BankCase.
 func NewBankCase(cfg *config.Config) Case {
 	b := &BankCase{
 		cfg:         &cfg.Suite.Bank,
-		concurrency: cfg.Suite.Concurrency,
+		concurrency: cfg.Suite.Bank.Concurrency,
 	}
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
@@ -111,6 +111,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		var execInsert []string
 		go func() {
 			args := make([]string, batchSize)
+			defer wg.Done()
 
 			for {
 				startIndex, ok := <-ch
@@ -127,13 +128,16 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 					_, err := db.Exec(query)
 					return err
 				}
-				err := runWithRetry(ctx, 100, 3*time.Second, insertF)
+				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, insertF)
+				if isCancel {
+					execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex))
+					return
+				}
+
 				if err != nil {
 					c.logger.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
-
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
-				wg.Done()
 			}
 		}()
 		c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
@@ -181,14 +185,29 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 }
 
 // Execute implements Case Execute interface.
-func (c *BankCase) Execute(db *sql.DB, index int) error {
-	if atomic.LoadInt32(&c.stopped) != 0 {
-		// too many log print in here if return error
-		return nil
+func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	for i := 0; i < c.concurrency; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if atomic.LoadInt32(&c.stopped) != 0 {
+					// too many log print in here if return error
+					return
+				}
+				c.wg.Add(1)
+				c.moveMoney(db)
+				c.wg.Done()
+			}
+		}(i)
 	}
-	c.wg.Add(1)
-	c.moveMoney(db)
-	c.wg.Done()
+	wg.Wait()
 	return nil
 }
 

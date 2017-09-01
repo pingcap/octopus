@@ -32,7 +32,7 @@ type Case interface {
 	Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error
 
 	// Execute executes the case once.
-	Execute(db *sql.DB, concurrentIndex int) error
+	Execute(ctx context.Context, db *sql.DB) error
 
 	// String implements fmt.Stringer interface.
 	String() string
@@ -51,15 +51,14 @@ func RegisterSuite(name string, f SuiteMaker) error {
 }
 
 // RunSuite runs all suites.
-func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.DB) {
+func RunSuite(ctx context.Context, suiteCases []Case, db *sql.DB) {
 	for _, c := range suiteCases {
 		go func(c Case) {
-			if err := c.Execute(ctx); err != nil {
+			if err := c.Execute(ctx, db); err != nil {
 				log.Fatalf("[%s] execute failed %v", c, err)
 			}
 		}()
 	}
-
 }
 
 // InitCase is init case
