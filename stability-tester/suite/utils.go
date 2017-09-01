@@ -16,6 +16,7 @@ package suite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math/rand"
 	"os"
 	"time"
@@ -66,20 +67,20 @@ func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 	return errors.Trace(err)
 }
 
-func mustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
+func mustExec(db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
 	r, err := db.Exec(query, args...)
 	if err != nil {
-		Log.Fatalf("exec %s err %v", query, err)
+		return r, fmt.Errorf("exec %s err %v", query, err)
 	}
-	return r
+	return r, nil
 }
 
-func mustQuery(db *sql.DB, query string, args ...interface{}) *sql.Rows {
+func mustQuery(db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		Log.Fatalf("query %s err %v", query, err)
+		return r, fmt.Errorf("exec %s err %v", query, err)
 	}
-	return rows
+	return rows, nil
 }
 
 type queryEntry struct {
@@ -106,7 +107,7 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 				return nil, errors.Trace(err)
 			}
 			if affected != q.expectAffectedRows {
-				Log.Fatalf("expect affectedRows %v, but got %v, query %v", q.expectAffectedRows, affected, q)
+				return nil, fmt.Errorf("expect affectedRows %v, but got %v, query %v", q.expectAffectedRows, affected, q)
 			}
 		}
 	}
@@ -117,7 +118,7 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 	return
 }
 
-func newLogger(filename string) *log.Logger {
+func newlogger(filename string) *log.logger {
 	logger := log.New()
 	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
 		logger.Out = file

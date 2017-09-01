@@ -22,6 +22,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/twinj/uuid"
 )
@@ -131,7 +132,7 @@ func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *lo
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		mustExec(db, fmt.Sprintf("CREATE TABLE IF NOT EXISTS block_writer%s %s", s, `
+		_, err := mustExec(db, fmt.Sprintf("CREATE TABLE IF NOT EXISTS block_writer%s %s", s, `
 	(
       block_id BIGINT NOT NULL,
       writer_id VARCHAR(64) NOT NULL,
@@ -139,6 +140,9 @@ func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *lo
       raw_bytes BLOB NOT NULL,
       PRIMARY KEY (block_id, writer_id, block_num)
 )`))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }

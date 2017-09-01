@@ -22,6 +22,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -80,7 +81,10 @@ func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s))
+		_, err := mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	c.startCheck(ctx, db)

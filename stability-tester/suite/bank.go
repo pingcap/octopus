@@ -82,8 +82,11 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		return nil
 	}
 
-	mustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL)", index))
-	mustExec(db, `create table if not exists record (id BIGINT AUTO_INCREMENT,
+	_, err := mustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL)", index))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = mustExec(db, `create table if not exists record (id BIGINT AUTO_INCREMENT,
         from_id BIGINT NOT NULL,
         to_id BIGINT NOT NULL,
         from_balance BIGINT NOT NULL,
@@ -91,6 +94,9 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
         amount BIGINT NOT NULL,
         tso BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY(id))`)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	var wg sync.WaitGroup
 
 	// TODO: fix the error is NumAccounts can't be divided by batchSize.
@@ -217,8 +223,14 @@ func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	}
 
 	c.logger.Infof("[%s] we need %d accounts%s but got %d, re-initialize the data again", c, c.cfg.NumAccounts, index, count)
-	mustExec(db, fmt.Sprintf("drop table if exists accounts%s", index))
-	mustExec(db, "DROP TABLE IF EXISTS record")
+	_, err = mustExec(db, fmt.Sprintf("drop table if exists accounts%s", index))
+	if err != nil {
+		c.logger.Fatal(err)
+	}
+	_, err = mustExec(db, "DROP TABLE IF EXISTS record")
+	if err != nil {
+		c.logger.Fatal(err)
+	}
 	return true
 }
 
