@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -32,7 +33,7 @@ type SchedulerConfig struct {
 }
 
 // RunConfigScheduler continuously adds schedulers using pd api.
-func RunConfigScheduler(conf *SchedulerConfig) {
+func RunConfigScheduler(ctx context.Context, conf *SchedulerConfig) {
 	var schedulerNames []string
 	if conf.ShuffleLeader {
 		schedulerNames = append(schedulerNames, "shuffle-leader-scheduler")
@@ -43,6 +44,11 @@ func RunConfigScheduler(conf *SchedulerConfig) {
 
 	for {
 		for _, name := range schedulerNames {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			data := map[string]string{"name": name}
 			b, _ := json.Marshal(data)
 			for _, addr := range conf.PDAddrs {

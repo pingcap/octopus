@@ -155,7 +155,12 @@ func main() {
 	// Run all nemeses in background.
 	// go nemesis.RunNemeses(ctx, &cfg.Nemeses, cluster.NewCluster(&cfg.Cluster))
 
-	go config.RunConfigScheduler(&cfg.Scheduler)
+	go func() {
+		wg.Add(1)
+		defer wg.Done()
+		config.RunConfigScheduler(ctx, &cfg.Scheduler)
+	}()
+
 	time.Sleep(3 * time.Second)
 	wg.Wait()
 }
