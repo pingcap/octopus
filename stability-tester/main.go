@@ -109,7 +109,9 @@ func main() {
 		}
 		// init case one by one
 		suiteCases := suite.InitCase(ctx, cfg, db)
-
+		if len(suiteCases) == 0 {
+			return
+		}
 		// run case
 		wg.Add(1)
 		go func() {

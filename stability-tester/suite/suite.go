@@ -63,22 +63,28 @@ func RunSuite(ctx context.Context, suiteCases []Case, concurrency int, db *sql.D
 }
 
 // InitCase is init case
-func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) Case {
+func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
 	// Create all cases and initialize them.
 	for _, name := range cfg.Suite.Names {
-		suiteM, ok := suites[name]
-		if !ok {
-			log.Warnf("Not found this Suite Case: %s", name)
-			continue
-		}
-		logger := newLogger(fmt.Sprintf("%s-stability-tester.log"), name)
-		suiteCase := suiteM(cfg)
-		err := suiteCase.Initialize(ctx, db, logger)
-		if err != nil {
-			log.Fatal(err)
-		}
+		select {
+		case <-ctx.Done():
+			var tempCases []Case
+			return tempCases
+		default:
+			suiteM, ok := suites[name]
+			if !ok {
+				log.Warnf("Not found this Suite Case: %s", name)
+				continue
+			}
+			logger := newLogger(fmt.Sprintf("%s-stability-tester.log"), name)
+			suiteCase := suiteM(cfg)
+			err := suiteCase.Initialize(ctx, db, logger)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		suiteCases = append(suiteCases, suiteCase)
+			suiteCases = append(suiteCases, suiteCase)
+		}
 	}
 	return suiteCases
 }

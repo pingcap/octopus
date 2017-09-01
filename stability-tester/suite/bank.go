@@ -58,6 +58,11 @@ func NewBankCase(cfg *config.Config) Case {
 func (c *BankCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		err := c.initDB(ctx, db, i)
 		if err != nil {
 			return err
