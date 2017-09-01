@@ -154,9 +154,9 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return
 				default:
-					if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
-						log.Errorf("[%s] execute failed %v", c.String(), err)
-					}
+				}
+				if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
+					log.Errorf("[%s] execute failed %v", c.String(), err)
 				}
 			}
 		}(i)

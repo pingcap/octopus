@@ -86,6 +86,7 @@ func (c *SmallWriterCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 				}
 				if err := c.sws[i].batchExecute(db); err != nil {
+					smallWriteFailedCounter.Inc()
 					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
 					return
 				}
@@ -113,7 +114,6 @@ func (sw *smallDataWriter) batchExecute(db *sql.DB) error {
 		)
 
 		if err != nil {
-			smallWriteFailedCounter.Inc()
 			return fmt.Errorf("[small writer] insert err %v", err)
 		}
 		smallWriteDuration.Observe(time.Since(start).Seconds())

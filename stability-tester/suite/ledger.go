@@ -142,9 +142,9 @@ func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return
 				default:
-					if err := c.ExecuteLedger(db); err != nil {
-						c.logger.Errorf("[%s] exec failed %v", c.String(), err)
-					}
+				}
+				if err := c.ExecuteLedger(db); err != nil {
+					c.logger.Errorf("[%s] exec failed %v", c.String(), err)
 				}
 			}
 		}(i)
