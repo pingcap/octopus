@@ -105,6 +105,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 			for job := range ch {
 				select {
 				case <-ctx.Done():
+					log.Warn("cancel")
 					return
 				default:
 				}
@@ -135,6 +136,8 @@ TRUNCATE TABLE bank2_transaction_leg;
 		}
 		select {
 		case <-ctx.Done():
+			log.Warning("cancel")
+			return nil
 		case ch <- Job{begin: begin, end: end}:
 		}
 	}

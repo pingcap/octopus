@@ -15,15 +15,15 @@ pd = ""
 
 [suite]
 names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
-concurrency = 10000
+concurrency = 1000
 
 [suite.bank]
-num_accounts = 10000000
+num_accounts = 1000000
 interval = "2s"
 table_num = 1
 
 [suite.bank2]
-num_accounts = 10000000
+num_accounts = 1000000
 interval = "2s"
 contention = "low"
 
