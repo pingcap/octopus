@@ -34,19 +34,17 @@ var (
 
 // BackCase is for concurrent balance transfer.
 type BankCase struct {
-	mu          sync.RWMutex
-	cfg         *config.BankCaseConfig
-	concurrency int
-	wg          sync.WaitGroup
-	stopped     int32
-	logger      *log.Logger
+	mu      sync.RWMutex
+	cfg     *config.BankCaseConfig
+	wg      sync.WaitGroup
+	stopped int32
+	logger  *log.Logger
 }
 
 // NewBankCase returns the BankCase.
 func NewBankCase(cfg *config.Config) Case {
 	b := &BankCase{
-		cfg:         &cfg.Suite.Bank,
-		concurrency: cfg.Suite.Bank.Concurrency,
+		cfg: &cfg.Suite.Bank,
 	}
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
@@ -106,7 +104,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	wg.Add(jobCount)
 
 	ch := make(chan int, jobCount)
-	for i := 0; i < c.concurrency; i++ {
+	for i := 0; i < c.cfg.Concurrency; i++ {
 		start := time.Now()
 		var execInsert []string
 		go func() {
@@ -187,7 +185,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 // Execute implements Case Execute interface.
 func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 	var wg sync.WaitGroup
-	for i := 0; i < c.concurrency; i++ {
+	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -199,6 +197,7 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 				}
 				if atomic.LoadInt32(&c.stopped) != 0 {
 					// too many log print in here if return error
+					c.logger.Error("bank stopped")
 					return
 				}
 				c.wg.Add(1)

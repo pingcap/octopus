@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -55,15 +56,14 @@ func NewBlockWriterCase(cfg *config.Config) Case {
 	if c.cfg.TableNum < 1 {
 		c.cfg.TableNum = 1
 	}
-
-	c.initBlocks(cfg.Suite.Concurrency)
+	c.initBlocks()
 
 	return c
 }
 
-func (c *BlockWriterCase) initBlocks(concurrency int) {
-	c.bws = make([]*blockWriter, concurrency)
-	for i := 0; i < concurrency; i++ {
+func (c *BlockWriterCase) initBlocks() {
+	c.bws = make([]*blockWriter, c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
 		c.bws[i] = c.newBlockWriter()
 	}
 }
@@ -85,7 +85,7 @@ func (c *BlockWriterCase) newBlockWriter() *blockWriter {
 //
 // TODO: configure it from outside.
 
-func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) {
+func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) error {
 	// buffer values
 	for i := 0; i < blockWriterBatchSize; i++ {
 		blockID := bw.rand.Int63()
@@ -109,12 +109,11 @@ func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) {
 	)
 
 	if err != nil {
-		blockWriteFailedCounter.Inc()
-		c.logger.Errorf("[block writer] insert err %v", err)
-		return
+		return fmt.Errorf("[block writer] insert err %v", err)
 	}
 	bw.index = (bw.index + 1) % tableNum
 	blockBatchWriteDuration.Observe(time.Since(start).Seconds())
+	return nil
 }
 
 func (bw *blockWriter) randomBlock() []byte {
@@ -148,8 +147,26 @@ func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *lo
 }
 
 // Execute implements Case Execute interface.
-func (c *BlockWriterCase) Execute(db *sql.DB, index int) error {
-	c.bws[index].batchExecute(db, c.cfg.TableNum)
+func (c *BlockWriterCase) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				err := c.bws[i].batchExecute(db, c.cfg.TableNum)
+				if err != nil {
+					blockWriteFailedCounter.Inc()
+					c.logger.Error(err)
+				}
+			}
+		}(i)
+	}
 	return nil
 }
 

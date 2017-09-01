@@ -40,19 +40,17 @@ const (
 // in the form of a transaction record and two transaction "legs" per database
 // transaction.
 type Bank2Case struct {
-	cfg         *config.Bank2CaseConfig
-	concurrency int
-	wg          sync.WaitGroup
-	stop        int32
-	txnID       int32
-	logger      *log.Logger
+	cfg    *config.Bank2CaseConfig
+	wg     sync.WaitGroup
+	stop   int32
+	txnID  int32
+	logger *log.Logger
 }
 
 // NewBank2Case returns a Bank2Case.
 func NewBank2Case(cfg *config.Config) Case {
 	b := &Bank2Case{
-		cfg:         &cfg.Suite.Bank2,
-		concurrency: cfg.Suite.Concurrency,
+		cfg: &cfg.Suite.Bank2,
 	}
 	return b
 }
@@ -113,10 +111,14 @@ TRUNCATE TABLE bank2_transaction_leg;
 				}
 
 				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES %s", strings.Join(args, ","))
-				err := runWithRetry(ctx, 100, 3*time.Second, func() error {
+				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
 					_, err := db.Exec(query)
 					return err
 				})
+				if isCancel {
+					execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.begin))
+					return
+				}
 				if err != nil {
 					c.logger.Fatalf("exec %s err %s", query, err)
 				}
@@ -141,10 +143,13 @@ TRUNCATE TABLE bank2_transaction_leg;
 	wg.Wait()
 
 	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, c.cfg.NumAccounts*initialBalance)
-	err = runWithRetry(ctx, 100, 3*time.Second, func() error {
+	err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
 		_, err := db.Exec(query)
 		return err
 	})
+	if isCancel {
+		return nil
+	}
 	if err != nil {
 		c.logger.Fatalf("[%s] insert system account err: %v", c, err)
 	}
@@ -202,13 +207,28 @@ func (c *Bank2Case) verify(db *sql.DB) {
 }
 
 // Execute implements Case Execute interface.
-func (c *Bank2Case) Execute(db *sql.DB, index int) error {
-	if atomic.LoadInt32(&c.stop) != 0 {
-		return errors.New("bank2 stopped")
+func (c *Bank2Case) Execute(ctx context.Context, db *sql.DB) error {
+	var wg sync.WaitGroup
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				if atomic.LoadInt32(&c.stop) != 0 {
+					c.logger.Error("bank2 stopped")
+					return
+				}
+				c.wg.Add(1)
+				c.moveMoney(db)
+				c.wg.Done()
+			}
+		}(i)
 	}
-	c.wg.Add(1)
-	c.moveMoney(db)
-	c.wg.Done()
 	return nil
 }
 
