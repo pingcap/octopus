@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -26,6 +25,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -109,8 +109,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		var execInsert []string
 		go func() {
 			args := make([]string, batchSize)
-			defer wg.Done()
-
 			for {
 				select {
 				case <-ctx.Done():
@@ -140,6 +138,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 					c.logger.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
+				wg.Done()
 			}
 		}()
 		c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))

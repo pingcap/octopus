@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -26,6 +25,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 	"github.com/twinj/uuid"
+	"golang.org/x/net/context"
 )
 
 const blockWriterBatchSize = 20

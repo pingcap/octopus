@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -26,6 +25,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -94,12 +94,12 @@ TRUNCATE TABLE bank2_transaction_leg;
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(insertConcurrency)
 	type Job struct {
 		begin, end int
 	}
 	ch := make(chan Job)
 	for i := 0; i < insertConcurrency; i++ {
+		wg.Add(1)
 		start := time.Now()
 		var execInsert []string
 		go func() {

@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -26,6 +25,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"golang.org/x/net/context"
 )
 
 // LedgerCase simulates a complete record of financial transactions over the
@@ -72,12 +72,12 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(insertConcurrency)
 	type Job struct {
 		begin, end int
 	}
 	ch := make(chan Job)
 	for i := 0; i < insertConcurrency; i++ {
+		wg.Add(1)
 		start := time.Now()
 		var execInsert []string
 		go func() {
@@ -139,8 +139,8 @@ type postingRequest struct {
 // Execute implements Case Execute interface.
 func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
 	var wg sync.WaitGroup
-	wg.Add(c.cfg.Concurrency)
 	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			for {

@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 
@@ -22,6 +21,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"golang.org/x/net/context"
 )
 
 // Case is a test case for running cluster.

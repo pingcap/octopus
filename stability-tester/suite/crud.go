@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
@@ -24,6 +23,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
+	"golang.org/x/net/context"
 )
 
 var errNotExist = errors.New("the request row does not exist")
@@ -69,8 +69,8 @@ func (c *CRUDCase) String() string {
 // Execute is accpte running command
 func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
 	var wg sync.WaitGroup
-	wg.Add(c.cfg.Concurrency)
 	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			for {
