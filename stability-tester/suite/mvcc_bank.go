@@ -44,11 +44,10 @@ const mvccPrefix = "#"
 
 // NewMVCCBankCase returns the MVCCBankCase.
 func NewMVCCBankCase(cfg *config.Config) Case {
-	c := &MVCCBankCase{
+	return &MVCCBankCase{
 		cfg: &cfg.Suite.MVCCBank,
+		pd:  cfg.PD,
 	}
-	c.pd = cfg.PD
-	return c
 }
 
 // Initialize implements Case Initialize interface.
@@ -142,7 +141,19 @@ func (c *MVCCBankCase) startVerify(ctx context.Context) {
 
 // Execute implements Case Execute interface.
 func (c *MVCCBankCase) Execute(ctx context.Context, db *sql.DB) error {
-	c.moveMoney(c.store)
+	var wg sync.WaitGroup
+	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			c.moveMoney(ctx)
+		}()
+	}
 	return nil
 }
 
@@ -186,9 +197,14 @@ func (c *MVCCBankCase) verify() {
 	}
 }
 
-func (c *MVCCBankCase) moveMoney(store kv.Storage) {
+func (c *MVCCBankCase) moveMoney(ctx context.Context) {
 	var from, to int
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		from, to = rand.Intn(c.cfg.NumAccounts), rand.Intn(c.cfg.NumAccounts)
 		if from == to {
 			continue

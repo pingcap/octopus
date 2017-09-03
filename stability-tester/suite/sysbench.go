@@ -15,13 +15,13 @@ package suite
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"os/exec"
 	"time"
 
-	"database/sql"
+	log "github.com/Sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/config"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -51,9 +51,9 @@ func NewSysbenchCase(cfg *config.Config) Case {
 }
 
 // Initialize implements Case Initialize interface.
-func (s *SysbenchCase) Initialize(ctx context.Context, cfg *config.Config, db *sql.DB, logger *log.Logger) error {
-	s.logger = logger
-	err := s.clean()
+func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	c.logger = logger
+	err := c.clean()
 	if err != nil {
 		return err
 	}
@@ -61,19 +61,19 @@ func (s *SysbenchCase) Initialize(ctx context.Context, cfg *config.Config, db *s
 }
 
 // Execute implements Case Execute interface.
-func (s *SysbenchCase) Execute(ctx context.Context, db *sql.DB) error {
-	err := s.runAction()
+func (c *SysbenchCase) Execute(ctx context.Context, db *sql.DB) error {
+	err := c.runAction()
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(s.cfg.Interval.Duration)
+	ticker := time.NewTicker(c.cfg.Interval.Duration)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			err := s.runAction()
+			err := c.runAction()
 			if err != nil {
 				return err
 			}
@@ -82,70 +82,70 @@ func (s *SysbenchCase) Execute(ctx context.Context, db *sql.DB) error {
 }
 
 // String implements fmt.Stringer interface.
-func (s *SysbenchCase) String() string {
+func (c *SysbenchCase) String() string {
 	return "sysbench"
 }
 
-func (s *SysbenchCase) runAction() error {
-	if err := s.prepare(); err != nil {
+func (c *SysbenchCase) runAction() error {
+	if err := c.prepare(); err != nil {
 		return err
 	}
 	time.Sleep(10 * time.Second)
-	if err := s.run(); err != nil {
+	if err := c.run(); err != nil {
 		return err
 	}
-	if err := s.clean(); err != nil {
+	if err := c.clean(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *SysbenchCase) prepare() error {
+func (c *SysbenchCase) prepare() error {
 	var err error
-	createDBArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"create database IF NOT EXISTS sbtest"`, s.host, s.port, s.user)
-	Log.Infof("prepare command: %s", createDBArgs)
+	createDBArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"create database IF NOT EXISTS sbtest"`, c.host, c.port, c.user)
+	c.logger.Infof("prepare command: %s", createDBArgs)
 	cmdCreate := exec.Command("/bin/sh", "-c", createDBArgs)
 	if err = cmdCreate.Run(); err != nil {
-		Log.Errorf("create database failed: %v", err)
+		c.logger.Errorf("create database failed: %v", err)
 		return err
 	}
 
 	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --rand-init=on --db-driver=mysql prepare`,
-		s.cfg.LuaPath, s.host, s.port, s.user, s.password, s.cfg.TableCount, 0)
-	Log.Infof("create tables command: %s", cmdStr)
+		c.cfg.LuaPath, c.host, c.port, c.user, c.password, c.cfg.TableCount, 0)
+	c.logger.Infof("create tables command: %s", cmdStr)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		Log.Errorf("%s\n", out.String())
+		c.logger.Errorf("%s\n", out.String())
 		return err
 	}
 
 	return nil
 }
 
-func (s *SysbenchCase) run() error {
+func (c *SysbenchCase) run() error {
 	cmdStr := fmt.Sprintf(`sysbench --test=%s/insert.lua --mysql-host=%s --mysql-port=%d --mysql-user=%s --mysql-password=%s --oltp-tables-count=%d --oltp-table-size=%d --num-threads=%d --oltp-read-only=off --report-interval=600 --rand-type=uniform --max-time=%d --percentile=99 --max-requests=1000000000 --db-driver=mysql run`,
-		s.cfg.LuaPath, s.host, s.port, s.user, s.password, s.cfg.TableCount, s.cfg.TableSize, s.cfg.Threads, s.cfg.MaxTime)
+		c.cfg.LuaPath, c.host, c.port, c.user, c.password, c.cfg.TableCount, c.cfg.TableSize, c.cfg.Threads, c.cfg.MaxTime)
 	cmd := exec.Command("/bin/sh", "-c", cmdStr)
-	Log.Infof("run command: %s", cmdStr)
+	c.logger.Infof("run command: %s", cmdStr)
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		Log.Errorf("%s\n", out.String())
+		c.logger.Errorf("%s\n", out.String())
 		return err
 	}
 
 	return nil
 }
 
-func (s *SysbenchCase) clean() error {
-	cmdStrArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"drop database if exists sbtest"`, s.host, s.port, s.user)
-	Log.Infof("clean command: ", cmdStrArgs)
+func (c *SysbenchCase) clean() error {
+	cmdStrArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"drop database if exists sbtest"`, c.host, c.port, c.user)
+	c.logger.Infof("clean command: ", cmdStrArgs)
 	cmd := exec.Command("/bin/sh", "-c", cmdStrArgs)
 	if err := cmd.Run(); err != nil {
-		Log.Infof("run drop database failed", err)
+		c.logger.Infof("run drop database failed", err)
 		return err
 	}
 	return nil

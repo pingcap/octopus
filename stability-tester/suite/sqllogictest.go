@@ -29,10 +29,10 @@ import (
 	"strings"
 	"time"
 
-	"context"
+	log "github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/octopus/stability-tester/config"
-	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
 )
 
 func init() {
