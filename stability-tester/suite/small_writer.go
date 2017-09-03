@@ -18,11 +18,11 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
-	"sync"
-
 	log "github.com/Sirupsen/logrus"
+	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -67,7 +67,9 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 // Initialize implements Case Initialize interface.
 func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
-	mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))")
+	if _, err := mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))"); err != nil {
+		return errors.Trace(err)
+	}
 
 	return nil
 }

@@ -83,6 +83,11 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 		go func() {
 			defer wg.Done()
 			for job := range ch {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%v, 0, "acc%v", 0, 0)`, rand.Int63(), i))
@@ -111,9 +116,10 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 		if end > c.cfg.NumAccounts {
 			end = c.cfg.NumAccounts + 1
 		}
-		ch <- Job{
-			begin: begin,
-			end:   end,
+		select {
+		case <-ctx.Done():
+			return nil
+		case ch <- Job{begin: begin, end: end}:
 		}
 	}
 	close(ch)
@@ -250,10 +256,10 @@ func (c *LedgerCase) startVerify(ctx context.Context, db *sql.DB) {
 	go func() {
 		for {
 			select {
-			case <-time.After(c.cfg.Interval.Duration):
-				c.verify(db)
 			case <-ctx.Done():
 				return
+			case <-time.After(c.cfg.Interval.Duration):
+				c.verify(db)
 			}
 		}
 	}()

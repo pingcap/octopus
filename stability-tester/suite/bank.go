@@ -112,6 +112,11 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 			defer wg.Done()
 
 			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				startIndex, ok := <-ch
 				if !ok {
 					return
@@ -160,6 +165,8 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-ticker.C:
 				err := c.verify(db, index)
 				if err != nil {
@@ -174,8 +181,6 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 					start = time.Now()
 					c.logger.Infof("[%s] verify success in %s", c, time.Now())
 				}
-			case <-ctx.Done():
-				return
 			}
 		}
 	}(index)

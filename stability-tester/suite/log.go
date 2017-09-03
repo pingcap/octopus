@@ -19,11 +19,11 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
-	"sync"
-
 	log "github.com/Sirupsen/logrus"
+	"github.com/juju/errors"
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
@@ -80,11 +80,18 @@ func (c *LogCase) initLogWrite(concurrency int) {
 func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		var s string
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s))
+		if _, err := mustExec(db, fmt.Sprintf("create table if not exists log%s (id bigint auto_increment,data varchar(1024),primary key(id))", s)); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	c.startCheck(ctx, db)
@@ -99,10 +106,10 @@ func (c *LogCase) startCheck(ctx context.Context, db *sql.DB) {
 
 			for {
 				select {
-				case <-ticker.C:
-					c.reviseLogCount(db, i)
 				case <-ctx.Done():
 					return
+				case <-ticker.C:
+					c.reviseLogCount(db, i)
 				}
 			}
 		}(i)

@@ -50,9 +50,15 @@ func NewCRUDCase(cfg *config.Config) Case {
 
 func (c *CRUDCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
-	mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts")
-	mustExec(db, "CREATE TABLE crud_users (id BIGINT PRIMARY KEY, name VARCHAR(16), posts BIGINT)")
-	mustExec(db, "CREATE TABLE crud_posts (id BIGINT PRIMARY KEY, author BIGINT, title VARCHAR(128))")
+	if _, err := mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts"); err != nil {
+		return errors.Trace(err)
+	}
+	if _, err := mustExec(db, "CREATE TABLE crud_users (id BIGINT PRIMARY KEY, name VARCHAR(16), posts BIGINT)"); err != nil {
+		return errors.Trace(err)
+	}
+	if _, err := mustExec(db, "CREATE TABLE crud_posts (id BIGINT PRIMARY KEY, author BIGINT, title VARCHAR(128))"); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 

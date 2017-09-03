@@ -140,6 +140,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 		}
 		select {
 		case <-ctx.Done():
+			return nil
 		case ch <- Job{begin: begin, end: end}:
 		}
 	}
@@ -148,8 +149,11 @@ TRUNCATE TABLE bank2_transaction_leg;
 
 	select {
 	case <-ctx.Done():
+		c.logger.Warn("bank2 init is cancel")
+		return nil
+	default:
 	}
-	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, c.cfg.NumAccounts*initialBalance)
+	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, int64(c.cfg.NumAccounts*initialBalance))
 	err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
 		_, err := db.Exec(query)
 		return err
@@ -171,10 +175,10 @@ func (c *Bank2Case) startVerify(ctx context.Context, db *sql.DB) {
 	go func() {
 		for {
 			select {
-			case <-time.After(c.cfg.Interval.Duration):
-				c.verify(db)
 			case <-ctx.Done():
 				return
+			case <-time.After(c.cfg.Interval.Duration):
+				c.verify(db)
 			}
 		}
 	}()

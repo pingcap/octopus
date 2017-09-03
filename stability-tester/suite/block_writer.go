@@ -127,6 +127,11 @@ func (bw *blockWriter) randomBlock() []byte {
 func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
 	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		var s string
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
