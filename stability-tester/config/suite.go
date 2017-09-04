@@ -28,8 +28,8 @@ type SuiteConfig struct {
 	Log          LogCaseConfig          `toml:"log"`
 	BlockWriter  BlockWriterCaseConfig  `toml:"block_writer"`
 	MVCCBank     BankCaseConfig         `toml:"mvcc_bank"`
-	Sysbench     SysbenchCaseConfig     `toml:"sysbench`
-	SqllogicTest SqllogicTestCaseConfig `toml:"sqllogic_test`
+	Sysbench     SysbenchCaseConfig     `toml:"sysbench"`
+	SqllogicTest SqllogicTestCaseConfig `toml:"sqllogic_test"`
 	SmallWriter  SmallWriterCaseConfig  `toml:"small_writer"`
 }
 

@@ -139,5 +139,7 @@ func main() {
 		}()
 	}
 
+	// run scheduler
+	go config.RunConfigScheduler(&cfg.Scheduler)
 	wg.Wait()
 }
