@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 )
 
-var _ = Suite(&testBankSuite{})
+var _ = Suite(&testBank2Suite{})
 
 type testBank2Suite struct {
 	db *sql.DB
