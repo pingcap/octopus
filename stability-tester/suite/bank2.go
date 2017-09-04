@@ -99,10 +99,8 @@ TRUNCATE TABLE bank2_transaction_leg;
 	type Job struct {
 		begin, end int
 	}
-	//  128 letters used to generate
-	remark := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
-	maxLen := len(remark)
 
+	maxLen := len(remark)
 	ch := make(chan Job)
 	for i := 0; i < insertConcurrency; i++ {
 		go func() {

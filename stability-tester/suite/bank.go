@@ -30,6 +30,8 @@ import (
 
 var (
 	defaultVerifyTimeout = 20 * time.Minute
+	//  128 letters used to generate
+	remark = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 )
 
 // BackCase is for concurrent balance transfer.
@@ -92,10 +94,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	jobCount := c.cfg.NumAccounts / batchSize
 	wg.Add(jobCount)
 
-	//  128 letters used to generate
-	remark := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 	maxLen := len(remark)
-
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.concurrency; i++ {
 		go func() {
