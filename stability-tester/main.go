@@ -74,21 +74,7 @@ func main() {
 	}
 
 	if len(*testCase) > 0 {
-		splitCase := strings.Split(*testCase, ",")
-		var existCase bool
-		if len(splitCase) > 0 {
-			for _, addCase := range splitCase {
-				existCase = false
-				for _, eCase := range cfg.Suite.Names {
-					if addCase == eCase {
-						existCase = true
-					}
-				}
-				if existCase == false {
-					cfg.Suite.Names = append(cfg.Suite.Names, addCase)
-				}
-			}
-		}
+		cfg.Suite.Names = strings.Split(*testCase, ",")
 	}
 
 	log.Infof("%#v", cfg)
