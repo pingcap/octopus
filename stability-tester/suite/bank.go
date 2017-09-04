@@ -134,8 +134,8 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 					c.logger.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
-				wg.Done()
 			}
+			wg.Done()
 			c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
 			return
 		}()
