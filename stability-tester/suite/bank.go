@@ -101,12 +101,12 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	// Insert batchSize values in one SQL.
 	batchSize := 100
 	jobCount := c.cfg.NumAccounts / batchSize
-	wg.Add(jobCount)
 
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		start := time.Now()
 		var execInsert []string
+		wg.Add(1)
 		go func() {
 			args := make([]string, batchSize)
 			for {
@@ -117,7 +117,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				startIndex, ok := <-ch
 				if !ok {
-					return
+					break
 				}
 
 				for i := 0; i < batchSize; i++ {
@@ -129,19 +129,16 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 					_, err := db.Exec(query)
 					return err
 				}
-				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, insertF)
-				if isCancel {
-					return
-				}
-
+				err, _ := runWithRetry(ctx, 100, 3*time.Second, insertF)
 				if err != nil {
 					c.logger.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
 				wg.Done()
 			}
+			c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
+			return
 		}()
-		c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
 	}
 
 	for i := 0; i < jobCount; i++ {
