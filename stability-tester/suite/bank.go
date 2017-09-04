@@ -30,6 +30,8 @@ import (
 
 var (
 	defaultVerifyTimeout = 20 * time.Minute
+	//  128 letters used to generate
+	remark = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 )
 
 // BackCase is for concurrent balance transfer.
@@ -75,7 +77,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		return nil
 	}
 
-	mustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL)", index))
+	mustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL, remark VARCHAR(128))", index))
 	mustExec(db, `create table if not exists record (id BIGINT AUTO_INCREMENT,
         from_id BIGINT NOT NULL,
         to_id BIGINT NOT NULL,
@@ -92,6 +94,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	jobCount := c.cfg.NumAccounts / batchSize
 	wg.Add(jobCount)
 
+	maxLen := len(remark)
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.concurrency; i++ {
 		go func() {
@@ -104,12 +107,11 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 
 				start := time.Now()
-
 				for i := 0; i < batchSize; i++ {
-					args[i] = fmt.Sprintf("(%d, %d)", startIndex+i, 1000)
+					args[i] = fmt.Sprintf("(%d, %d, \"%s\")", startIndex+i, 1000, remark[:rand.Intn(maxLen)])
 				}
 
-				query := fmt.Sprintf("INSERT IGNORE INTO accounts%s (id, balance) VALUES %s", index, strings.Join(args, ","))
+				query := fmt.Sprintf("INSERT IGNORE INTO accounts%s (id, balance, remark) VALUES %s", index, strings.Join(args, ","))
 				insertF := func() error {
 					_, err := db.Exec(query)
 					return err
