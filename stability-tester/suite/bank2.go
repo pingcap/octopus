@@ -240,6 +240,7 @@ func (c *Bank2Case) Execute(ctx context.Context, db *sql.DB) error {
 			}
 		}(i)
 	}
+	wg.Wait()
 	return nil
 }
 
