@@ -23,6 +23,9 @@ tidb-benchbot:
 tidb-stability:
 	$(GOBUILD) -o bin/tidb-stability-tester stability-tester/*.go
 
+bridge:
+	$(GOBUILD) -o bin/bridge local-tester/bridge/*
+
 tidb-ycsb:
 	$(GOBUILD) -o bin/tidb-ycsb ycsb/*.go
 
