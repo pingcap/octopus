@@ -121,10 +121,10 @@ func (s *SqllogictestCase) ExecuteSqllogic(ctx context.Context, db *sql.DB) erro
 	go addTasks(fileNames, taskChan)
 
 	for i := 0; i < taskCount; i++ {
-		go doProcess(doneChan, taskChan, resultChan, mdbs[i], i, s.cfg.SkipError, s.logger)
+		go doProcess(ctx, doneChan, taskChan, resultChan, mdbs[i], i, s.cfg.SkipError, s.logger)
 	}
 
-	go doWait(doneChan, resultChan, taskCount)
+	go doWait(ctx, doneChan, resultChan, taskCount)
 	if errCnt := doResult(resultChan, startTime, s.logger); errCnt > 0 {
 		s.logger.Fatalf("Test failed, error count:%d", errCnt)
 	}
@@ -132,9 +132,10 @@ func (s *SqllogictestCase) ExecuteSqllogic(ctx context.Context, db *sql.DB) erro
 }
 
 const (
-	intType    = 'I'
-	floatType  = 'R'
-	stringType = 'T'
+	intType     = 'I'
+	floatType   = 'R'
+	stringType  = 'T'
+	dbTryNumber = 100
 )
 
 type msgType byte
@@ -154,6 +155,7 @@ type tester struct {
 	labelHashes map[string]string
 	mdb         *sql.DB
 	logger      *log.Logger
+	ctx         context.Context
 }
 
 type lineScanner struct {
@@ -217,12 +219,14 @@ func addTasks(tasks []string, taskChan chan string) {
 	close(taskChan)
 }
 
-func doProcess(doneChan chan struct{}, taskChan chan string, resultChan chan *result, mdb *sql.DB, runid int, skipError bool, logger *log.Logger) {
+func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string, resultChan chan *result,
+	mdb *sql.DB, runid int, skipError bool, logger *log.Logger) {
 	for task := range taskChan {
 		t := &tester{
 			labelHashes: make(map[string]string),
 			mdb:         mdb,
 			logger:      logger,
+			ctx:         ctx,
 		}
 
 		logger.Infof("run %s", task)
@@ -237,16 +241,19 @@ func (t *tester) prepare(runid int) {
 	dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d", runid)
 	createsql := fmt.Sprintf("create database sqllogic_test_%d", runid)
 	usesql := fmt.Sprintf("USE sqllogic_test_%d", runid)
-	if _, err = t.mdb.Exec(dropsql); err != nil {
-		t.logger.Fatalf("Executing %s err %v", dropsql, err)
-	}
 
-	if _, err = t.mdb.Exec(createsql); err != nil {
-		t.logger.Fatalf("Executing %s err %v", createsql, err)
-	}
-
-	if _, err = t.mdb.Exec(usesql); err != nil {
-		t.logger.Fatalf("Executing %s err %v", usesql, err)
+	sqlList := []string{dropsql, createsql, usesql}
+	for _, _sql := range sqlList {
+		for i := 0; i < dbTryNumber; i++ {
+			_, err = t.mdb.Exec(_sql)
+			if err == nil {
+				break
+			}
+			time.Sleep(3 * time.Second)
+		}
+		if err != nil {
+			t.logger.Fatalf("Executing %s err %v", _sql, err)
+		}
 	}
 }
 
@@ -463,8 +470,14 @@ func (t *tester) execStatement(stmt statement) error {
 		}
 	}()
 
-	_, err := t.mdb.Exec(stmt.sql)
-
+	var err error
+	for i := 0; i < dbTryNumber; i++ {
+		_, err = t.mdb.Exec(stmt.sql)
+		if err == nil {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
 	if stmt.expectErr {
 		if err == nil {
 			return fmt.Errorf("%s: expected error, but return ok", stmt.pos)
@@ -494,7 +507,15 @@ func (t *tester) execQuery(q query) error {
 		}
 	}()
 
-	rows, err := t.mdb.Query(q.sql)
+	var rows *sql.Rows
+	var err error
+	for i := 0; i < dbTryNumber; i++ {
+		rows, err = t.mdb.Query(q.sql)
+		if err == nil {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
 	if err != nil {
 		return fmt.Errorf("%s: query err %v - sql[ %s ]", q.pos, err, q.sql)
 	}
@@ -619,12 +640,19 @@ func (r rowSlice) flatten() []string {
 	return s
 }
 
-func doWait(doneChan chan struct{}, resultChan chan *result, taskCount int) {
-	for i := 0; i < taskCount; i++ {
-		<-doneChan
+func doWait(ctx context.Context, doneChan chan struct{}, resultChan chan *result, taskCount int) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		deault:
+		}
+		for i := 0; i < taskCount; i++ {
+			<-doneChan
+		}
+		close(resultChan)
 	}
 
-	close(resultChan)
 }
 
 // Return error count
