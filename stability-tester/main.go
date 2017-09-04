@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -24,6 +25,7 @@ var (
 	pprofAddr  = flag.String("pprof", "0.0.0.0:16060", "pprof address")
 	logFile    = flag.String("log-file", "", "log file")
 	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
+	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, mvcc_bank, sysbench, sqllogic_test. mutliple case please use , to divide")
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
@@ -69,6 +71,24 @@ func main() {
 	cfg, err := config.ParseConfig(*configFile)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if len(*testCase) > 0 {
+		splitCase := strings.Split(*testCase, ",")
+		var existCase bool
+		if len(splitCase) > 0 {
+			for _, addCase := range splitCase {
+				existCase = false
+				for _, eCase := range cfg.Suite.Names {
+					if addCase == eCase {
+						existCase = true
+					}
+				}
+				if existCase == false {
+					cfg.Suite.Names = append(cfg.Suite.Names, addCase)
+				}
+			}
+		}
 	}
 
 	log.Infof("%#v", cfg)
