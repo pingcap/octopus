@@ -26,6 +26,9 @@ var (
 	logFile    = flag.String("log-file", "", "log file")
 	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
 	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, mvcc_bank, sysbench, sqllogic_test. mutliple case please use , to divide")
+	hostIP     = flag.String("host", "", "db ip")
+	hostPort   = flag.Int("port", 4000, "db port")
+	pdInfo     = flag.String("pd-info", "", "pd information")
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
@@ -77,6 +80,16 @@ func main() {
 		cfg.Suite.Names = strings.Split(*testCase, ",")
 	}
 
+	if len(*hostIP) > 0 {
+		cfg.Host = *hostIP
+	}
+	if *hostPort > 0 {
+		cfg.Port = *hostPort
+	}
+	if len(*pdInfo) > 0 {
+		cfg.PD = *pdInfo
+	}
+
 	log.Infof("%#v", cfg)
 
 	// Prometheus metrics
@@ -101,6 +114,7 @@ func main() {
 		log.Infof("Got signal [%d] to exit.", sig)
 		cancel()
 
+		wg.Wait()
 		if db != nil {
 			db.Close()
 		}
