@@ -122,7 +122,7 @@ func main() {
 			log.Fatal(err)
 		}
 		// init case one by one
-		suiteCases := suite.InitCase(ctx, cfg, db)
+		suiteCases := suite.InitCase(ctx, cfg, db, *logLevel)
 		if len(suiteCases) == 0 {
 			return
 		}
