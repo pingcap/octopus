@@ -60,7 +60,7 @@ func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB, logger *log.L
 		return nil
 	}
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -124,6 +124,7 @@ func (c *SysbenchCase) prepare(ctx context.Context) (error, bool) {
 	c.logger.Infof("prepare command: %s", createDBArgs)
 	cmdCreate := exec.Command("/bin/sh", "-c", createDBArgs)
 	if err := cmdCreate.Start(); err != nil {
+		c.logger.Errorf("[%s] start failed: %v", createDBArgs, err)
 		return errors.Trace(err), false
 	}
 	done := make(chan error)
@@ -137,11 +138,12 @@ func (c *SysbenchCase) prepare(ctx context.Context) (error, bool) {
 	case <-ctx.Done():
 		err := cmdCreate.Process.Kill()
 		if err != nil {
-			log.Errorf("kill [%s] failed: %v", cmdCreate, err)
+			c.logger.Errorf("kill [%s] failed: %v", cmdCreate, err)
 		}
 		return nil, true
 	case err := <-done:
 		if err != nil {
+			c.logger.Errorf("[%s] run failed: %v", createDBArgs, err)
 			return errors.Trace(err), false
 		}
 	}
@@ -166,11 +168,12 @@ func (c *SysbenchCase) prepare(ctx context.Context) (error, bool) {
 	case <-ctx.Done():
 		err := cmdCreate.Process.Kill()
 		if err != nil {
-			log.Errorf("kill [%s] failed: %v", cmd, err)
+			c.logger.Errorf("kill [%s] failed: %v", cmd, err)
 		}
 		return nil, true
 	case err := <-done:
 		if err != nil {
+			c.logger.Errorf("%s\n", out.String())
 			return errors.Trace(err), false
 		}
 	}
@@ -202,11 +205,12 @@ func (c *SysbenchCase) run(ctx context.Context) (error, bool) {
 	case <-ctx.Done():
 		err := cmd.Process.Kill()
 		if err != nil {
-			log.Errorf("kill [%s] failed: %v", cmd, err)
+			c.logger.Errorf("kill [%s] failed: %v", cmd, err)
 		}
 		return nil, true
 	case err := <-done:
 		if err != nil {
+			c.logger.Errorf("%s\n", out.String())
 			return errors.Trace(err), false
 		}
 	}
@@ -216,11 +220,12 @@ func (c *SysbenchCase) run(ctx context.Context) (error, bool) {
 
 func (c *SysbenchCase) clean(ctx context.Context) (error, bool) {
 	cmdStrArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"drop database if exists sbtest"`, c.host, c.port, c.user)
-	c.logger.Infof("clean command: ", cmdStrArgs)
+	c.logger.Infof("clean command: %s", cmdStrArgs)
 	cmd := exec.Command("/bin/sh", "-c", cmdStrArgs)
 	var wg sync.WaitGroup
 	done := make(chan error)
 	if err := cmd.Start(); err != nil {
+		c.logger.Error("[%s] start failed: %s", cmdStrArgs, err)
 		return errors.Trace(err), false
 	}
 	wg.Add(1)
@@ -233,11 +238,12 @@ func (c *SysbenchCase) clean(ctx context.Context) (error, bool) {
 	case <-ctx.Done():
 		err := cmd.Process.Kill()
 		if err != nil {
-			log.Errorf("kill [%s] failed: %v", cmd, err)
+			c.logger.Errorf("kill [%s] failed: %v", cmd, err)
 		}
 		return nil, true
 	case err := <-done:
 		if err != nil {
+			c.logger.Error("sysbench clean failed: %s", err)
 			return errors.Trace(err), false
 		}
 	}

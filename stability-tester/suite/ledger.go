@@ -107,7 +107,7 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
 			}
 		}()
-		c.logger.Infof("[%s] insert %d accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
+		c.logger.Infof("[%s] insert %s accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
