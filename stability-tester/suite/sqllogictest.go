@@ -1,4 +1,3 @@
-// Copyright 2017 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -463,7 +462,6 @@ func (t *tester) execStatement(stmt statement) error {
 		}
 		if err != nil {
 			t.logger.Errorf("PANIC for %s:[%s] %v\n%s", stmt.pos, stmt.sql, err, debug.Stack())
-			os.Exit(1)
 		}
 	}()
 
@@ -500,7 +498,6 @@ func (t *tester) execQuery(q query) error {
 		}
 		if err != nil {
 			t.logger.Errorf("PANIC for %s:[%s] %v\n%s", q.pos, q.sql, err, debug.Stack())
-			os.Exit(1)
 		}
 	}()
 
