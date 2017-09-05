@@ -13,7 +13,7 @@ shuffle-leader = false
 shuffle-region = false
 
 [suite]
-names = ["bank", "bank2", "ledger", "crud", "block_writer","log", "sysbench", "sqllogic_test"]
+names = ["bank", "bank2", "ledger", "crud", "block_writer","log", "sqllogic_test"]
 
 [suite.bank]
 num_accounts = 10000000

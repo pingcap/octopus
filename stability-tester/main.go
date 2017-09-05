@@ -25,7 +25,7 @@ var (
 	pprofAddr  = flag.String("pprof", "0.0.0.0:16060", "pprof address")
 	logFile    = flag.String("log-file", "stability-tester.log", "log file")
 	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
-	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, sysbench, sqllogic_test. mutliple case please use , to divide")
+	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, sqllogic_test. mutliple case please use , to divide")
 	host       = flag.String("host", "", "db ip")
 	port       = flag.Int("port", 0, "db port")
 	pdURL      = flag.String("pd-url", "", "pd information")
