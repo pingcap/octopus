@@ -102,8 +102,6 @@ TRUNCATE TABLE bank2_transaction_leg;
 	maxLen := len(remark)
 	for i := 0; i < insertConcurrency; i++ {
 		wg.Add(1)
-		start := time.Now()
-		var execInsert []string
 		go func() {
 			defer wg.Done()
 			for job := range ch {
@@ -112,6 +110,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 					return
 				default:
 				}
+				start := time.Now()
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
 					args = append(args, fmt.Sprintf(`(%d, %d, "account %d", "%s")`, i, initialBalance, i, remark[:rand.Intn(maxLen)]))
@@ -128,10 +127,9 @@ TRUNCATE TABLE bank2_transaction_leg;
 				if err != nil {
 					c.logger.Fatalf("exec %s err %s", query, err)
 				}
-				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
+				c.logger.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
 			}
 		}()
-		c.logger.Infof("[%s] insert %s accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
