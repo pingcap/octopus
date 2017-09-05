@@ -114,14 +114,14 @@ func (s *SqllogictestCase) ExecuteSqllogic(ctx context.Context, db *sql.DB) erro
 	mdbs := createDatabases(taskCount, s.port, s.host, s.user, s.password, s.cfg.DBName, s.logger)
 	defer closeDatabases(mdbs)
 
-	go addTasks(fileNames, taskChan, s.logger)
+	go addTasks(ctx, fileNames, taskChan, s.logger)
 
 	for i := 0; i < taskCount; i++ {
 		go doProcess(ctx, doneChan, taskChan, resultChan, mdbs[i], i, s.cfg.SkipError, s.logger)
 	}
 
 	go doWait(ctx, doneChan, resultChan, taskCount)
-	if errCnt := doResult(resultChan, startTime, s.logger); errCnt > 0 {
+	if errCnt := doResult(ctx, resultChan, startTime, s.logger); errCnt > 0 {
 		s.logger.Fatalf("Test failed, error count:%d", errCnt)
 	}
 	return nil
@@ -208,12 +208,19 @@ func closeDatabases(mdbs []*sql.DB) {
 	os.RemoveAll("var")
 }
 
-func addTasks(tasks []string, taskChan chan string, logger *log.Logger) {
-	for _, task := range tasks {
-		logger.Infof("add task %s", task)
-		taskChan <- task
+func addTasks(ctx context.Context, tasks []string, taskChan chan string, logger *log.Logger) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		for _, task := range tasks {
+			logger.Infof("add task %s", task)
+			taskChan <- task
+		}
+		close(taskChan)
 	}
-	close(taskChan)
 }
 
 func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string, resultChan chan *result,
@@ -652,11 +659,13 @@ func doWait(ctx context.Context, doneChan chan struct{}, resultChan chan *result
 }
 
 // Return error count
-func doResult(resultChan chan *result, startTime time.Time, logger *log.Logger) int64 {
+func doResult(ctx context.Context, resultChan chan *result, startTime time.Time, logger *log.Logger) int64 {
 	var totalCount, errCount int64
 	ticker := time.NewTicker(3 * time.Second)
 	for {
 		select {
+		case <-ctx.Done():
+			return errCount
 		case <-ticker.C:
 			printResultInfo("run", totalCount, errCount, startTime, logger)
 		case msg, ok := <-resultChan:

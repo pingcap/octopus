@@ -220,7 +220,7 @@ func (c *SysbenchCase) run(ctx context.Context) (error, bool) {
 
 func (c *SysbenchCase) clean(ctx context.Context) (error, bool) {
 	cmdStrArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"drop database if exists sbtest"`, c.host, c.port, c.user)
-	c.logger.Infof("clean command: %s", cmdStrArgs)
+	c.logger.Infof("clean command: [%s] ", cmdStrArgs)
 	cmd := exec.Command("/bin/sh", "-c", cmdStrArgs)
 	var wg sync.WaitGroup
 	done := make(chan error)
