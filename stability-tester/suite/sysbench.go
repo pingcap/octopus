@@ -225,7 +225,7 @@ func (c *SysbenchCase) clean(ctx context.Context) (error, bool) {
 	var wg sync.WaitGroup
 	done := make(chan error)
 	if err := cmd.Start(); err != nil {
-		c.logger.Error("[%s] start failed: %s", cmdStrArgs, err)
+		c.logger.Errorf("[%s] start failed: %s", cmdStrArgs, err)
 		return errors.Trace(err), false
 	}
 	wg.Add(1)
@@ -243,7 +243,7 @@ func (c *SysbenchCase) clean(ctx context.Context) (error, bool) {
 		return nil, true
 	case err := <-done:
 		if err != nil {
-			c.logger.Error("sysbench clean failed: %s", err)
+			c.logger.Errorf("sysbench clean failed: %v", err)
 			return errors.Trace(err), false
 		}
 	}
