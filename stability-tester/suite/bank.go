@@ -44,7 +44,7 @@ type BankCase struct {
 // NewBankCase returns the BankCase.
 func NewBankCase(cfg *config.Config) Case {
 	b := &BankCase{
-		cfg: &cfg.Suite.Bank,
+		cfg: &cfig.Suite.Bank,
 	}
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
@@ -108,6 +108,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		var execInsert []string
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			args := make([]string, batchSize)
 			for {
 				select {
@@ -135,7 +136,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				execInsert = append(execInsert, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
 			}
-			wg.Done()
 			c.logger.Infof("[%s] insert %s accounts%s, takes %s", c, strings.Join(execInsert, ","), index, time.Now().Sub(start))
 			return
 		}()
