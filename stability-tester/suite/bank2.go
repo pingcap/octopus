@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS bank2_accounts (
   id INT,
   balance INT NOT NULL,
   name VARCHAR(32),
+  remark VARCHAR(128),
   PRIMARY KEY (id),
   UNIQUE INDEX byName (name)
 );
@@ -98,6 +99,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 		begin, end int
 	}
 	ch := make(chan Job)
+	maxLen := len(remark)
 	for i := 0; i < insertConcurrency; i++ {
 		wg.Add(1)
 		start := time.Now()
@@ -112,10 +114,10 @@ TRUNCATE TABLE bank2_transaction_leg;
 				}
 				args := make([]string, 0, insertBatchSize)
 				for i := job.begin; i < job.end; i++ {
-					args = append(args, fmt.Sprintf(`(%d, %d, "account %d")`, i, initialBalance, i))
+					args = append(args, fmt.Sprintf(`(%d, %d, "account %d", "%s")`, i, initialBalance, i, remark[:rand.Intn(maxLen)]))
 				}
 
-				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES %s", strings.Join(args, ","))
+				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name, remark) VALUES %s", strings.Join(args, ","))
 				err, isCancel := runWithRetry(ctx, 200, 5*time.Second, func() error {
 					_, err := db.Exec(query)
 					return err
