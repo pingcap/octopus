@@ -68,10 +68,11 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 	// Insert batchSize values in one SQL.
 	batchSize := 100
 	jobCount := c.cfg.NumAccounts / batchSize
-	wg.Add(jobCount)
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
@@ -114,8 +115,14 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 		}
 	}
 
-	wg.Wait()
 	close(ch)
+	wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
 
 	c.startVerify(ctx)
 	return nil
@@ -154,6 +161,8 @@ func (c *MVCCBankCase) Execute(ctx context.Context, db *sql.DB) error {
 			c.moveMoney(ctx)
 		}()
 	}
+
+	wg.Wait()
 	return nil
 }
 

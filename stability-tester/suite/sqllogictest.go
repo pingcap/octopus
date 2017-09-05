@@ -73,19 +73,16 @@ func (s *SqllogictestCase) String() string {
 
 // Execute implements Case Execute interface.
 func (s *SqllogictestCase) Execute(ctx context.Context, db *sql.DB) error {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			if err := s.ExecuteSqllogic(ctx, db); err != nil {
-				s.logger.Errorf("[%s] execute failed %v", s.String(), err)
-			}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
 		}
-	}()
-	return nil
+		if err := s.ExecuteSqllogic(ctx, db); err != nil {
+			s.logger.Errorf("[%s] execute failed %v", s.String(), err)
+		}
+	}
 }
 
 // ExecuteSqllogic run case

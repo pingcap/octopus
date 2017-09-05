@@ -125,6 +125,13 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Log
 	close(ch)
 	wg.Wait()
 
+	select {
+	case <-ctx.Done():
+		c.logger.Warn("ledger initialize is cancel")
+		return nil
+	default:
+	}
+
 	c.startVerify(ctx, db)
 	return nil
 }
