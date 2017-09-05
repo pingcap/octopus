@@ -78,6 +78,9 @@ func (c *LogCase) initLogWrite() {
 
 // Initialize implements Case Initialize interface.
 func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
+	if logger == nil {
+		return errors.New("[log case] init logger failed")
+	}
 	c.logger = logger
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
@@ -163,7 +166,7 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 				}
 				if i >= len(c.lws) {
-					log.Error("[log]: index out of range")
+					log.Error("[log case]: index out of range")
 					return
 				}
 				if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
@@ -216,7 +219,7 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) error {
 
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("batch_insert").Inc()
-		lw.logger.Errorf("[log] insert log err %v", err)
+		lw.logger.Errorf("[log] insert log failed: %v", err)
 		return err
 	}
 
