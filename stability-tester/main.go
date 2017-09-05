@@ -116,11 +116,6 @@ func main() {
 		sig := <-sc
 		log.Infof("Got signal [%d] to exit.", sig)
 		cancel()
-
-		wg.Wait()
-		if db != nil {
-			db.Close()
-		}
 	}()
 
 	// Create the database and run TiDB cases
@@ -143,6 +138,9 @@ func main() {
 	}
 
 	// run scheduler
-	go config.RunConfigScheduler(&cfg.Scheduler)
+	go config.RunConfigScheduler(ctx, &cfg.Scheduler)
 	wg.Wait()
+	if db != nil {
+		db.Close()
+	}
 }
