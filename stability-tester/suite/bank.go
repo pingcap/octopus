@@ -29,11 +29,11 @@ import (
 )
 
 var (
-	defaultVerifyTimeout = 24 * time.Hour
+	defaultVerifyTimeout = 2 * time.Hour
 	remark               = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 )
 
-// BackCase is for concurrent balance transfer.
+// BankCase is for concurrent balance transfer.
 type BankCase struct {
 	mu      sync.RWMutex
 	cfg     *config.BankCaseConfig
@@ -132,7 +132,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 					_, err := db.Exec(query)
 					return err
 				}
-				err, _ := runWithRetry(ctx, 100, 3*time.Second, insertF)
+				err, _ := runWithRetry(ctx, 200, 5*time.Second, insertF)
 				if err != nil {
 					c.logger.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
@@ -147,8 +147,15 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		ch <- i * batchSize
 	}
 
-	wg.Wait()
 	close(ch)
+	wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		c.logger.Warn("bank initialize is cancel")
+		return nil
+	default:
+	}
 
 	c.startVerify(ctx, db, index)
 	return nil

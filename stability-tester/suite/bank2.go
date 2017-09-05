@@ -118,7 +118,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 				}
 
 				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name, remark) VALUES %s", strings.Join(args, ","))
-				err, isCancel := runWithRetry(ctx, 100, 3*time.Second, func() error {
+				err, isCancel := runWithRetry(ctx, 200, 5*time.Second, func() error {
 					_, err := db.Exec(query)
 					return err
 				})
@@ -151,7 +151,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 
 	select {
 	case <-ctx.Done():
-		c.logger.Warn("bank2 init is cancel")
+		c.logger.Warn("bank2 initialize is cancel")
 		return nil
 	default:
 	}

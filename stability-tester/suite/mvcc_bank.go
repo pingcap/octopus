@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"golang.org/x/net/context"
+	"strings"
 )
 
 // BackCase is for concurrent balance transfer.
@@ -68,10 +69,13 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 	// Insert batchSize values in one SQL.
 	batchSize := 100
 	jobCount := c.cfg.NumAccounts / batchSize
-	wg.Add(jobCount)
 	ch := make(chan int, jobCount)
 	for i := 0; i < c.cfg.Concurrency; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+			start := time.Now()
+			var execInfo []string
 			for {
 				select {
 				case <-ctx.Done():
@@ -80,42 +84,41 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 				}
 				startIndex, ok := <-ch
 				if !ok {
-					return
+					break
 				}
-
-				start := time.Now()
-
 				err := kv.RunInNewTxn(c.store, true, func(txn kv.Transaction) error {
 					for i := 0; i < batchSize; i++ {
 						if err := txn.Set(bankKey(startIndex+i), []byte("1000")); err != nil {
 							return err
 						}
 					}
-
 					return nil
 				})
 				if err != nil {
-					fmt.Errorf("[%s] initialize failed %v", c, err)
+					c.logger.Errorf("[%s] initialize failed %v", c, err)
 					return
 				}
+				execInfo = append(execInfo, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
 
-				c.logger.Infof("[%s] insert %d accounts, takes %s", c, batchSize, time.Now().Sub(start))
-
-				wg.Done()
 			}
+			c.logger.Infof("[%s] insert [%s] accounts, takes %s", c, strings.Join(execInfo, ","), time.Now().Sub(start))
+			return
 		}()
 	}
 
 	for i := 0; i < jobCount; i++ {
-		select {
-		case <-ctx.Done():
-			return nil
-		case ch <- i * batchSize:
-		}
+		ch <- i * batchSize
 	}
 
-	wg.Wait()
 	close(ch)
+	wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		c.logger.Errorf("mvcc bank initialize cancel")
+		return nil
+	default:
+	}
 
 	c.startVerify(ctx)
 	return nil
@@ -154,6 +157,8 @@ func (c *MVCCBankCase) Execute(ctx context.Context, db *sql.DB) error {
 			c.moveMoney(ctx)
 		}()
 	}
+
+	wg.Wait()
 	return nil
 }
 
