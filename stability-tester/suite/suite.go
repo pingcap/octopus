@@ -68,7 +68,7 @@ func RunSuite(ctx context.Context, suiteCases []Case, db *sql.DB) {
 }
 
 // InitCase is init case
-func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
+func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB, loglevel string) []Case {
 	// Create all cases and initialize them.
 	var suiteCases []Case
 	for _, name := range cfg.Suite.Names {
@@ -81,7 +81,7 @@ func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
 				log.Warnf("Not found this Suite Case: %s", name)
 				continue
 			}
-			logger := newLogger(fmt.Sprintf("%s-stability-tester.log", name), "info")
+			logger := newLogger(fmt.Sprintf("%s-stability-tester.log", name), loglevel)
 			suiteCase := suiteM(cfg)
 			err := suiteCase.Initialize(ctx, db, logger)
 			if err != nil {
