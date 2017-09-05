@@ -44,7 +44,7 @@ type BankCase struct {
 // NewBankCase returns the BankCase.
 func NewBankCase(cfg *config.Config) Case {
 	b := &BankCase{
-		cfg: &cfig.Suite.Bank,
+		cfg: &cfg.Suite.Bank,
 	}
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
