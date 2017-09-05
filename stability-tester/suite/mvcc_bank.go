@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"golang.org/x/net/context"
-	"strings"
 )
 
 // BackCase is for concurrent balance transfer.
@@ -74,8 +73,6 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			start := time.Now()
-			var execInfo []string
 			for {
 				select {
 				case <-ctx.Done():
@@ -84,8 +81,10 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 				}
 				startIndex, ok := <-ch
 				if !ok {
-					break
+					return
 				}
+
+				start := time.Now()
 				err := kv.RunInNewTxn(c.store, true, func(txn kv.Transaction) error {
 					for i := 0; i < batchSize; i++ {
 						if err := txn.Set(bankKey(startIndex+i), []byte("1000")); err != nil {
@@ -98,11 +97,9 @@ func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *lo
 					c.logger.Errorf("[%s] initialize failed %v", c, err)
 					return
 				}
-				execInfo = append(execInfo, fmt.Sprintf("%d_%d", startIndex, startIndex+batchSize))
+				c.logger.Infof("[%s] insert %d accounts, takes %s", c, batchSize, time.Now().Sub(start))
 
 			}
-			c.logger.Infof("[%s] insert [%s] accounts, takes %s", c, strings.Join(execInfo, ","), time.Now().Sub(start))
-			return
 		}()
 	}
 
