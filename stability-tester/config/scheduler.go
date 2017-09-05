@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"golang.org/x/net/context"
 )
 
 var addSchedulerInterval = time.Minute
@@ -33,26 +32,17 @@ type SchedulerConfig struct {
 }
 
 // RunConfigScheduler for ctx
-func RunConfigScheduler(ctx context.Context, conf *SchedulerConfig) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		ExecConfigScheduler(conf)
-	}
-
-}
-
-// ExecConfigScheduler continuously adds schedulers using pd api.
-func ExecConfigScheduler(conf *SchedulerConfig) {
+func RunConfigScheduler(conf *SchedulerConfig) {
 	var schedulerNames []string
 	if conf.ShuffleLeader {
 		schedulerNames = append(schedulerNames, "shuffle-leader-scheduler")
 	}
 	if conf.ShuffleRegion {
 		schedulerNames = append(schedulerNames, "shuffle-region-scheduler")
+	}
+
+	if len(schedulerNames) == 0 {
+		return
 	}
 
 	for {
