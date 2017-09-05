@@ -645,7 +645,7 @@ func doWait(ctx context.Context, doneChan chan struct{}, resultChan chan *result
 		select {
 		case <-ctx.Done():
 			return
-		deault:
+		default:
 		}
 		for i := 0; i < taskCount; i++ {
 			<-doneChan

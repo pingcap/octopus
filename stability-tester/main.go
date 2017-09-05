@@ -26,9 +26,9 @@ var (
 	logFile    = flag.String("log-file", "", "log file")
 	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
 	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, mvcc_bank, sysbench, sqllogic_test. mutliple case please use , to divide")
-	hostIP     = flag.String("host", "", "db ip")
-	hostPort   = flag.Int("port", 4000, "db port")
-	pdInfo     = flag.String("pd-info", "", "pd information")
+	host       = flag.String("host", "", "db ip")
+	port       = flag.Int("port", 4000, "db port")
+	pdURL      = flag.String("pd-url", "", "pd information")
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
@@ -46,7 +46,7 @@ func initLog() {
 	if file, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY, 0666); err == nil {
 		log.SetOutput(file)
 	} else {
-		log.Info("failed to log to file, using default stderr")
+		log.Info("failed to log to file, using default std")
 	}
 
 	if lvl, err := log.ParseLevel(*logLevel); err != nil {
@@ -80,14 +80,17 @@ func main() {
 		cfg.Suite.Names = strings.Split(*testCase, ",")
 	}
 
-	if len(*hostIP) > 0 {
-		cfg.Host = *hostIP
+	if len(*host) > 0 {
+		cfg.Host = *host
 	}
-	if *hostPort > 0 {
-		cfg.Port = *hostPort
+	if *port > 0 {
+		cfg.Port = *port
 	}
-	if len(*pdInfo) > 0 {
-		cfg.PD = *pdInfo
+	if len(*pdURL) > 0 {
+		cfg.PD = *pdURL
+		cfg.Scheduler.PDAddrs = []string{*pdURL}
+		cfg.Scheduler.ShuffleLeader = true
+		cfg.Scheduler.ShuffleRegion = true
 	}
 
 	log.Infof("%#v", cfg)

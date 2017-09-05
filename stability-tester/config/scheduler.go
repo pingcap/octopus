@@ -41,6 +41,10 @@ func RunConfigScheduler(conf *SchedulerConfig) {
 		schedulerNames = append(schedulerNames, "shuffle-region-scheduler")
 	}
 
+	if len(schedulerNames) == 0 {
+		return
+	}
+
 	for {
 		for _, name := range schedulerNames {
 			data := map[string]string{"name": name}

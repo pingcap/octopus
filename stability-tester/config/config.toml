@@ -8,9 +8,9 @@ password = ""
 pd = ""
 
 [scheduler]
-# pd = ["http://127.0.0.1:2379"]
-# shuffle-leader = false
-# shuffle-region = false
+pd = ["http://127.0.0.1:2379"]
+shuffle-leader = false
+shuffle-region = false
 
 [suite]
 names = ["bank", "bank2", "ledger", "crud", "block_writer","log", "mvcc_bank", "sysbench", "sqllogic_test"]
