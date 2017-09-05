@@ -125,7 +125,7 @@ func (c *MVCCBankCase) startVerify(ctx context.Context) {
 	c.verify()
 
 	go func() {
-		ticker := time.NewTicker(c.cfg.Interval.Duration)
+		ticker := time.NewTicker(Interval)
 		defer ticker.Stop()
 
 		for {

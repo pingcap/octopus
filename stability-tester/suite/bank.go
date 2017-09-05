@@ -161,7 +161,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 	c.verify(db, index)
 	start := time.Now()
 	go func(index string) {
-		ticker := time.NewTicker(c.cfg.Interval.Duration)
+		ticker := time.NewTicker(Interval)
 		defer ticker.Stop()
 
 		for {

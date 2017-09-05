@@ -101,7 +101,7 @@ func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger
 func (c *LogCase) startCheck(ctx context.Context, db *sql.DB) {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		go func(i int) {
-			ticker := time.NewTicker(c.cfg.Interval.Duration)
+			ticker := time.NewTicker(Interval)
 			defer ticker.Stop()
 
 			for {

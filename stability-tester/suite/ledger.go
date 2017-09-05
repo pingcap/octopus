@@ -265,7 +265,7 @@ func (c *LedgerCase) startVerify(ctx context.Context, db *sql.DB) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(c.cfg.Interval.Duration):
+			case <-time.After(Interval):
 				c.verify(db)
 			}
 		}

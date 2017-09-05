@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
@@ -24,6 +25,8 @@ import (
 	"github.com/pingcap/octopus/stability-tester/config"
 	"golang.org/x/net/context"
 )
+
+var Interval = 5 * time.Second
 
 // Case is a test case for running cluster.
 type Case interface {

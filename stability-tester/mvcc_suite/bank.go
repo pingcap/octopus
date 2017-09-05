@@ -97,7 +97,7 @@ func (c *BankCase) startVerify(ctx context.Context, db kv.Storage) {
 	c.verify(db)
 
 	go func() {
-		ticker := time.NewTicker(c.cfg.Interval.Duration)
+		ticker := time.NewTicker(Interval)
 		defer ticker.Stop()
 
 		for {

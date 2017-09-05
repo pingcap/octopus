@@ -63,7 +63,7 @@ func (s *SysbenchCase) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(s.cfg.Interval.Duration)
+	ticker := time.NewTicker(Interval)
 	defer ticker.Stop()
 	for {
 		select {
