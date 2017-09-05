@@ -114,7 +114,7 @@ func (s *SqllogictestCase) ExecuteSqllogic(ctx context.Context, db *sql.DB) erro
 	mdbs := createDatabases(taskCount, s.port, s.host, s.user, s.password, s.cfg.DBName, s.logger)
 	defer closeDatabases(mdbs)
 
-	go addTasks(fileNames, taskChan)
+	go addTasks(fileNames, taskChan, s.logger)
 
 	for i := 0; i < taskCount; i++ {
 		go doProcess(ctx, doneChan, taskChan, resultChan, mdbs[i], i, s.cfg.SkipError, s.logger)
@@ -208,8 +208,9 @@ func closeDatabases(mdbs []*sql.DB) {
 	os.RemoveAll("var")
 }
 
-func addTasks(tasks []string, taskChan chan string) {
+func addTasks(tasks []string, taskChan chan string, logger *log.Logger) {
 	for _, task := range tasks {
+		logger.Infof("add task %s", task)
 		taskChan <- task
 	}
 	close(taskChan)
@@ -234,20 +235,21 @@ func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string
 
 func (t *tester) prepare(runid int) {
 	var err error
-	dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d", runid)
-	createsql := fmt.Sprintf("create database sqllogic_test_%d", runid)
-	usesql := fmt.Sprintf("USE sqllogic_test_%d", runid)
+	dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", runid)
+	createsql := fmt.Sprintf("create database sqllogic_test_%d;", runid)
+	usesql := fmt.Sprintf("USE sqllogic_test_%d;", runid)
 
 	sqlList := []string{dropsql, createsql, usesql}
 	for _, _sql := range sqlList {
+		t.logger.Infof("run sql [%s]", _sql)
 		for i := 0; i < dbTryNumber; i++ {
 			_, err = t.mdb.Exec(_sql)
-			if err == nil {
+			if err == nil || strings.Contains(err.Error(), "doesn't exists") {
 				break
 			}
 			time.Sleep(3 * time.Second)
 		}
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "doesn't exists") {
 			t.logger.Fatalf("Executing %s err %v", _sql, err)
 		}
 	}

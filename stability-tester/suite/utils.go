@@ -119,12 +119,15 @@ func ExecWithRollback(db *sql.DB, queries []queryEntry) (res sql.Result, err err
 	return
 }
 
-func newLogger(filename string) *log.Logger {
+func newLogger(filename, loglevel string) *log.Logger {
 	logger := log.New()
-	if file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
-		logger.Out = file
+	file, _ := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
+	logger.Out = file
+	if lvl, err := log.ParseLevel(loglevel); err != nil {
+		log.SetLevel(lvl)
 	} else {
-		log.Infof("failed to log to %s, using default stderr", filename)
+		log.SetLevel(log.InfoLevel)
 	}
+
 	return logger
 }

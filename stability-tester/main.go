@@ -23,7 +23,7 @@ import (
 var (
 	configFile = flag.String("c", "config.toml", "stability test config file")
 	pprofAddr  = flag.String("pprof", "0.0.0.0:16060", "pprof address")
-	logFile    = flag.String("log-file", "", "log file")
+	logFile    = flag.String("log-file", "stability-tester.log", "log file")
 	logLevel   = flag.String("L", "info", "log level: info, debug, warn, error, fatal")
 	testCase   = flag.String("t", "", "testcase: bank, bank2, ledger, crud, block_writer, log, mvcc_bank, sysbench, sqllogic_test. mutliple case please use , to divide")
 	host       = flag.String("host", "", "db ip")
@@ -43,19 +43,15 @@ func openDB(cfg *config.Config) (*sql.DB, error) {
 }
 
 func initLog() {
-	if file, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY, 0666); err == nil {
-		log.SetOutput(file)
-	} else {
-		log.Info("failed to log to file, using default std")
-	}
+	file, _ := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY, 0666)
+	log.SetOutput(file)
 
 	if lvl, err := log.ParseLevel(*logLevel); err != nil {
 		log.SetLevel(lvl)
 	} else {
-		log.Info("failed to set log level, use info level")
+		log.SetLevel(log.InfoLevel)
 	}
 
-	log.SetLevel(log.InfoLevel)
 }
 
 func main() {
@@ -93,7 +89,7 @@ func main() {
 		cfg.Scheduler.ShuffleRegion = true
 	}
 
-	log.Infof("%#v", cfg)
+	log.Infof("config %+v", cfg)
 
 	// Prometheus metrics
 	PushMetrics(cfg)

@@ -81,7 +81,7 @@ func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB) []Case {
 				log.Warnf("Not found this Suite Case: %s", name)
 				continue
 			}
-			logger := newLogger(fmt.Sprintf("%s-stability-tester.log", name))
+			logger := newLogger(fmt.Sprintf("%s-stability-tester.log", name), "info")
 			suiteCase := suiteM(cfg)
 			err := suiteCase.Initialize(ctx, db, logger)
 			if err != nil {
