@@ -54,16 +54,16 @@ func NewLogCase(cfg *config.Config) Case {
 	c := &LogCase{
 		cfg: &cfg.Suite.Log,
 	}
-	c.initLogWrite(cfg.Suite.Concurrency)
+	c.initLogWrite()
 	if c.cfg.TableNum <= 1 {
 		c.cfg.TableNum = 1
 	}
 	return c
 }
 
-func (c *LogCase) initLogWrite(concurrency int) {
-	c.lws = make([]*logWriter, concurrency)
-	for i := 0; i < concurrency; i++ {
+func (c *LogCase) initLogWrite() {
+	c.lws = make([]*logWriter, c.cfg.Concurrency)
+	for i := 0; i < c.cfg.Concurrency; i++ {
 		source := rand.NewSource(int64(time.Now().UnixNano()))
 		c.lws[i] = &logWriter{
 			minSize:       100,
@@ -161,6 +161,10 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 				case <-ctx.Done():
 					return
 				default:
+				}
+				if i >= len(c.lws) {
+					log.Error("[log]: index out of range")
+					return
 				}
 				if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
 					log.Errorf("[%s] execute failed %v", c.String(), err)

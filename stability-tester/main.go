@@ -37,7 +37,6 @@ func openDB(cfg *config.Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxIdleConns(cfg.Suite.Concurrency)
 	log.Info("DB opens successfully")
 	return db, nil
 }

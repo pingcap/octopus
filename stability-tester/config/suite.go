@@ -20,7 +20,6 @@ type SuiteConfig struct {
 	// Names contains all cases to be run later.
 	Names []string `toml:"names"`
 	// Concurrency is the concurrency to run all cases.
-	Concurrency  int                    `toml:"concurrency"`
 	Bank         BankCaseConfig         `toml:"bank"`
 	Bank2        Bank2CaseConfig        `toml:"bank2"`
 	Ledger       LedgerConfig           `toml:"ledger"`
