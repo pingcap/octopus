@@ -133,7 +133,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 	err := db.QueryRow(query).Scan(&count)
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("count").Inc()
-		c.logger.Errorf("[%s] select count err %v", c, err)
+		c.logger.Errorf("[%s] select count failed: %v", c, err)
 		return
 	}
 	logDurationVec.WithLabelValues("count").Observe(time.Since(start).Seconds())
@@ -145,7 +145,7 @@ func (c *LogCase) reviseLogCount(db *sql.DB, id int) {
 		_, err = db.Exec(sql)
 		if err != nil {
 			logFailedCounterVec.WithLabelValues("delete").Inc()
-			c.logger.Errorf("[%s] delete log err %v", c, err)
+			c.logger.Errorf("[%s] delete log failed: %v", c, err)
 			return
 		}
 		logDurationVec.WithLabelValues("delete").Observe(time.Since(start).Seconds())
@@ -166,11 +166,11 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 				}
 				if i >= len(c.lws) {
-					log.Error("[log case]: index out of range")
+					c.logger.Error("[log case]: index out of range")
 					return
 				}
 				if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
-					log.Errorf("[%s] execute failed %v", c.String(), err)
+					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
 				}
 			}
 		}(i)
