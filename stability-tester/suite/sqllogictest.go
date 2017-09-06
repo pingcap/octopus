@@ -67,6 +67,25 @@ func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB) error {
 	defer func() {
 		s.logger.Infof("[%s] init end...", s.String())
 	}()
+	var err error
+	for index := 0; index < s.cfg.Parallel; index++ {
+		dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", index)
+		createsql := fmt.Sprintf("create database sqllogic_test_%d;", index)
+		sqlList := []string{dropsql, createsql}
+		for _, _sql := range sqlList {
+			s.logger.Infof("run sql [%s]", _sql)
+			for i := 0; i < dbTryNumber; i++ {
+				_, err = db.Exec(_sql)
+				if err == nil || strings.Contains(err.Error(), "doesn't exists") {
+					break
+				}
+				time.Sleep(3 * time.Second)
+			}
+			if err != nil && !strings.Contains(err.Error(), "doesn't exists") {
+				return fmt.Errorf("Executing %s err %v", _sql, err)
+			}
+		}
+	}
 	return nil
 }
 
