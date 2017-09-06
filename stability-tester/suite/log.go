@@ -46,7 +46,6 @@ type logWriter struct {
 	logDataBuffer []byte
 	values        []string
 	index         int
-	logger        *log.Logger
 }
 
 //NewLogCase returns the LogCase.
@@ -71,7 +70,6 @@ func (c *LogCase) initLogWrite() {
 			rand:          rand.New(source),
 			logDataBuffer: make([]byte, 1024),
 			values:        make([]string, logWriterBatchSize),
-			logger:        c.logger,
 		}
 	}
 }
@@ -169,7 +167,7 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 					c.logger.Error("[log case]: index out of range")
 					return
 				}
-				if err := c.lws[i].batchExecute(db, c.cfg.TableNum); err != nil {
+				if err := c.lws[i].batchExecute(db, c.cfg.TableNum, c.logger); err != nil {
 					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
 				}
 			}
@@ -196,7 +194,7 @@ func (lw *logWriter) randomLogData() []byte {
 //
 // TODO: configure it from outside.
 
-func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) error {
+func (lw *logWriter) batchExecute(db *sql.DB, tableNum int, logger *log.Logger) error {
 	// buffer values
 	for i := 0; i < logWriterBatchSize; i++ {
 		lw.values[i] = fmt.Sprintf("('%s')", lw.randomLogData())
@@ -219,7 +217,7 @@ func (lw *logWriter) batchExecute(db *sql.DB, tableNum int) error {
 
 	if err != nil {
 		logFailedCounterVec.WithLabelValues("batch_insert").Inc()
-		lw.logger.Errorf("[log] insert log failed: %v", err)
+		logger.Errorf("[log] insert log failed: %v", err)
 		return err
 	}
 
