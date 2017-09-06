@@ -15,6 +15,7 @@ package suite
 
 import (
 	"database/sql"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -60,7 +61,12 @@ func RunSuite(ctx context.Context, suiteCases []Case, db *sql.DB) {
 	for _, c := range suiteCases {
 		wg.Add(1)
 		go func(c Case) {
-			defer wg.Done()
+			defer func() {
+				if err1 := recover(); err1 != nil {
+					log.Errorf("panic. err: %s, stack: %s", err1, debug.Stack())
+				}
+				wg.Done()
+			}()
 			if err := c.Execute(ctx, db); err != nil {
 				log.Fatalf("[%s] execute failed %v", c, err)
 			}
@@ -74,25 +80,39 @@ func RunSuite(ctx context.Context, suiteCases []Case, db *sql.DB) {
 func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB, loglvl string) []Case {
 	// Create all cases and initialize them.
 	var suiteCases []Case
+	var lock sync.Mutex
+	var wg sync.WaitGroup
 	loglevel = loglvl
 	for _, name := range cfg.Suite.Names {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			suiteM, ok := suites[name]
-			if !ok {
-				log.Warnf("Not found this Suite Case: %s", name)
-				continue
-			}
-			suiteCase := suiteM(cfg)
-			err := suiteCase.Initialize(ctx, db)
-			if err != nil {
-				log.Fatal(err)
-			}
+			wg.Add(1)
+			go func(c string) {
+				defer func() {
+					if err1 := recover(); err1 != nil {
+						log.Errorf("%s panic. err: %s, stack: %s", c, err1, debug.Stack())
+					}
+					wg.Done()
+				}()
+				suiteM, ok := suites[c]
+				if !ok {
+					log.Warnf("Not found this Suite Case: %s", c)
+					return
+				}
+				suiteCase := suiteM(cfg)
+				err := suiteCase.Initialize(ctx, db)
+				if err != nil {
+					panic(err)
+				}
 
-			suiteCases = append(suiteCases, suiteCase)
+				lock.Lock()
+				suiteCases = append(suiteCases, suiteCase)
+				lock.Unlock()
+			}(name)
 		}
 	}
+	wg.Wait()
 	return suiteCases
 }
