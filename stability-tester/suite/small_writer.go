@@ -67,6 +67,10 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 
 // Initialize implements Case Initialize interface.
 func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	if _, err := mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))"); err != nil {
 		return errors.Trace(err)
 	}
@@ -76,6 +80,10 @@ func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
 
 // Execute implements Case Execute interface.
 func (c *SmallWriterCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

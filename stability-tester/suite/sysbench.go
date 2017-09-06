@@ -56,6 +56,10 @@ func NewSysbenchCase(cfg *config.Config) Case {
 
 // Initialize implements Case Initialize interface.
 func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	err, isCancel := c.clean(ctx)
 	if isCancel {
 		return nil
@@ -68,6 +72,10 @@ func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB) error {
 
 // Execute implements Case Execute interface.
 func (c *SysbenchCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	err, isCancel := c.runAction(ctx)
 	if isCancel {
 		return nil

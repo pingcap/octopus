@@ -58,6 +58,10 @@ func NewBank2Case(cfg *config.Config) Case {
 
 // Initialize creates the tables and inserts initial balances.
 func (c *Bank2Case) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	_, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS bank2_accounts (
   id INT,
@@ -219,6 +223,10 @@ func (c *Bank2Case) verify(db *sql.DB) {
 
 // Execute implements Case Execute interface.
 func (c *Bank2Case) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

@@ -56,6 +56,10 @@ func NewBankCase(cfg *config.Config) Case {
 
 // Initialize implements Case Initialize interface.
 func (c *BankCase) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():
@@ -189,6 +193,10 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 
 // Execute implements Case Execute interface.
 func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

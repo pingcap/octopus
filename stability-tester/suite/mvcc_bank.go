@@ -54,6 +54,10 @@ func NewMVCCBankCase(cfg *config.Config) Case {
 
 // Initialize implements Case Initialize interface.
 func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	if len(c.pd) <= 0 {
 		return errors.New("mvcc bank init failed: pd is empty")
 	}
@@ -142,6 +146,10 @@ func (c *MVCCBankCase) startVerify(ctx context.Context) {
 
 // Execute implements Case Execute interface.
 func (c *MVCCBankCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

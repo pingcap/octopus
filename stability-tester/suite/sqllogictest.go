@@ -63,6 +63,10 @@ func NewSqllogictest(cfg *config.Config) Case {
 
 // Initialize implements Case Initialize interface.
 func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB) error {
+	s.logger.Infof("[%s] start to init...", s.String())
+	defer func() {
+		s.logger.Infof("[%s] init end...", s.String())
+	}()
 	return nil
 }
 
@@ -73,6 +77,10 @@ func (s *SqllogictestCase) String() string {
 
 // Execute implements Case Execute interface.
 func (s *SqllogictestCase) Execute(ctx context.Context, db *sql.DB) error {
+	s.logger.Infof("[%s] start to test...", s.String())
+	defer func() {
+		s.logger.Infof("[%s] test end...", s.String())
+	}()
 	for {
 		select {
 		case <-ctx.Done():

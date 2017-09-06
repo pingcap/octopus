@@ -67,6 +67,10 @@ TRUNCATE TABLE ledger_accounts;
 
 // Initialize creates the table for ledger test.
 func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	if _, err := db.Exec(stmtCreate); err != nil {
 		c.logger.Fatal(err)
 	}
@@ -145,6 +149,10 @@ type postingRequest struct {
 
 // Execute implements Case Execute interface.
 func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

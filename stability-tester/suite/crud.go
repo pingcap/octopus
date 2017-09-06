@@ -51,6 +51,10 @@ func NewCRUDCase(cfg *config.Config) Case {
 }
 
 func (c *CRUDCase) Initialize(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to init...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] init end...", c.String())
+	}()
 	if _, err := mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts"); err != nil {
 		return errors.Trace(err)
 	}
@@ -69,6 +73,10 @@ func (c *CRUDCase) String() string {
 
 // Execute is accpte running command
 func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
+	c.logger.Infof("[%s] start to test...", c.String())
+	defer func() {
+		c.logger.Infof("[%s] test end...", c.String())
+	}()
 	var wg sync.WaitGroup
 	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)

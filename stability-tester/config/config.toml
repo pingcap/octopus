@@ -19,18 +19,18 @@ names = ["bank", "bank2", "ledger", "crud", "block_writer","log", "sqllogic_test
 num_accounts = 10000000
 interval = "2s"
 table_num = 1
-concurrency = 1000 
+concurrency = 200 
 
 [suite.bank2]
 num_accounts = 1000000
 interval = "2s"
 contention = "low"
-concurrency = 1000 
+concurrency = 200 
 
 [suite.ledger]
 num_accounts = 10
 interval = "2s"
-concurrency = 1000 
+concurrency = 200 
 
 [suite.crud]
 user_count = 1000
@@ -38,18 +38,18 @@ post_count = 1000
 update_users = 20
 update_posts = 200
 interval = "2s"
-concurrency = 1000 
+concurrency = 200 
 
 [suite.log]
 max_count = 100000000
 delete_count = 100000
 interval = "2s"
 table_num = 1
-concurrency = 1000 
+concurrency = 200 
 
 [suite.block_writer]
 table_num = 1
-concurrency = 1000 
+concurrency = 200 
 
 [suite.mvcc_bank]
 num_accounts = 10000
