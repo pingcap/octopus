@@ -40,16 +40,17 @@ type CRUDCase struct {
 
 // NewCRUDCase creates a CRUDCase.
 func NewCRUDCase(cfg *config.Config) Case {
-	return &CRUDCase{
+	c := &CRUDCase{
 		cfg:     &cfg.Suite.CRUD,
 		userIDs: newIDList(),
 		postIDs: newIDList(),
 		rnd:     rand.New(rand.NewSource(time.Now().Unix())),
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
+	return c
 }
 
-func (c *CRUDCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *CRUDCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := mustExec(db, "DROP TABLE IF EXISTS crud_users, crud_posts"); err != nil {
 		return errors.Trace(err)
 	}

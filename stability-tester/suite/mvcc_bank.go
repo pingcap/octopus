@@ -44,15 +44,16 @@ const mvccPrefix = "#"
 
 // NewMVCCBankCase returns the MVCCBankCase.
 func NewMVCCBankCase(cfg *config.Config) Case {
-	return &MVCCBankCase{
+	c := &MVCCBankCase{
 		cfg: &cfg.Suite.MVCCBank,
 		pd:  cfg.PD,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
+	return c
 }
 
 // Initialize implements Case Initialize interface.
-func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *MVCCBankCase) Initialize(ctx context.Context, store *sql.DB) error {
 	if len(c.pd) <= 0 {
 		return errors.New("mvcc bank init failed: pd is empty")
 	}

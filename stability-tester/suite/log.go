@@ -54,6 +54,7 @@ func NewLogCase(cfg *config.Config) Case {
 	c := &LogCase{
 		cfg: &cfg.Suite.Log,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
 	c.initLogWrite()
 	if c.cfg.TableNum <= 1 {
 		c.cfg.TableNum = 1
@@ -77,11 +78,7 @@ func (c *LogCase) initLogWrite() {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *LogCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	if logger == nil {
-		return errors.New("[log case] init logger failed")
-	}
-	c.logger = logger
+func (c *LogCase) Initialize(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():

@@ -52,12 +52,12 @@ func NewBank2Case(cfg *config.Config) Case {
 	b := &Bank2Case{
 		cfg: &cfg.Suite.Bank2,
 	}
+	b.logger = newLogger(b.String()+"-stability-tester.log", loglevel)
 	return b
 }
 
 // Initialize creates the tables and inserts initial balances.
-func (c *Bank2Case) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *Bank2Case) Initialize(ctx context.Context, db *sql.DB) error {
 	_, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS bank2_accounts (
   id INT,

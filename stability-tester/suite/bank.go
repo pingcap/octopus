@@ -47,6 +47,7 @@ func NewBankCase(cfg *config.Config) Case {
 	b := &BankCase{
 		cfg: &cfg.Suite.Bank,
 	}
+	b.logger = newLogger(b.String()+"-stability-tester.log", loglevel)
 	if b.cfg.TableNum <= 1 {
 		b.cfg.TableNum = 1
 	}
@@ -54,8 +55,7 @@ func NewBankCase(cfg *config.Config) Case {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *BankCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *BankCase) Initialize(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():

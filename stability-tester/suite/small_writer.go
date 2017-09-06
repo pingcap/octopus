@@ -47,6 +47,7 @@ func NewSmallWriterCase(cfg *config.Config) Case {
 	c := &SmallWriterCase{
 		cfg: cfg.Suite.SmallWriter,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
 
 	c.initSmallDataWriter(c.cfg.Concurrency)
 	return c
@@ -65,8 +66,7 @@ func (c *SmallWriterCase) initSmallDataWriter(concurrency int) {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *SmallWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := mustExec(db, "create table if not exists small_writer(id bigint auto_increment, data bigint, primary key(id))"); err != nil {
 		return errors.Trace(err)
 	}

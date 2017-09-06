@@ -43,18 +43,19 @@ type SysbenchCase struct {
 
 // NewSysbenchCase returns the SysbenchCase.
 func NewSysbenchCase(cfg *config.Config) Case {
-	return &SysbenchCase{
+	c := &SysbenchCase{
 		cfg:      &cfg.Suite.Sysbench,
 		host:     cfg.Host,
 		port:     cfg.Port,
 		user:     cfg.User,
 		password: cfg.Password,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
+	return c
 }
 
 // Initialize implements Case Initialize interface.
-func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *SysbenchCase) Initialize(ctx context.Context, db *sql.DB) error {
 	err, isCancel := c.clean(ctx)
 	if isCancel {
 		return nil

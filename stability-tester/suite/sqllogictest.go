@@ -50,18 +50,19 @@ type SqllogictestCase struct {
 
 // NewSqllogictest return the SqllogictestCase.
 func NewSqllogictest(cfg *config.Config) Case {
-	return &SqllogictestCase{
+	c := &SqllogictestCase{
 		cfg:      &cfg.Suite.SqllogicTest,
 		host:     cfg.Host,
 		port:     cfg.Port,
 		user:     cfg.User,
 		password: cfg.Password,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
+	return c
 }
 
 // Initialize implements Case Initialize interface.
-func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	s.logger = logger
+func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 

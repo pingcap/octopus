@@ -15,7 +15,6 @@ package suite
 
 import (
 	"database/sql"
-	"fmt"
 	"sync"
 	"time"
 
@@ -27,13 +26,14 @@ import (
 )
 
 var Interval = 5 * time.Second
+var loglevel string
 
 // Case is a test case for running cluster.
 type Case interface {
 	// Initialize initializes the case.
 	// Because the initialization may take a lot of time,
 	// we may output the process periodicity.
-	Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error
+	Initialize(ctx context.Context, db *sql.DB) error
 
 	// Execute executes the case once.
 	Execute(ctx context.Context, db *sql.DB) error
@@ -71,9 +71,10 @@ func RunSuite(ctx context.Context, suiteCases []Case, db *sql.DB) {
 }
 
 // InitCase is init case
-func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB, loglevel string) []Case {
+func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB, loglvl string) []Case {
 	// Create all cases and initialize them.
 	var suiteCases []Case
+	loglevel = loglvl
 	for _, name := range cfg.Suite.Names {
 		select {
 		case <-ctx.Done():
@@ -84,9 +85,8 @@ func InitCase(ctx context.Context, cfg *config.Config, db *sql.DB, loglevel stri
 				log.Warnf("Not found this Suite Case: %s", name)
 				continue
 			}
-			logger := newLogger(fmt.Sprintf("%s-stability-tester.log", name), loglevel)
 			suiteCase := suiteM(cfg)
-			err := suiteCase.Initialize(ctx, db, logger)
+			err := suiteCase.Initialize(ctx, db)
 			if err != nil {
 				log.Fatal(err)
 			}

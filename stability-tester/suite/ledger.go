@@ -42,6 +42,7 @@ func NewLedgerCase(cfg *config.Config) Case {
 	c := &LedgerCase{
 		cfg: &cfg.Suite.Ledger,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
 	return c
 }
 
@@ -65,8 +66,7 @@ TRUNCATE TABLE ledger_accounts;
 `
 
 // Initialize creates the table for ledger test.
-func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	if _, err := db.Exec(stmtCreate); err != nil {
 		c.logger.Fatal(err)
 	}

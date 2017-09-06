@@ -53,6 +53,7 @@ func NewBlockWriterCase(cfg *config.Config) Case {
 	c := &BlockWriterCase{
 		cfg: &cfg.Suite.BlockWriter,
 	}
+	c.logger = newLogger(c.String()+"-stability-tester.log", loglevel)
 	if c.cfg.TableNum < 1 {
 		c.cfg.TableNum = 1
 	}
@@ -124,8 +125,7 @@ func (bw *blockWriter) randomBlock() []byte {
 }
 
 // Initialize implements Case Initialize interface.
-func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB, logger *log.Logger) error {
-	c.logger = logger
+func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():
