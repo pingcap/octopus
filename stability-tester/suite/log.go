@@ -100,6 +100,25 @@ func (c *LogCase) Initialize(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+func (c *LogCase) truncate(ctx context.Context, db *sql.DB) error {
+	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		var s string
+		if i > 0 {
+			s = fmt.Sprintf("%d", i)
+		}
+		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table log%s", s), db)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 func (c *LogCase) startCheck(ctx context.Context, db *sql.DB) {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		go func(i int) {
@@ -158,28 +177,44 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 		c.logger.Infof("[%s] test end...", c.String())
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < c.cfg.Concurrency; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				if i >= len(c.lws) {
-					c.logger.Error("[log case]: index out of range")
-					return
-				}
-				if err := c.lws[i].batchExecute(db, c.cfg.TableNum, c.logger); err != nil {
-					c.logger.Errorf("[%s] execute failed %v", c.String(), err)
-				}
-			}
-		}(i)
-	}
+	var ticker = time.NewTicker(gcInterval)
+	defer ticker.Stop()
 
-	wg.Wait()
+	for {
+		select {
+		case <-ctx.Done():
+		default:
+			err := c.truncate(ctx, db)
+			if err != nil {
+				blockWriteFailedCounter.Inc()
+				c.logger.Errorf("truncate table error %v", err)
+			}
+		}
+		for i := 0; i < c.cfg.Concurrency; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						return
+					default:
+					}
+					if i >= len(c.lws) {
+						c.logger.Error("[log case]: index out of range")
+						return
+					}
+					if err := c.lws[i].batchExecute(db, c.cfg.TableNum, c.logger); err != nil {
+						c.logger.Errorf("[%s] execute failed %v", c.String(), err)
+					}
+				}
+			}(i)
+		}
+
+		wg.Wait()
+	}
 	return nil
 }
 

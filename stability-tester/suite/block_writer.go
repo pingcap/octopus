@@ -30,6 +30,8 @@ import (
 
 const blockWriterBatchSize = 20
 
+var gcInterval = 6 * time.Hour
+
 // BlockWriterCase is for concurrent writing blocks.
 type BlockWriterCase struct {
 	cfg    *config.BlockWriterCaseConfig
@@ -155,6 +157,25 @@ func (c *BlockWriterCase) Initialize(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+func (c *BlockWriterCase) truncate(ctx context.Context, db *sql.DB) error {
+	for i := 0; i < c.cfg.TableNum; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		var s string
+		if i > 0 {
+			s = fmt.Sprintf("%d", i)
+		}
+		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table block_writer%s", s), db)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // Execute implements Case Execute interface.
 func (c *BlockWriterCase) Execute(ctx context.Context, db *sql.DB) error {
 	c.logger.Infof("[%s] start to test...", c.String())
@@ -162,26 +183,41 @@ func (c *BlockWriterCase) Execute(ctx context.Context, db *sql.DB) error {
 		c.logger.Infof("[%s] test end...", c.String())
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < c.cfg.Concurrency; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				err := c.bws[i].batchExecute(db, c.cfg.TableNum)
-				if err != nil {
-					blockWriteFailedCounter.Inc()
-					c.logger.Error(err)
-				}
+	var ticker = time.NewTicker(gcInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+		default:
+			err := c.truncate(ctx, db)
+			if err != nil {
+				blockWriteFailedCounter.Inc()
+				c.logger.Errorf("truncate table error %v", err)
 			}
-		}(i)
+		}
+		for i := 0; i < c.cfg.Concurrency; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						return
+					default:
+					}
+					err := c.bws[i].batchExecute(db, c.cfg.TableNum)
+					if err != nil {
+						blockWriteFailedCounter.Inc()
+						c.logger.Error(err)
+					}
+				}
+			}(i)
+			wg.Wait()
+		}
 	}
-	wg.Wait()
-	return nil
 }
 
 // String implements fmt.Stringer interface.
