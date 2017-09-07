@@ -50,7 +50,7 @@ func RunConfigScheduler(conf *SchedulerConfig) {
 			data := map[string]string{"name": name}
 			b, _ := json.Marshal(data)
 			for _, addr := range conf.PDAddrs {
-				_, err := http.Post(addr+"pd/api/v1/schedulers", "application/json", bytes.NewBuffer(b))
+				_, err := http.Post(addr+"/pd/api/v1/schedulers", "application/json", bytes.NewBuffer(b))
 				if err != nil {
 					log.Errorf("add scheduler to pd %v err: %v", addr, err)
 				}
