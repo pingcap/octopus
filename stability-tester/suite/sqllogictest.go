@@ -67,23 +67,14 @@ func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB) error {
 	defer func() {
 		s.logger.Infof("[%s] init end...", s.String())
 	}()
-	var err error
 	for index := 0; index < s.cfg.Parallel; index++ {
 		dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", index)
+		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, db); err != nil {
+			return fmt.Errorf("executing %s err %v", dropsql, err)
+		}
 		createsql := fmt.Sprintf("create database sqllogic_test_%d;", index)
-		sqlList := []string{dropsql, createsql}
-		for _, _sql := range sqlList {
-			s.logger.Infof("run sql [%s]", _sql)
-			for i := 0; i < dbTryNumber; i++ {
-				_, err = db.Exec(_sql)
-				if err == nil || strings.Contains(err.Error(), "doesn't exists") {
-					break
-				}
-				time.Sleep(3 * time.Second)
-			}
-			if err != nil && !strings.Contains(err.Error(), "doesn't exists") {
-				return fmt.Errorf("Executing %s err %v", _sql, err)
-			}
+		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, db); err != nil {
+			return fmt.Errorf("executing %s err %v", createsql, err)
 		}
 	}
 	return nil
@@ -262,35 +253,36 @@ func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string
 		}
 
 		logger.Infof("run %s", task)
-		t.run(task, resultChan, runid, skipError)
+		t.run(ctx, task, resultChan, runid, skipError)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
 
 	doneChan <- struct{}{}
 }
 
-func (t *tester) prepare(runid int) {
-	var err error
+func (t *tester) prepare(ctx context.Context, runid int) {
 	dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", runid)
-	createsql := fmt.Sprintf("create database sqllogic_test_%d;", runid)
-	usesql := fmt.Sprintf("USE sqllogic_test_%d;", runid)
-
-	sqlList := []string{dropsql, createsql, usesql}
-	for _, _sql := range sqlList {
-		t.logger.Infof("run sql [%s]", _sql)
-		for i := 0; i < dbTryNumber; i++ {
-			_, err = t.mdb.Exec(_sql)
-			if err == nil || strings.Contains(err.Error(), "doesn't exists") {
-				break
-			}
-			time.Sleep(3 * time.Second)
-		}
-		if err != nil && !strings.Contains(err.Error(), "doesn't exists") {
-			t.logger.Fatalf("Executing %s err %v", _sql, err)
-		}
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, t.mdb); err != nil {
+		t.logger.Fatalf("executing %s err %v", dropsql, err)
 	}
+
+	createsql := fmt.Sprintf("create database sqllogic_test_%d;", runid)
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, t.mdb); err != nil {
+		t.logger.Fatalf("executing %s err %v", createsql, err)
+	}
+
+	usesql := fmt.Sprintf("USE sqllogic_test_%d;", runid)
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, usesql, t.mdb); err != nil {
+		t.logger.Fatalf("executing %s err %v", usesql, err)
+	}
+
 }
 
-func (t *tester) run(path string, resultChan chan *result, runid int, skipError bool) {
+func (t *tester) run(ctx context.Context, path string, resultChan chan *result, runid int, skipError bool) {
 	var err error
 
 	file, err := os.Open(path)
@@ -299,12 +291,17 @@ func (t *tester) run(path string, resultChan chan *result, runid int, skipError 
 		return
 	}
 
-	t.prepare(runid)
+	t.prepare(ctx, runid)
 
 	s := newLineScanner(file)
 
 LOOP:
 	for s.Scan() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
 			continue
@@ -336,7 +333,7 @@ LOOP:
 				fmt.Fprintln(&buf, line)
 			}
 			stmt.sql = strings.TrimSpace(buf.String())
-			if err := t.execStatement(stmt); err != nil {
+			if err := t.execStatement(ctx, stmt); err != nil {
 				sendFatalResult(resultChan, err.Error())
 				return
 			}
@@ -486,7 +483,7 @@ func (l *lineScanner) Scan() bool {
 	return ok
 }
 
-func (t *tester) execStatement(stmt statement) error {
+func (t *tester) execStatement(ctx context.Context, stmt statement) error {
 	defer func() {
 		var err error
 		if e := recover(); e != nil {
@@ -503,13 +500,7 @@ func (t *tester) execStatement(stmt statement) error {
 	}()
 
 	var err error
-	for i := 0; i < dbTryNumber; i++ {
-		_, err = t.mdb.Exec(stmt.sql)
-		if err == nil {
-			break
-		}
-		time.Sleep(3 * time.Second)
-	}
+	err = execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, stmt.sql, t.mdb)
 	if stmt.expectErr {
 		if err == nil {
 			return fmt.Errorf("%s: expected error, but return ok", stmt.pos)

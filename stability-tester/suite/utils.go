@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -66,6 +67,29 @@ func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 		}
 	}
 	return errors.Trace(err), false
+}
+
+func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration, sql string, db *sql.DB) error {
+	var err error
+	for i := 0; i < retryCnt; i++ {
+		_, err = db.Exec(sql)
+		if err == nil {
+			return nil
+		}
+		if strings.Contains(err.Error(), "doesn't exists") {
+			return nil
+		}
+		if strings.Contains(err.Error(), "already exists") {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(interval):
+		}
+	}
+
+	return errors.Trace(err)
 }
 
 func mustExec(db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
