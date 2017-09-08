@@ -76,10 +76,10 @@ func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration,
 		if err == nil {
 			return nil
 		}
-		if strings.Contains(err.Error(), "doesn't exists") {
+		if strings.Contains(err.Error(), "doesn't exist") {
 			return nil
 		}
-		if strings.Contains(err.Error(), "already exists") {
+		if strings.Contains(err.Error(), "already exist") {
 			return nil
 		}
 		select {
