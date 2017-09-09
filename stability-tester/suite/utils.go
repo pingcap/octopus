@@ -25,6 +25,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/terror"
 )
 
 const (
@@ -69,6 +71,26 @@ func runWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 	return errors.Trace(err), false
 }
 
+func ignoreDDLError(err error) bool {
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	errCode := terror.ErrCode(mysqlErr.Number)
+	switch errCode {
+	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
+		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
+		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(),
+		infoschema.ErrIndexExists.Code(), tddl.ErrCantDropFieldOrKey.Code():
+		return true
+	case tmysql.ErrDupKeyName:
+		return true
+	default:
+		return false
+	}
+}
+
 func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration, sql string, db *sql.DB) error {
 	var err error
 	for i := 0; i < retryCnt; i++ {
@@ -80,6 +102,9 @@ func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration,
 			return nil
 		}
 		if strings.Contains(err.Error(), "already exist") {
+			return nil
+		}
+		if ignoreDDLError(err) {
 			return nil
 		}
 		select {
