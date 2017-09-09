@@ -23,9 +23,11 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
+	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
 )
 
