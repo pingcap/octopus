@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	defaultVerifyTimeout = 2 * time.Hour
+	defaultVerifyTimeout = 6 * time.Hour
 	remark               = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 )
 
