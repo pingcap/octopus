@@ -505,10 +505,11 @@ func (t *tester) execStatement(ctx context.Context, stmt statement) error {
 		if err == nil {
 			return fmt.Errorf("%s: expected error, but return ok", stmt.pos)
 		}
-	} else {
-		if err != nil {
-			return fmt.Errorf("%s: expected success, but found %v", stmt.pos, err)
+	} else if err != nil {
+		if ignoreUnknownError(err) {
+			return nil
 		}
+		return fmt.Errorf("%s: expected success, but found %v", stmt.pos, err)
 	}
 	return nil
 }

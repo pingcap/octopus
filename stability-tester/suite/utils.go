@@ -124,9 +124,6 @@ func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration,
 		if ignoreDDLError(err) {
 			return nil
 		}
-		if ignoreUnknownError(err) {
-			return nil
-		}
 		logger.Errorf("[goroutine: %d], sql[%v] exec faild: %v, retry", getGoroutineID(), sql, err)
 		select {
 		case <-ctx.Done():
