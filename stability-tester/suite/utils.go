@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,7 +95,20 @@ func ignoreDDLError(err error) bool {
 	}
 }
 
-func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration, sql string, db *sql.DB) error {
+func ignoreUnknownError(err error) bool {
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	errCode := terror.ErrCode(mysqlErr.Number)
+	if errCode == tmysql.ErrUnknown {
+		return true
+	}
+	return false
+}
+
+func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration, sql string, db *sql.DB, logger *log.Logger) error {
 	var err error
 	for i := 0; i < retryCnt; i++ {
 		_, err = db.Exec(sql)
@@ -109,6 +124,10 @@ func execSQLWithRetry(ctx context.Context, retryCnt int, interval time.Duration,
 		if ignoreDDLError(err) {
 			return nil
 		}
+		if ignoreUnknownError(err) {
+			return nil
+		}
+		logger.Errorf("[goroutine: %d], sql[%v] exec faild: %v, retry", getGoroutineID(), sql, err)
 		select {
 		case <-ctx.Done():
 			return nil
@@ -181,4 +200,21 @@ func newLogger(filename, loglevel string) *log.Logger {
 	}
 
 	return logger
+}
+
+func getGoroutineID() int {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Errorf("panic recover:panic info:%v", err)
+		}
+	}()
+
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	id, err := strconv.Atoi(idField)
+	if err != nil {
+		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
+	}
+	return id
 }

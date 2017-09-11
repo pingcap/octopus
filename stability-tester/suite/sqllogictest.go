@@ -69,11 +69,11 @@ func (s *SqllogictestCase) Initialize(ctx context.Context, db *sql.DB) error {
 	}()
 	for index := 0; index < s.cfg.Parallel; index++ {
 		dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", index)
-		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, db); err != nil {
+		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, db, s.logger); err != nil {
 			return fmt.Errorf("executing %s err %v", dropsql, err)
 		}
 		createsql := fmt.Sprintf("create database sqllogic_test_%d;", index)
-		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, db); err != nil {
+		if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, db, s.logger); err != nil {
 			return fmt.Errorf("executing %s err %v", createsql, err)
 		}
 	}
@@ -266,17 +266,17 @@ func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string
 
 func (t *tester) prepare(ctx context.Context, runid int) {
 	dropsql := fmt.Sprintf("drop database if exists sqllogic_test_%d;", runid)
-	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, t.mdb); err != nil {
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, dropsql, t.mdb, t.logger); err != nil {
 		t.logger.Fatalf("executing %s err %v", dropsql, err)
 	}
 
 	createsql := fmt.Sprintf("create database sqllogic_test_%d;", runid)
-	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, t.mdb); err != nil {
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, createsql, t.mdb, t.logger); err != nil {
 		t.logger.Fatalf("executing %s err %v", createsql, err)
 	}
 
 	usesql := fmt.Sprintf("USE sqllogic_test_%d;", runid)
-	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, usesql, t.mdb); err != nil {
+	if err := execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, usesql, t.mdb, t.logger); err != nil {
 		t.logger.Fatalf("executing %s err %v", usesql, err)
 	}
 
@@ -500,7 +500,7 @@ func (t *tester) execStatement(ctx context.Context, stmt statement) error {
 	}()
 
 	var err error
-	err = execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, stmt.sql, t.mdb)
+	err = execSQLWithRetry(ctx, dbTryNumber, 3*time.Second, stmt.sql, t.mdb, t.logger)
 	if stmt.expectErr {
 		if err == nil {
 			return fmt.Errorf("%s: expected error, but return ok", stmt.pos)

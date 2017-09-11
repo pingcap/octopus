@@ -111,7 +111,7 @@ func (c *LogCase) truncate(ctx context.Context, db *sql.DB) error {
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table log%s", s), db)
+		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table log%s", s), db, c.logger)
 		if err != nil {
 			return errors.Trace(err)
 		}
