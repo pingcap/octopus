@@ -51,6 +51,7 @@ type Config struct {
 	Nemeses NemesesConfig   `toml:"nemeses"`
 	Suite   SuiteConfig     `toml:"suite"`
 	MVCC    MVCCSuiteConfig `toml:"mvcc"`
+	DDL     DDLCaseConfig   `toml:"ddl"`
 
 	Metric MetricConfig `toml:"metric"`
 }
