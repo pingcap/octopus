@@ -88,7 +88,7 @@ func ignoreDDLError(err error) bool {
 		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(),
 		infoschema.ErrIndexExists.Code(), tddl.ErrCantDropFieldOrKey.Code():
 		return true
-	case tmysql.ErrDupKeyName:
+	case tmysql.ErrDupKeyName, tmysql.ErrDupEntry:
 		return true
 	default:
 		return false
