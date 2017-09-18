@@ -3,6 +3,7 @@ package suite
 import (
 	"log"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/octopus/benchbot/common"
 )
@@ -11,8 +12,8 @@ func TestBlockWrite(t *testing.T) {
 	db := MustConnectTestDB()
 
 	cfg := &BlockWriteConfig{
+		Duration:     Duration{Duration: time.Second * 10},
 		NumThreads:   3,
-		NumRequests:  10,
 		MinBlockSize: 8,
 		MaxBlockSize: 10,
 	}

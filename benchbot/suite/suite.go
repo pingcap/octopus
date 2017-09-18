@@ -3,12 +3,22 @@ package suite
 import (
 	"database/sql"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	log "github.com/Sirupsen/logrus"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 )
+
+type Duration struct {
+	time.Duration
+}
+
+func (d *Duration) UnmarshalText(text []byte) (err error) {
+	d.Duration, err = time.ParseDuration(string(text))
+	return
+}
 
 type BenchCase interface {
 	Name() string
