@@ -14,8 +14,8 @@ user = "root"
 password = ""
 
 [suites.block-write]
+duration = "1m"
 num_threads = 100
-num_requests = 100000
 min_block_size = 3000
 max_block_size = 4000
 
@@ -28,12 +28,11 @@ port = 4000
 scripts_dir = "tpch_scripts"
 
 [suites.ycsb]
+duration = "1m"
+num_threads = 100
+workloads = ["a", "b"]
 databases = [
     "raw://127.0.0.1:2379",
     "txn://127.0.0.1:2379",
     "tidb://root@tcp(127.0.0.1:4000)/",
 ]
-workloads = ["a", "b"]
-num_threads = 100
-num_initials = 100000
-num_requests = 100000

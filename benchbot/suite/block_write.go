@@ -30,10 +30,10 @@ const (
 )
 
 type BlockWriteConfig struct {
-	NumThreads   int `toml:"num_threads"`
-	NumRequests  int `toml:"num_requests"`
-	MinBlockSize int `toml:"min_block_size"`
-	MaxBlockSize int `toml:"max_block_size"`
+	Duration     Duration `toml:"duration"`
+	NumThreads   int      `toml:"num_threads"`
+	MinBlockSize int      `toml:"min_block_size"`
+	MaxBlockSize int      `toml:"max_block_size"`
 }
 
 type BlockWriteSuite struct {
@@ -89,7 +89,7 @@ func (c *BlockWriteCase) Name() string {
 }
 
 func (c *BlockWriteCase) Run(db *sql.DB) (*CaseResult, error) {
-	return ParallelSQLBench(c, c.execute, c.cfg.NumThreads, c.cfg.NumRequests, db)
+	return ParallelSQLBench(c, c.execute, c.cfg.Duration, c.cfg.NumThreads, db)
 }
 
 func (c *BlockWriteCase) execute(db *StatDB, rander *rand.Rand) error {

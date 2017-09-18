@@ -3,6 +3,7 @@ package ycsb
 import (
 	"log"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/octopus/benchbot/suite"
 )
@@ -14,10 +15,9 @@ func TestYCSB(t *testing.T) {
 			"txn://127.0.0.1:2379",
 			"tidb://root@tcp(127.0.0.1:4000)/test",
 		},
-		Workloads:   []string{"a", "b"},
-		NumThreads:  3,
-		NumInitials: 10,
-		NumRequests: 20,
+		Workloads:  []string{"a", "b"},
+		Duration:   Duration{Duration: time.Second * 10},
+		NumThreads: 3,
 	}
 
 	s := NewYCSBSuite(cfg)

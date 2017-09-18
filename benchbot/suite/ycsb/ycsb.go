@@ -43,11 +43,10 @@ const (
 )
 
 type YCSBConfig struct {
-	Databases   []string `toml:"databases"`
-	Workloads   []string `toml:"workloads"`
-	NumThreads  int      `toml:"num_threads"`
-	NumInitials int      `toml:"num_initials"`
-	NumRequests int      `toml:"num_requests"`
+	Databases  []string `toml:"databases"`
+	Workloads  []string `toml:"workloads"`
+	Duration   Duration `toml:"duration"`
+	NumThreads int      `toml:"num_threads"`
 }
 
 type YCSBSuite struct {
@@ -100,6 +99,8 @@ func NewYCSBCase(s *YCSBSuite, dbURL, workload string) *YCSBCase {
 		readRatio = 0.50
 	case "b":
 		readRatio = 0.95
+	case "c":
+		readRatio = 1.00
 	case "f":
 		readRatio = 0.00
 	default:
@@ -129,7 +130,7 @@ func (c *YCSBCase) Run(*sql.DB) (*CaseResult, error) {
 	prepare := func(rander *rand.Rand) (OPKind, error) {
 		return OPWrite, c.prepare(db, rander)
 	}
-	_, err = ParallelBench(c, prepare, c.cfg.NumThreads, c.cfg.NumInitials)
+	_, err = ParallelBench(c, prepare, c.cfg.Duration, c.cfg.NumThreads)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func (c *YCSBCase) Run(*sql.DB) (*CaseResult, error) {
 	execute := func(rander *rand.Rand) (OPKind, error) {
 		return c.execute(db, rander)
 	}
-	return ParallelBench(c, execute, c.cfg.NumThreads, c.cfg.NumRequests)
+	return ParallelBench(c, execute, c.cfg.Duration, c.cfg.NumThreads)
 }
 
 func (c *YCSBCase) prepare(db Database, rander *rand.Rand) error {

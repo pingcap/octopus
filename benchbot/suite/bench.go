@@ -2,12 +2,12 @@ package suite
 
 import (
 	"database/sql"
-	"math"
 	"math/rand"
 	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"golang.org/x/net/context"
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 )
@@ -54,35 +54,51 @@ func RunBenchCasesWithReset(cases []BenchCase, cluster Cluster) ([]*CaseResult, 
 	return results, nil
 }
 
+type ExecFunc func(*rand.Rand)
+
+func ParallelExec(exec ExecFunc, duration Duration, numThreads int) {
+	wg := sync.WaitGroup{}
+	ctx, stop := context.WithCancel(context.Background())
+
+	t := time.NewTimer(duration.Duration)
+	for id := 0; id < numThreads; id++ {
+		go func(id int) {
+			wg.Add(1)
+			defer wg.Done()
+			rander := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					exec(rander)
+				}
+			}
+			wg.Done()
+		}(id)
+	}
+	<-t.C
+
+	stop()
+	wg.Wait()
+}
+
 type BenchFunc func(*rand.Rand) (OPKind, error)
 
-func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*CaseResult, error) {
+func ParallelBench(c BenchCase, exec BenchFunc, duration Duration, numThreads int) (*CaseResult, error) {
 	stat := NewStatManager()
 	stat.Start()
 
-	wg := sync.WaitGroup{}
-	avgRequests := int(math.Ceil(float64(numRequests) / float64(numThreads)))
-	for id, requests := 0, 0; requests < numRequests; id++ {
-		wg.Add(1)
-		endRequests := requests + avgRequests
-		endRequests = int(math.Min(float64(endRequests), float64(numRequests)))
-
-		go func(id, requests int) {
-			rander := rand.New(rand.NewSource(int64(id) + int64(time.Now().UnixNano())))
-			for i := 0; i < requests; i++ {
-				start := time.Now()
-				op, err := exec(rander)
-				if err != nil {
-					log.Errorf("[case:%s] exec: %s", c.Name(), err)
-				}
-				stat.Record(op, err, time.Since(start))
-			}
-			wg.Done()
-		}(id, endRequests-requests)
-
-		requests = endRequests
+	f := func(rander *rand.Rand) {
+		start := time.Now()
+		op, err := exec(rander)
+		if err != nil {
+			log.Errorf("[case:%s] exec: %s", c.Name(), err)
+		}
+		stat.Record(op, err, time.Since(start))
 	}
-	wg.Wait()
+
+	ParallelExec(f, duration, numThreads)
 
 	stat.Close()
 	return NewCaseResult(c.Name(), stat.Result()), nil
@@ -90,30 +106,17 @@ func ParallelBench(c BenchCase, exec BenchFunc, numThreads, numRequests int) (*C
 
 type SQLBenchFunc func(*StatDB, *rand.Rand) error
 
-func ParallelSQLBench(c BenchCase, exec SQLBenchFunc, numThreads, numRequests int, db *sql.DB) (*CaseResult, error) {
+func ParallelSQLBench(c BenchCase, exec SQLBenchFunc, duration Duration, numThreads int, db *sql.DB) (*CaseResult, error) {
 	stdb := NewStatDB(db)
 	stdb.Start()
 
-	wg := sync.WaitGroup{}
-	avgRequests := int(math.Ceil(float64(numRequests) / float64(numThreads)))
-	for id, requests := 0, 0; requests < numRequests; id++ {
-		wg.Add(1)
-		endRequests := requests + avgRequests
-		endRequests = int(math.Min(float64(endRequests), float64(numRequests)))
-
-		go func(id, requests int) {
-			rander := rand.New(rand.NewSource(int64(id) + int64(time.Now().UnixNano())))
-			for i := 0; i < requests; i++ {
-				if err := exec(stdb, rander); err != nil {
-					log.Errorf("[case:%s] exec: %s", c.Name(), err)
-				}
-			}
-			wg.Done()
-		}(id, endRequests-requests)
-
-		requests = endRequests
+	f := func(rander *rand.Rand) {
+		if err := exec(stdb, rander); err != nil {
+			log.Errorf("[case:%s] exec: %s", c.Name(), err)
+		}
 	}
-	wg.Wait()
+
+	ParallelExec(f, duration, numThreads)
 
 	stdb.Close()
 	return NewCaseResult(c.Name(), stdb.Result()), nil
