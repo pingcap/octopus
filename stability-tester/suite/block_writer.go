@@ -161,6 +161,7 @@ func (c *BlockWriterCase) truncate(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():
+			c.logger.Error("truncate block write ctx done")
 			return nil
 		default:
 		}
@@ -168,6 +169,7 @@ func (c *BlockWriterCase) truncate(ctx context.Context, db *sql.DB) error {
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
+		c.logger.Errorf("truncate table block_writer%s", s)
 		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table block_writer%s", s), db, c.logger)
 		if err != nil {
 			return errors.Trace(err)

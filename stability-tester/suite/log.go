@@ -104,6 +104,7 @@ func (c *LogCase) truncate(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < c.cfg.TableNum; i++ {
 		select {
 		case <-ctx.Done():
+			c.logger.Error("truncate logctx done")
 			return nil
 		default:
 		}
@@ -111,6 +112,7 @@ func (c *LogCase) truncate(ctx context.Context, db *sql.DB) error {
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
+		c.logger.Errorf("truncate table log%s", s)
 		err := execSQLWithRetry(ctx, 200, 3*time.Second, fmt.Sprintf("truncate table log%s", s), db, c.logger)
 		if err != nil {
 			return errors.Trace(err)

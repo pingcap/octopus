@@ -32,7 +32,7 @@ var (
 )
 
 func openDB(cfg *config.Config) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/test", cfg.User, cfg.Password, cfg.Host, cfg.Port)
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/test?readTimeout=10m&writeTimeout=2m", cfg.User, cfg.Password, cfg.Host, cfg.Port)
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {
 		return nil, err
