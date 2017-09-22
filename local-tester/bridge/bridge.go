@@ -249,7 +249,7 @@ func main() {
 		acceptFaults = append(acceptFaults, f)
 	}
 
-	connFaults := []connFaultFunc{func(b *bridgeConn) { timeBridge2(b, 10) }}
+	connFaults := []connFaultFunc{func(b *bridgeConn) { timeBridge2(b, 30) }}
 	if cfg.immediateClose {
 		f := func(b *bridgeConn) {
 			log.Printf("terminating connection %s immediately", b.String())
