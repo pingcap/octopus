@@ -27,6 +27,8 @@ import (
 	"time"
 )
 
+var maxwaitTime int64 = 120
+
 type bridgeConn struct {
 	in  net.Conn
 	out net.Conn
@@ -303,15 +305,19 @@ func main() {
 		disp = newDispatcherImmediate()
 	}
 
+	startUnix := time.Now().Unix()
 	for {
-		acceptFaults[rand.Intn(len(acceptFaults))]()
+		diff := time.Now().Unix() - startUnix
+		if diff > maxwaitTime {
+			acceptFaults[rand.Intn(len(acceptFaults))]()
+		}
 		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		r := rand.Intn(len(connFaults))
-		if rand.Intn(100) >= int(100.0*cfg.connFaultRate) {
+		if rand.Intn(100) >= int(100.0*cfg.connFaultRate) || diff < maxwaitTime {
 			r = 0
 		}
 
