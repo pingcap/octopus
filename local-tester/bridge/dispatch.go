@@ -23,7 +23,7 @@ import (
 
 var (
 	// dispatchPoolDelay is the time to wait before flushing all buffered packets
-	dispatchPoolDelay = 100 * time.Millisecond
+	dispatchPoolDelay = 5 * time.Millisecond
 	// dispatchPacketBytes is how many bytes to send until choosing a new connection
 	dispatchPacketBytes = 32
 )
