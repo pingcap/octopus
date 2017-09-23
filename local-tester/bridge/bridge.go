@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-var maxwaitTime int64 = 120
+var maxwaitTime int64 = 1200
 
 type bridgeConn struct {
 	in  net.Conn
@@ -60,16 +60,19 @@ func bridge(b *bridgeConn) {
 }
 
 func delayBridge(b *bridgeConn, txDelay, rxDelay time.Duration) {
+	log.Printf("delay bridging %s, tx %s, rx %s ", b.String(), txDelay, rxDelay)
 	go b.d.Copy(b.out, makeFetchDelay(makeFetch(b.in), txDelay))
 	b.d.Copy(b.in, makeFetchDelay(makeFetch(b.out), rxDelay))
 }
 
 func timeBridge(b *bridgeConn) {
+	log.Println("time bridging", b.String())
 	lv := rand.Intn(5) + 1
 	timeBridge2(b, lv)
 }
 
 func timeBridge2(b *bridgeConn, longevity int) {
+	log.Println("time bridging2", b.String())
 	go func() {
 		t := time.Duration(longevity) * time.Second
 		time.Sleep(t)
@@ -212,7 +215,7 @@ func main() {
 	flag.BoolVar(&cfg.randomBlackhole, "random-blackhole", true, "blackhole after data xfer")
 	flag.BoolVar(&cfg.corruptReceive, "corrupt-receive", false, "corrupt packets received from destination")
 	flag.BoolVar(&cfg.corruptSend, "corrupt-send", false, "corrupt packets sent to destination")
-	flag.BoolVar(&cfg.reorder, "reorder", true, "reorder packet delivery")
+	flag.BoolVar(&cfg.reorder, "reorder", false, "reorder packet delivery")
 
 	flag.StringVar(&cfg.txDelay, "tx-delay", "100ms", "duration to delay client transmission to server")
 	flag.StringVar(&cfg.rxDelay, "rx-delay", "100ms", "duration to delay client receive from server")
