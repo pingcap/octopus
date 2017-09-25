@@ -122,6 +122,16 @@ const (
 	ddlTestValueInvalid int32 = -99
 )
 
+func buildConditionSQL(columnName string, value int32) string {
+	sql := fmt.Sprintf("`%s`", columnName)
+	if value == ddlTestValueNull {
+		sql += " IS NULL"
+	} else {
+		sql += fmt.Sprintf(" = %d", value)
+	}
+	return sql
+}
+
 type ddlTestOpExecutor struct {
 	executeFunc func(interface{}) error
 	config      interface{}
@@ -148,10 +158,9 @@ func (c *DDLCase) Initialize(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (c *DDLCase) executeOperations(descriptor string, ops []ddlTestOpExecutor, postOp func() error) error {
+func (c *DDLCase) executeOperations(ops []ddlTestOpExecutor, postOp func() error) error {
 	perm := rand.Perm(len(ops))
-	for seq, idx := range perm {
-		log.Infof("[ddl] [instance %d] Running %s Operation %d (#%d)\n", c.caseIndex, descriptor, seq, idx)
+	for _, idx := range perm {
 		op := ops[idx]
 		err := op.executeFunc(op.config)
 		if err != nil {
@@ -179,7 +188,7 @@ func (c *DDLCase) Execute(db *sql.DB, testCaseIndex int) error {
 	err := parallel(func() error {
 		var err error
 		for {
-			err = c.executeOperations("DDL", c.ddlOps, nil)
+			err = c.executeOperations(c.ddlOps, nil)
 			ddlAllComplete = true
 			if ddlAllComplete && dmlAllComplete || err != nil {
 				break
@@ -189,7 +198,7 @@ func (c *DDLCase) Execute(db *sql.DB, testCaseIndex int) error {
 	}, func() error {
 		var err error
 		for {
-			err = c.executeOperations("DML", c.dmlOps, func() error {
+			err = c.executeOperations(c.dmlOps, func() error {
 				return c.executeVerifyIntegrity()
 			})
 			dmlAllComplete = true
@@ -226,9 +235,9 @@ func (c *DDLCase) generateDDLOps() error {
 	if err := c.generateDropTable(); err != nil {
 		return errors.Trace(err)
 	}
-	if err := c.generateRenameTable(); err != nil {
-		return errors.Trace(err)
-	}
+	// if err := c.generateRenameTable(); err != nil {
+	// 	return errors.Trace(err)
+	// }
 	return nil
 }
 
@@ -295,11 +304,11 @@ func (c *DDLCase) executeAddTable(cfg interface{}) error {
 	sql += ")"
 
 	_, err := c.db.Exec(sql)
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	log.Infof("[ddl] [instance %d] Created table `%s`", c.caseIndex, tableInfo.name)
 
 	c.tablesLock.Lock()
 	c.tables[tableInfo.name] = &tableInfo
@@ -321,15 +330,16 @@ func (c *DDLCase) executeDropTable(cfg interface{}) error {
 		return nil
 	}
 	delete(c.tables, tableToDrop.name)
+	tableToDrop.deleted = true
 	c.tablesLock.Unlock()
 
 	sql := fmt.Sprintf("DROP TABLE `%s`", tableToDrop.name)
 	_, err := c.db.Exec(sql)
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	log.Infof("[ddl] [instance %d] Dropped table `%s`", c.caseIndex, tableToDrop.name)
 
 	return nil
 }
@@ -359,11 +369,11 @@ func (c *DDLCase) executeRenameTable(cfg interface{}) error {
 
 	sql := fmt.Sprintf("RENAME TABLE `%s` TO `%s`", tableToRename.name, newTable.name)
 	_, err := c.db.Exec(sql)
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	log.Infof("[ddl] [instance %d] Renamed table `%s` to `%s`", c.caseIndex, tableToRename.name, newTable.name)
 
 	// Add new table
 	c.tablesLock.Lock()
@@ -530,15 +540,17 @@ func (c *DDLCase) executeInsert(cfg interface{}) error {
 
 	// execute SQL
 	_, err := c.db.Exec(sql)
-	if err != nil {
-		if table.deleted {
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
+	if table.deleted {
+		return ddlTestErrorConflict{}
+	}
+	for _, cd := range assigns {
+		if cd.column.deleted {
 			return ddlTestErrorConflict{}
 		}
-		for _, cd := range assigns {
-			if cd.column.deleted {
-				return ddlTestErrorConflict{}
-			}
-		}
+	}
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -553,7 +565,6 @@ func (c *DDLCase) executeInsert(cfg interface{}) error {
 		}
 	}
 	table.numberOfRows++
-
 	return nil
 }
 
@@ -684,26 +695,28 @@ func (c *DDLCase) executeUpdate(cfg interface{}) error {
 			if i > 0 {
 				sql += " AND "
 			}
-			sql += fmt.Sprintf("`%s` = '%d'", cd.column.name, cd.value)
+			sql += buildConditionSQL(cd.column.name, cd.value)
 		}
 	}
 
 	// execute SQL
 	_, err := c.db.Exec(sql)
-	if err != nil {
-		if table.deleted {
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
+	if table.deleted {
+		return ddlTestErrorConflict{}
+	}
+	for _, cd := range assigns {
+		if cd.column.deleted {
 			return ddlTestErrorConflict{}
 		}
-		for _, cd := range assigns {
-			if cd.column.deleted {
-				return ddlTestErrorConflict{}
-			}
+	}
+	for _, cd := range whereColumns {
+		if cd.column.deleted {
+			return ddlTestErrorConflict{}
 		}
-		for _, cd := range whereColumns {
-			if cd.column.deleted {
-				return ddlTestErrorConflict{}
-			}
-		}
+	}
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -769,21 +782,23 @@ func (c *DDLCase) executeDelete(cfg interface{}) error {
 			if i > 0 {
 				sql += " AND "
 			}
-			sql += fmt.Sprintf("`%s` = '%d'", cd.column.name, cd.value)
+			sql += buildConditionSQL(cd.column.name, cd.value)
 		}
 	}
 
 	// execute SQL
 	_, err := c.db.Exec(sql)
-	if err != nil {
-		if table.deleted {
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
+	if table.deleted {
+		return ddlTestErrorConflict{}
+	}
+	for _, cd := range whereColumns {
+		if cd.column.deleted {
 			return ddlTestErrorConflict{}
 		}
-		for _, cd := range whereColumns {
-			if cd.column.deleted {
-				return ddlTestErrorConflict{}
-			}
-		}
+	}
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -836,7 +851,7 @@ func (c *DDLCase) executeVerifyIntegrity() error {
 
 			for i, raw := range rawResult {
 				if raw == nil {
-					result[i] = -1
+					result[i] = ddlTestValueNull
 				} else {
 					val, err1 := strconv.Atoi(string(raw))
 					if err1 != nil {
@@ -880,7 +895,7 @@ func (c *DDLCase) executeVerifyIntegrity() error {
 		}
 		for rowString, occurs := range actualRowsMap {
 			if occurs > 0 {
-				return errors.Trace(fmt.Errorf("Unexpecting row %s in table `%s`", rowString, table.name))
+				return errors.Trace(fmt.Errorf("Unexpected row %s in table `%s`", rowString, table.name))
 			}
 		}
 	}
