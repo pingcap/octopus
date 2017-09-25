@@ -260,12 +260,14 @@ func (c *BankMultCase) moveMoney(db *sql.DB) {
 		amounts    []int
 	)
 	count := 0
+	from := rand.Intn(c.cfg.NumAccounts)
 	for count < involvedNum {
-		from, to, amount := rand.Intn(c.cfg.NumAccounts), rand.Intn(c.cfg.NumAccounts), rand.Intn(999)
+		to, amount := rand.Intn(c.cfg.NumAccounts), rand.Intn(999)
 		if from == to {
 			continue
 		}
 		froms, tos, amounts = append(froms, from), append(tos, to), append(amounts, amount)
+		from = to
 		count++
 	}
 	// make the transfer links to be a loop
