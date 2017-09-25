@@ -259,16 +259,15 @@ func (c *BankMultCase) moveMoney(db *sql.DB) {
 		froms, tos []int
 		amounts    []int
 	)
-	count := 0
+
 	from := rand.Intn(c.cfg.NumAccounts)
-	for count < involvedNum {
+	for len(froms) < involvedNum {
 		to, amount := rand.Intn(c.cfg.NumAccounts), rand.Intn(999)
 		if from == to {
 			continue
 		}
 		froms, tos, amounts = append(froms, from), append(tos, to), append(amounts, amount)
 		from = to
-		count++
 	}
 	// make the transfer links to be a loop
 	froms, tos, amounts = append(froms, tos[len(tos)-1]), append(tos, froms[0]), append(amounts, rand.Intn(999))
@@ -288,7 +287,7 @@ func (c *BankMultCase) moveMoney(db *sql.DB) {
 	bankMultTxnDuration.Observe(time.Since(start).Seconds())
 }
 
-func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int, index string) error {
+func (c *BankMultCase) execTransaction(db *sql.DB, froms, tos []int, amounts []int, index string) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return errors.Trace(err)
@@ -316,8 +315,8 @@ func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int,
 		return errors.Trace(err)
 	}
 
-	for i := 0; i < len(from); i++ {
-		rows, err := selectStmt.Query(from, to)
+	for i := 0; i < len(froms); i++ {
+		rows, err := selectStmt.Query(froms[i], tos[i])
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -325,7 +324,7 @@ func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int,
 		var (
 			fromBalance int
 			toBalance   int
-			count       int = 0
+			count       int
 		)
 
 		for rows.Next() {
@@ -334,9 +333,9 @@ func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int,
 				return errors.Trace(err)
 			}
 			switch id {
-			case from[i]:
+			case froms[i]:
 				fromBalance = balance
-			case to[i]:
+			case tos[i]:
 				toBalance = balance
 			default:
 				log.Fatalf("[%s] got unexpected account %d", c, id)
@@ -350,17 +349,17 @@ func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int,
 		}
 
 		if count != 2 {
-			log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from[i], fromBalance, to[i], toBalance, count)
+			log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, froms[i], fromBalance, tos[i], toBalance, count)
 		}
 
 		rows.Close()
 
 		update := fmt.Sprintf(`UPDATE bank_mult_accounts%s
 		SET balance = CASE id WHEN %d THEN %d WHEN %d THEN %d END
-		WHERE id IN (%d, %d)`, index, to[i], toBalance+amount[i], from[i], fromBalance-amount[i], from[i], to[i])
+		WHERE id IN (%d, %d)`, index, tos[i], toBalance+amounts[i], froms[i], fromBalance-amounts[i], froms[i], tos[i])
 
-		if fromBalance >= amount[i] {
-			_, err = updateStmt.Exec(to[i], toBalance+amount[i], from[i], fromBalance-amount[i], from[i], to[i])
+		if fromBalance >= amounts[i] {
+			_, err = updateStmt.Exec(tos[i], toBalance+amounts[i], froms[i], fromBalance-amounts[i], froms[i], tos[i])
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -369,12 +368,12 @@ func (c *BankMultCase) execTransaction(db *sql.DB, from, to []int, amount []int,
 			if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
 				return err
 			}
-			if _, err = insertStmt.Exec(from[i], to[i], fromBalance, toBalance, amount[i], tso); err != nil {
+			if _, err = insertStmt.Exec(froms[i], tos[i], fromBalance, toBalance, amounts[i], tso); err != nil {
 				return err
 			}
 			log.Infof("[bank_mult] exec pre: %s\n", update)
 		} else {
-			log.Infof("[bank_mult] %v %v", fromBalance, amount[i])
+			log.Infof("[bank_mult] %v %v", fromBalance, amounts[i])
 		}
 	}
 

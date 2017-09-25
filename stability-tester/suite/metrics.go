@@ -72,7 +72,7 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "tidb_test",
 			Subsystem: "stability",
-			Name:      "bank_verify_duration_seconds",
+			Name:      "bank_mult_verify_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of bank verification.",
 			Buckets:   largeScaleBuckets,
 		})
@@ -81,7 +81,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "tidb_test",
 			Subsystem: "stability",
-			Name:      "bank_verify_failed_total",
+			Name:      "bank_mult_verify_failed_total",
 			Help:      "Counter of failed bank verification.",
 		})
 
@@ -89,7 +89,7 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "tidb_test",
 			Subsystem: "stability",
-			Name:      "bank_txn_duration_seconds",
+			Name:      "bank_mult_txn_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of bank transcation.",
 		})
 
@@ -97,7 +97,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "tidb_test",
 			Subsystem: "stability",
-			Name:      "bank_txn_total",
+			Name:      "bank_mult_txn_total",
 			Help:      "Counter of failed bank transcation.",
 		})
 
