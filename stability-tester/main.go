@@ -115,8 +115,8 @@ func main() {
 		// Initialize suites.
 		suiteCases := suite.InitSuite(ctx, cfg, db)
 		// Run suites.
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			defer wg.Done()
 			suite.RunSuite(ctx, suiteCases, cfg.Suite.Concurrency, db)
 		}()
@@ -124,8 +124,8 @@ func main() {
 		// Initialize serial suites
 		SerialSuites := serial_suite.InitSuite(ctx, cfg)
 		// Run serial suites
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			defer wg.Done()
 			serial_suite.RunSuite(ctx, SerialSuites)
 		}()
@@ -142,8 +142,8 @@ func main() {
 		// Initialize suites.
 		suiteCases := mvcc_suite.InitSuite(ctx, cfg, store)
 		// Run suites.
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			defer wg.Done()
 			mvcc_suite.RunSuite(ctx, suiteCases, cfg.MVCC.Concurrency, store)
 		}()
