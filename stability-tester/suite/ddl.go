@@ -62,6 +62,7 @@ type ddlTestTable struct {
 	deleted      bool
 	name         string
 	columns      []*ddlTestColumn
+	indexes      []*ddlTestIndex
 	numberOfRows int
 }
 
@@ -93,12 +94,13 @@ type ddlTestColumnDescriptor struct {
 }
 
 type ddlTestColumn struct {
-	deleted      bool
-	name         string
-	fieldType    string
-	defaultValue int32
-	isPrimaryKey bool
-	rows         []int32
+	deleted         bool
+	name            string
+	fieldType       string
+	defaultValue    int32
+	isPrimaryKey    bool
+	rows            []int32
+	indexReferences int
 }
 
 func (col *ddlTestColumn) getMatchedColumnDescriptor(descriptors []*ddlTestColumnDescriptor) *ddlTestColumnDescriptor {
@@ -115,6 +117,12 @@ func (col *ddlTestColumn) getDefinition() string {
 		return col.fieldType
 	}
 	return fmt.Sprintf("%s NULL DEFAULT '%d'", col.fieldType, col.defaultValue)
+}
+
+type ddlTestIndex struct {
+	name      string
+	signature string
+	columns   []*ddlTestColumn
 }
 
 const (
@@ -235,6 +243,12 @@ func (c *DDLCase) generateDDLOps() error {
 	if err := c.generateDropTable(); err != nil {
 		return errors.Trace(err)
 	}
+	if err := c.generateAddIndex(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.generateDropIndex(); err != nil {
+		return errors.Trace(err)
+	}
 	// if err := c.generateRenameTable(); err != nil {
 	// 	return errors.Trace(err)
 	// }
@@ -281,6 +295,7 @@ func (c *DDLCase) executeAddTable(cfg interface{}) error {
 	tableInfo := ddlTestTable{
 		name:         uuid.NewV4().String(),
 		columns:      tableColumns,
+		indexes:      make([]*ddlTestIndex, 0),
 		numberOfRows: 0,
 	}
 
@@ -361,6 +376,7 @@ func (c *DDLCase) executeRenameTable(cfg interface{}) error {
 	newTable := &ddlTestTable{
 		name:         uuid.NewV4().String(),
 		columns:      tableToRename.columns,
+		indexes:      tableToRename.indexes,
 		numberOfRows: tableToRename.numberOfRows,
 	}
 	delete(c.tables, tableToRename.name)
@@ -383,21 +399,141 @@ func (c *DDLCase) executeRenameTable(cfg interface{}) error {
 	return nil
 }
 
-// func (c *DDLCase) generateAddIndex() error {
+type ddlTestIndexStrategy int
 
-// }
+const (
+	ddlTestIndexStrategyBegin ddlTestIndexStrategy = iota
+	ddlTestIndexStrategySingleColumnAtBeginning
+	ddlTestIndexStrategySingleColumnAtEnd
+	ddlTestIndexStrategySingleColumnRandom
+	ddlTestIndexStrategyMultipleColumnRandom
+	ddlTestIndexStrategyEnd
+)
 
-// func (c *DDLCase) executeAddIndex() {
+type ddlTestAddIndexConfig struct {
+	strategy ddlTestIndexStrategy
+}
 
-// }
+func (c *DDLCase) generateAddIndex() error {
+	for strategy := ddlTestIndexStrategyBegin + 1; strategy < ddlTestIndexStrategyEnd; strategy++ {
+		config := ddlTestAddIndexConfig{
+			strategy: strategy,
+		}
+		c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeAddIndex, config})
+	}
+	return nil
+}
 
-// func (c *DDLCase) generateDropIndex() error {
+func (c *DDLCase) executeAddIndex(cfg interface{}) error {
+	table := c.pickupRandomTable()
+	if table == nil {
+		return nil
+	}
+	config := cfg.(ddlTestAddIndexConfig)
 
-// }
+	if len(table.columns) == 0 {
+		return nil
+	}
 
-// func (c *DDLCase) executeDropIndex() {
+	// build index definition
+	index := ddlTestIndex{
+		name:      uuid.NewV4().String(),
+		signature: "",
+		columns:   make([]*ddlTestColumn, 0),
+	}
 
-// }
+	switch config.strategy {
+	case ddlTestIndexStrategySingleColumnAtBeginning:
+		index.columns = append(index.columns, table.columns[0])
+	case ddlTestIndexStrategySingleColumnAtEnd:
+		index.columns = append(index.columns, table.columns[len(table.columns)-1])
+	case ddlTestIndexStrategySingleColumnRandom:
+		index.columns = append(index.columns, table.columns[rand.Intn(len(table.columns))])
+	case ddlTestIndexStrategyMultipleColumnRandom:
+		numberOfColumns := rand.Intn(len(table.columns))
+		perm := rand.Perm(numberOfColumns)
+		for _, idx := range perm {
+			index.columns = append(index.columns, table.columns[idx])
+		}
+	}
+
+	signature := ""
+	for _, col := range index.columns {
+		signature += col.name + ","
+	}
+	index.signature = signature
+
+	// check whether index duplicates
+	for _, idx := range table.indexes {
+		if idx.signature == index.signature {
+			return nil
+		}
+	}
+
+	// build SQL
+	sql := fmt.Sprintf("ALTER TABLE `%s` ADD INDEX `%s` (", table.name, index.name)
+	for i, column := range index.columns {
+		if i > 0 {
+			sql += ", "
+		}
+		sql += fmt.Sprintf("`%s`", column.name)
+	}
+	sql += ")"
+
+	_, err := c.db.Exec(sql)
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	table.indexes = append(table.indexes, &index)
+	for _, column := range index.columns {
+		column.indexReferences++
+	}
+
+	return nil
+}
+
+func (c *DDLCase) generateDropIndex() error {
+	numberOfIndexToDrop := rand.Intn(5)
+	for i := 0; i < numberOfIndexToDrop; i++ {
+		c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeDropIndex, nil})
+	}
+	return nil
+}
+
+func (c *DDLCase) executeDropIndex(cfg interface{}) error {
+	table := c.pickupRandomTable()
+	if table == nil {
+		return nil
+	}
+	if len(table.indexes) == 0 {
+		return nil
+	}
+
+	indexToDropIndex := rand.Intn(len(table.indexes))
+	indexToDrop := table.indexes[indexToDropIndex]
+
+	sql := fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table.name, indexToDrop.name)
+
+	_, err := c.db.Exec(sql)
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, column := range indexToDrop.columns {
+		column.indexReferences--
+		if column.indexReferences < 0 {
+			panic("Unexpected index reference")
+		}
+	}
+	table.indexes = append(table.indexes[:indexToDropIndex], table.indexes[indexToDropIndex+1:]...)
+
+	return nil
+}
 
 type ddlTestInsertColumnStrategy int
 type ddlTestInsertMissingValueStrategy int
