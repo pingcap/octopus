@@ -14,11 +14,14 @@
 package suite
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,6 +67,7 @@ type ddlTestTable struct {
 	columns      []*ddlTestColumn
 	indexes      []*ddlTestIndex
 	numberOfRows int
+	lock         sync.RWMutex
 }
 
 func (table *ddlTestTable) filterColumns(predicate func(*ddlTestColumn) bool) []*ddlTestColumn {
@@ -86,6 +90,42 @@ func (table *ddlTestTable) predicatePrimaryKey(col *ddlTestColumn) bool {
 
 func (table *ddlTestTable) predicateNonPrimaryKey(col *ddlTestColumn) bool {
 	return !col.isPrimaryKey
+}
+
+func padLeft(str, pad string, length int) string {
+	padding := strings.Repeat(pad, length)
+	str = padding + str
+	return str[len(str)-length:]
+}
+
+func padRight(str, pad string, length int) string {
+	padding := strings.Repeat(pad, length)
+	str = str + padding
+	return str[0:length]
+}
+
+func (table *ddlTestTable) debugPrint(title string) {
+	var buffer bytes.Buffer
+	table.lock.RLock()
+	buffer.WriteString(fmt.Sprintf("======== DEBUG BEGIN for %s ========\n", title))
+	buffer.WriteString(fmt.Sprintf("Table Structures of `%s`:\n", table.name))
+	for i, column := range table.columns {
+		buffer.WriteString(fmt.Sprintf("Column #%d: %s\n", i, column.name))
+	}
+	buffer.WriteString(fmt.Sprintf("Table Values of `%s`:\n", table.name))
+	for i := 0; i < table.numberOfRows; i++ {
+		buffer.WriteString("#")
+		buffer.WriteString(padRight(fmt.Sprintf("%d", i), " ", 4))
+		buffer.WriteString(": ")
+		for _, col := range table.columns {
+			buffer.WriteString(padLeft(fmt.Sprintf("%d", col.rows[i]), " ", 11))
+			buffer.WriteString(", ")
+		}
+		buffer.WriteString("\n")
+	}
+	buffer.WriteString("======== DEBUG END ========\n")
+	table.lock.RUnlock()
+	fmt.Print(buffer.String())
 }
 
 type ddlTestColumnDescriptor struct {
@@ -159,10 +199,18 @@ func NewDDLCase(cfg *config.Config) Case {
 // Initialize does nothing currently
 func (c *DDLCase) Initialize(ctx context.Context, db *sql.DB) error {
 	c.db = db
-	c.generateDDLOps()
-	c.generateDMLOps()
-	c.executeAddTable(nil)
-	c.executeAddTable(nil)
+	if err := c.generateDDLOps(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.generateDMLOps(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.executeAddTable(nil); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.executeAddTable(nil); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -220,6 +268,7 @@ func (c *DDLCase) Execute(db *sql.DB, testCaseIndex int) error {
 	if err != nil {
 		ddlFailedCounter.Inc()
 		log.Errorf("[ddl] [instance %d] ERROR: %s", testCaseIndex, errors.ErrorStack(err))
+		os.Exit(1)
 		return nil
 	}
 
@@ -247,6 +296,12 @@ func (c *DDLCase) generateDDLOps() error {
 		return errors.Trace(err)
 	}
 	if err := c.generateDropIndex(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.generateAddColumn(); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.generateDropColumn(); err != nil {
 		return errors.Trace(err)
 	}
 	// if err := c.generateRenameTable(); err != nil {
@@ -318,8 +373,8 @@ func (c *DDLCase) executeAddTable(cfg interface{}) error {
 	}
 	sql += ")"
 
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
 	if err != nil {
 		return errors.Trace(err)
@@ -349,8 +404,8 @@ func (c *DDLCase) executeDropTable(cfg interface{}) error {
 	c.tablesLock.Unlock()
 
 	sql := fmt.Sprintf("DROP TABLE `%s`", tableToDrop.name)
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
 	if err != nil {
 		return errors.Trace(err)
@@ -359,45 +414,45 @@ func (c *DDLCase) executeDropTable(cfg interface{}) error {
 	return nil
 }
 
-func (c *DDLCase) generateRenameTable() error {
-	c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeRenameTable, nil})
-	return nil
-}
+// func (c *DDLCase) generateRenameTable() error {
+// 	c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeRenameTable, nil})
+// 	return nil
+// }
 
-// executeRenameTable is implemented as "drop" + "create" for the tester.
-func (c *DDLCase) executeRenameTable(cfg interface{}) error {
-	// Remove previous table
-	c.tablesLock.Lock()
-	tableToRename := c.pickupRandomTable()
-	if tableToRename == nil {
-		c.tablesLock.Unlock()
-		return nil
-	}
-	newTable := &ddlTestTable{
-		name:         uuid.NewV4().String(),
-		columns:      tableToRename.columns,
-		indexes:      tableToRename.indexes,
-		numberOfRows: tableToRename.numberOfRows,
-	}
-	delete(c.tables, tableToRename.name)
-	tableToRename.deleted = true
-	c.tablesLock.Unlock()
+// // executeRenameTable is implemented as "drop" + "create" for the tester.
+// func (c *DDLCase) executeRenameTable(cfg interface{}) error {
+// 	// Remove previous table
+// 	c.tablesLock.Lock()
+// 	tableToRename := c.pickupRandomTable()
+// 	if tableToRename == nil {
+// 		c.tablesLock.Unlock()
+// 		return nil
+// 	}
+// 	newTable := &ddlTestTable{
+// 		name:         uuid.NewV4().String(),
+// 		columns:      tableToRename.columns,
+// 		indexes:      tableToRename.indexes,
+// 		numberOfRows: tableToRename.numberOfRows,
+// 	}
+// 	delete(c.tables, tableToRename.name)
+// 	tableToRename.deleted = true
+// 	c.tablesLock.Unlock()
 
-	sql := fmt.Sprintf("RENAME TABLE `%s` TO `%s`", tableToRename.name, newTable.name)
-	_, err := c.db.Exec(sql)
-	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+// 	sql := fmt.Sprintf("RENAME TABLE `%s` TO `%s`", tableToRename.name, newTable.name)
+//  log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+// 	_, err := c.db.Exec(sql)
 
-	if err != nil {
-		return errors.Trace(err)
-	}
+// 	if err != nil {
+// 		return errors.Trace(err)
+// 	}
 
-	// Add new table
-	c.tablesLock.Lock()
-	c.tables[newTable.name] = newTable
-	c.tablesLock.Unlock()
+// 	// Add new table
+// 	c.tablesLock.Lock()
+// 	c.tables[newTable.name] = newTable
+// 	c.tablesLock.Unlock()
 
-	return nil
-}
+// 	return nil
+// }
 
 type ddlTestIndexStrategy int
 
@@ -457,6 +512,10 @@ func (c *DDLCase) executeAddIndex(cfg interface{}) error {
 		}
 	}
 
+	if len(index.columns) == 0 {
+		return nil
+	}
+
 	signature := ""
 	for _, col := range index.columns {
 		signature += col.name + ","
@@ -480,8 +539,8 @@ func (c *DDLCase) executeAddIndex(cfg interface{}) error {
 	}
 	sql += ")"
 
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
 	if err != nil {
 		return errors.Trace(err)
@@ -496,7 +555,7 @@ func (c *DDLCase) executeAddIndex(cfg interface{}) error {
 }
 
 func (c *DDLCase) generateDropIndex() error {
-	numberOfIndexToDrop := rand.Intn(5)
+	numberOfIndexToDrop := rand.Intn(10)
 	for i := 0; i < numberOfIndexToDrop; i++ {
 		c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeDropIndex, nil})
 	}
@@ -517,8 +576,8 @@ func (c *DDLCase) executeDropIndex(cfg interface{}) error {
 
 	sql := fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", table.name, indexToDrop.name)
 
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
 	if err != nil {
 		return errors.Trace(err)
@@ -531,6 +590,150 @@ func (c *DDLCase) executeDropIndex(cfg interface{}) error {
 		}
 	}
 	table.indexes = append(table.indexes[:indexToDropIndex], table.indexes[indexToDropIndex+1:]...)
+
+	return nil
+}
+
+type ddlTestAddDropColumnStrategy int
+
+const (
+	ddlTestAddDropColumnStrategyBegin ddlTestAddDropColumnStrategy = iota
+	ddlTestAddDropColumnStrategyAtBeginning
+	ddlTestAddDropColumnStrategyAtEnd
+	ddlTestAddDropColumnStrategyAtRandom
+	ddlTestAddDropColumnStrategyEnd
+)
+
+type ddlTestAddDropColumnConfig struct {
+	strategy ddlTestAddDropColumnStrategy
+}
+
+func (c *DDLCase) generateAddColumn() error {
+	for strategy := ddlTestAddDropColumnStrategyBegin + 1; strategy < ddlTestAddDropColumnStrategyEnd; strategy++ {
+		config := ddlTestAddDropColumnConfig{
+			strategy: strategy,
+		}
+		c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeAddColumn, config})
+	}
+	return nil
+}
+
+func (c *DDLCase) executeAddColumn(cfg interface{}) error {
+	table := c.pickupRandomTable()
+	if table == nil {
+		return nil
+	}
+	config := cfg.(ddlTestAddDropColumnConfig)
+
+	newColumn := ddlTestColumn{
+		name:         uuid.NewV4().String(),
+		fieldType:    "int",
+		defaultValue: rand.Int31(),
+	}
+
+	insertAfterPosition := -1
+
+	// build SQL
+	sql := fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", table.name, newColumn.name, newColumn.getDefinition())
+	switch config.strategy {
+	case ddlTestAddDropColumnStrategyAtBeginning:
+		sql += " FIRST"
+	case ddlTestAddDropColumnStrategyAtEnd:
+		// do nothing
+	case ddlTestAddDropColumnStrategyAtRandom:
+		insertAfterPosition = rand.Intn(len(table.columns))
+		sql += fmt.Sprintf(" AFTER `%s`", table.columns[insertAfterPosition].name)
+	}
+
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// update table definitions
+	table.lock.Lock()
+	newColumn.rows = make([]int32, table.numberOfRows)
+	for i := 0; i < table.numberOfRows; i++ {
+		newColumn.rows[i] = newColumn.defaultValue
+	}
+	switch config.strategy {
+	case ddlTestAddDropColumnStrategyAtBeginning:
+		table.columns = append([]*ddlTestColumn{&newColumn}, table.columns...)
+	case ddlTestAddDropColumnStrategyAtEnd:
+		table.columns = append(table.columns, &newColumn)
+	case ddlTestAddDropColumnStrategyAtRandom:
+		table.columns = append(table.columns[:insertAfterPosition+1], append([]*ddlTestColumn{&newColumn}, table.columns[insertAfterPosition+1:]...)...)
+	}
+	table.lock.Unlock()
+
+	// table.debugPrint("AddColumn")
+
+	return nil
+}
+
+func (c *DDLCase) generateDropColumn() error {
+	for i := 0; i < 5; i++ {
+		for strategy := ddlTestAddDropColumnStrategyBegin + 1; strategy < ddlTestAddDropColumnStrategyEnd; strategy++ {
+			config := ddlTestAddDropColumnConfig{
+				strategy: strategy,
+			}
+			c.ddlOps = append(c.ddlOps, ddlTestOpExecutor{c.executeDropColumn, config})
+		}
+	}
+	return nil
+}
+
+func (c *DDLCase) executeDropColumn(cfg interface{}) error {
+	table := c.pickupRandomTable()
+	if table == nil {
+		return nil
+	}
+	if len(table.columns) <= 1 {
+		return nil
+	}
+
+	config := cfg.(ddlTestAddDropColumnConfig)
+	columnToDropIndex := -1
+	switch config.strategy {
+	case ddlTestAddDropColumnStrategyAtBeginning:
+		columnToDropIndex = 0
+	case ddlTestAddDropColumnStrategyAtEnd:
+		columnToDropIndex = len(table.columns) - 1
+	case ddlTestAddDropColumnStrategyAtRandom:
+		columnToDropIndex = rand.Intn(len(table.columns))
+	}
+
+	columnToDrop := table.columns[columnToDropIndex]
+
+	// primary key columns cannot be dropped
+	if columnToDrop.isPrimaryKey {
+		return nil
+	}
+
+	// we does not support dropping a column with index
+	if columnToDrop.indexReferences > 0 {
+		return nil
+	}
+
+	columnToDrop.deleted = true
+
+	sql := fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN `%s`", table.name, columnToDrop.name)
+
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// update table definitions
+	table.lock.Lock()
+	table.columns = append(table.columns[:columnToDropIndex], table.columns[columnToDropIndex+1:]...)
+	table.lock.Unlock()
+
+	// table.debugPrint("DropColumn")
 
 	return nil
 }
@@ -563,20 +766,20 @@ type ddlTestInsertConfig struct {
 func (c *DDLCase) generateInsert() error {
 	for i := 0; i < 5; i++ {
 		for columnStrategy := ddlTestInsertColumnStrategyBegin + 1; columnStrategy < ddlTestInsertColumnStrategyEnd; columnStrategy++ {
-			for useSetStatement := 0; useSetStatement < 2; useSetStatement++ {
-				config := ddlTestInsertConfig{
-					useSetStatement: !(useSetStatement == 0),
-					columnStrategy:  columnStrategy,
-				}
-				if config.useSetStatement {
-					c.dmlOps = append(c.dmlOps, ddlTestOpExecutor{c.executeInsert, config})
-				} else {
-					for missingValueStrategy := ddlTestInsertMissingValueStrategyBegin + 1; missingValueStrategy < ddlTestInsertMissingValueStrategyEnd; missingValueStrategy++ {
-						config.missingValueStrategy = missingValueStrategy
-						c.dmlOps = append(c.dmlOps, ddlTestOpExecutor{c.executeInsert, config})
-					}
-				}
+			// for useSetStatement := 0; useSetStatement < 2; useSetStatement++ {
+			config := ddlTestInsertConfig{
+				useSetStatement: true, // !(useSetStatement == 0),
+				columnStrategy:  columnStrategy,
 			}
+			//	if config.useSetStatement {
+			c.dmlOps = append(c.dmlOps, ddlTestOpExecutor{c.executeInsert, config})
+			// 	} else {
+			// 		for missingValueStrategy := ddlTestInsertMissingValueStrategyBegin + 1; missingValueStrategy < ddlTestInsertMissingValueStrategyEnd; missingValueStrategy++ {
+			// 			config.missingValueStrategy = missingValueStrategy
+			// 			c.dmlOps = append(c.dmlOps, ddlTestOpExecutor{c.executeInsert, config})
+			// 		}
+			// 	}
+			// }
 		}
 	}
 	return nil
@@ -589,8 +792,10 @@ func (c *DDLCase) executeInsert(cfg interface{}) error {
 		c.tablesLock.RUnlock()
 		return nil
 	}
+	table.lock.RLock()
 	columns := table.filterColumns(table.predicateAll)
 	nonPkColumns := table.filterColumns(table.predicateNonPrimaryKey)
+	table.lock.RUnlock()
 	c.tablesLock.RUnlock()
 
 	config := cfg.(ddlTestInsertConfig)
@@ -675,23 +880,24 @@ func (c *DDLCase) executeInsert(cfg interface{}) error {
 	}
 
 	// execute SQL
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
-	if table.deleted {
-		return ddlTestErrorConflict{}
-	}
-	for _, cd := range assigns {
-		if cd.column.deleted {
+	if err != nil {
+		if table.deleted {
 			return ddlTestErrorConflict{}
 		}
-	}
-	if err != nil {
+		for _, cd := range assigns {
+			if cd.column.deleted {
+				return ddlTestErrorConflict{}
+			}
+		}
 		return errors.Trace(err)
 	}
 
 	// append row
-	for _, column := range columns {
+	table.lock.Lock()
+	for _, column := range table.columns {
 		cd := column.getMatchedColumnDescriptor(assigns)
 		if cd == nil {
 			// only happens when using SET
@@ -701,6 +907,10 @@ func (c *DDLCase) executeInsert(cfg interface{}) error {
 		}
 	}
 	table.numberOfRows++
+	table.lock.Unlock()
+
+	// table.debugPrint("Insert")
+
 	return nil
 }
 
@@ -786,8 +996,10 @@ func (c *DDLCase) executeUpdate(cfg interface{}) error {
 		c.tablesLock.RUnlock()
 		return nil
 	}
+	table.lock.RLock()
 	pkColumns := table.filterColumns(table.predicatePrimaryKey)
 	nonPkColumns := table.filterColumns(table.predicateNonPrimaryKey)
+	table.lock.RUnlock()
 	c.tablesLock.RUnlock()
 
 	if table.numberOfRows == 0 {
@@ -804,17 +1016,18 @@ func (c *DDLCase) executeUpdate(cfg interface{}) error {
 	picks := 0
 	switch config.targetStrategy {
 	case ddlTestUpdateTargetStrategyRandom:
-		picks = rand.Intn(len(nonPkColumns))
+		if len(nonPkColumns) > 0 {
+			picks = rand.Intn(len(nonPkColumns))
+		}
 	case ddlTestUpdateTargetStrategyAllColumns:
 		picks = len(nonPkColumns)
+	}
+	if picks == 0 {
+		return nil
 	}
 	perm := rand.Perm(picks)
 	for _, idx := range perm {
 		assigns = append(assigns, &ddlTestColumnDescriptor{nonPkColumns[idx], rand.Int31()})
-	}
-
-	if len(assigns) == 0 {
-		return nil
 	}
 
 	// build SQL
@@ -836,27 +1049,28 @@ func (c *DDLCase) executeUpdate(cfg interface{}) error {
 	}
 
 	// execute SQL
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
-	if table.deleted {
-		return ddlTestErrorConflict{}
-	}
-	for _, cd := range assigns {
-		if cd.column.deleted {
-			return ddlTestErrorConflict{}
-		}
-	}
-	for _, cd := range whereColumns {
-		if cd.column.deleted {
-			return ddlTestErrorConflict{}
-		}
-	}
 	if err != nil {
+		if table.deleted {
+			return ddlTestErrorConflict{}
+		}
+		for _, cd := range assigns {
+			if cd.column.deleted {
+				return ddlTestErrorConflict{}
+			}
+		}
+		for _, cd := range whereColumns {
+			if cd.column.deleted {
+				return ddlTestErrorConflict{}
+			}
+		}
 		return errors.Trace(err)
 	}
 
 	// update values
+	table.lock.RLock()
 	for i := 0; i < table.numberOfRows; i++ {
 		match := true
 		for _, cd := range whereColumns {
@@ -871,6 +1085,7 @@ func (c *DDLCase) executeUpdate(cfg interface{}) error {
 			}
 		}
 	}
+	table.lock.RUnlock()
 
 	return nil
 }
@@ -898,9 +1113,11 @@ func (c *DDLCase) executeDelete(cfg interface{}) error {
 		c.tablesLock.RUnlock()
 		return nil
 	}
+	table.lock.RLock()
 	columns := table.filterColumns(table.predicateAll)
 	pkColumns := table.filterColumns(table.predicatePrimaryKey)
 	nonPkColumns := table.filterColumns(table.predicateNonPrimaryKey)
+	table.lock.RUnlock()
 	c.tablesLock.RUnlock()
 
 	if table.numberOfRows == 0 {
@@ -923,22 +1140,23 @@ func (c *DDLCase) executeDelete(cfg interface{}) error {
 	}
 
 	// execute SQL
-	_, err := c.db.Exec(sql)
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
 
-	if table.deleted {
-		return ddlTestErrorConflict{}
-	}
-	for _, cd := range whereColumns {
-		if cd.column.deleted {
+	if err != nil {
+		if table.deleted {
 			return ddlTestErrorConflict{}
 		}
-	}
-	if err != nil {
+		for _, cd := range whereColumns {
+			if cd.column.deleted {
+				return ddlTestErrorConflict{}
+			}
+		}
 		return errors.Trace(err)
 	}
 
 	// update values
+	table.lock.Lock()
 	for i := table.numberOfRows - 1; i >= 0; i-- {
 		match := true
 		for _, cd := range whereColumns {
@@ -952,17 +1170,52 @@ func (c *DDLCase) executeDelete(cfg interface{}) error {
 				column.rows = append(column.rows[:i], column.rows[i+1:]...)
 			}
 		}
+		table.numberOfRows--
 	}
+	table.lock.Unlock()
 
 	return nil
 }
 
 func (c *DDLCase) executeVerifyIntegrity() error {
 	c.tablesLock.RLock()
-	defer c.tablesLock.RUnlock()
+	tablesSnapshot := make([]*ddlTestTable, 0)
 	for _, table := range c.tables {
-		rows, err := c.db.Query(fmt.Sprintf("SELECT * FROM `%s`", table.name))
-		defer rows.Close()
+		tablesSnapshot = append(tablesSnapshot, table)
+	}
+	c.tablesLock.RUnlock()
+
+	for _, table := range tablesSnapshot {
+		table.lock.RLock()
+		columnsSnapshot := table.filterColumns(table.predicateAll)
+		table.lock.RUnlock()
+
+		// build SQL
+		sql := "SELECT "
+		for i, column := range columnsSnapshot {
+			if i > 0 {
+				sql += ", "
+			}
+			sql += fmt.Sprintf("`%s`", column.name)
+		}
+		sql += fmt.Sprintf(" FROM `%s`", table.name)
+
+		// execute
+		rows, err := c.db.Query(sql)
+		if err == nil {
+			defer rows.Close()
+		}
+		if table.deleted {
+			return nil
+		}
+		for _, column := range columnsSnapshot {
+			if column.deleted {
+				return nil
+			}
+		}
+		if err != nil {
+			return errors.Trace(err)
+		}
 
 		// Read all rows.
 		var actualRows [][]int32
@@ -1014,10 +1267,24 @@ func (c *DDLCase) executeVerifyIntegrity() error {
 			actualRowsMap[rowString]++
 		}
 
+		// table.debugPrint("Verify")
+
+		// var buffer bytes.Buffer
+		// buffer.WriteString(fmt.Sprintf("Table data in database for `%s`:\n", table.name))
+		// for _, row := range actualRows {
+		// 	rowString := ""
+		// 	for _, col := range row {
+		// 		rowString += fmt.Sprintf("%d,", col)
+		// 	}
+		// 	buffer.WriteString(fmt.Sprintf("%s\n", rowString))
+		// }
+		// buffer.WriteString("======== END ========\n")
+		// fmt.Printf("%s\n", buffer.String())
+
 		// Compare with expecting rows.
 		for i := 0; i < table.numberOfRows; i++ {
 			rowString := ""
-			for _, column := range table.columns {
+			for _, column := range columnsSnapshot {
 				rowString += fmt.Sprintf("%d,", column.rows[i])
 			}
 			_, ok := actualRowsMap[rowString]
