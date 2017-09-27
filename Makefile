@@ -32,6 +32,9 @@ bank2:
 block_writer:
 	$(GOBUILD) -o bin/bank2 stability-tester/block_writer/*.go
 
+crud:
+	$(GOBUILD) -o bin/bank2 stability-tester/crud/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 

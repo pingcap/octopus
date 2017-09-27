@@ -55,6 +55,43 @@ func RunWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 	return errors.Trace(err)
 }
 
+// QueryEntry is a query
+type QueryEntry struct {
+	Query              string
+	Args               []interface{}
+	ExpectAffectedRows int64
+}
+
+// ExecWithRollback exeutes or rollbak
+func ExecWithRollback(db *sql.DB, queries []QueryEntry) (res sql.Result, err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, q := range queries {
+		res, err = tx.Exec(q.Query, q.Args...)
+		if err != nil {
+			tx.Rollback()
+			return nil, errors.Trace(err)
+		}
+		if q.ExpectAffectedRows >= 0 {
+			affected, err := res.RowsAffected()
+			if err != nil {
+				tx.Rollback()
+				return nil, errors.Trace(err)
+			}
+			if affected != q.ExpectAffectedRows {
+				log.Fatalf("expect affectedRows %v, but got %v, query %v", q.ExpectAffectedRows, affected, q)
+			}
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		tx.Rollback()
+		return nil, errors.Trace(err)
+	}
+	return
+}
+
 // MustExec must execute sql or fatal
 func MustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
 	r, err := db.Exec(query, args...)
