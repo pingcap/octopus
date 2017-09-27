@@ -29,6 +29,9 @@ tidb-ycsb:
 bank2:
 	$(GOBUILD) -o bin/bank2 stability-tester/bank2/*.go
 
+block_writer:
+	$(GOBUILD) -o bin/bank2 stability-tester/block_writer/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 

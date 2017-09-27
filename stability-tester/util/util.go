@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"time"
 
 	"github.com/juju/errors"
@@ -10,6 +11,32 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 )
+
+const (
+	alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+	// Used by RandString
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+// RandString reference: http://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-golang
+func RandString(b []byte, r *rand.Rand) {
+	n := len(b)
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, r.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = r.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(alphabet) {
+			b[i] = alphabet[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+}
 
 // RunWithRetry tries to run func in specified count
 func RunWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f func() error) error {
@@ -26,6 +53,15 @@ func RunWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f f
 		}
 	}
 	return errors.Trace(err)
+}
+
+// MustExec must execute sql or fatal
+func MustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
+	r, err := db.Exec(query, args...)
+	if err != nil {
+		log.Fatalf("exec %s err %v", query, err)
+	}
+	return r
 }
 
 // OpenDB opens db
