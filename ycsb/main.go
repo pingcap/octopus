@@ -399,11 +399,6 @@ func main() {
 	wg = sync.WaitGroup{}
 	errCh := make(chan error)
 
-	for i := range workers {
-		wg.Add(1)
-		go workers[i].runWorker(errCh, &wg)
-	}
-
 	var numErr int
 	tick := time.Tick(1 * time.Second)
 	done := make(chan os.Signal, 3)
@@ -413,6 +408,15 @@ func main() {
 		wg.Wait()
 		done <- syscall.Signal(0)
 	}()
+
+	start := time.Now()
+	startOpsCount := globalStats[writes] + globalStats[emptyReads] +
+		globalStats[nonEmptyReads] + globalStats[scans]
+
+	for i := range workers {
+		wg.Add(1)
+		go workers[i].runWorker(errCh, &wg)
+	}
 
 	if *duration > 0 {
 		go func() {
@@ -427,10 +431,6 @@ func main() {
 			atomic.StoreInt32(&readOnly, 1)
 		}()
 	}
-
-	start := time.Now()
-	startOpsCount := globalStats[writes] + globalStats[emptyReads] +
-		globalStats[nonEmptyReads] + globalStats[scans]
 
 	for i := 0; ; {
 		select {
@@ -486,10 +486,10 @@ func main() {
 			opsCount := stats[writes] + stats[emptyReads] +
 				stats[nonEmptyReads] + stats[scans] - startOpsCount
 			elapsed := time.Since(start).Seconds()
-			fmt.Printf("\nelapsed__ops/sec(total)__errors(total)\n")
-			fmt.Printf("%6.1fs %14.1f %14d\n",
+			fmt.Printf("\nelapsed________ops/sec(total)________errors(total)\n")
+			fmt.Printf("%6.1fs %14.1f(%d) %14d\n",
 				time.Since(start).Seconds(),
-				float64(opsCount)/elapsed, numErr)
+				float64(opsCount)/elapsed, opsCount, numErr)
 			return
 		}
 	}
