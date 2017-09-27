@@ -30,10 +30,19 @@ bank2:
 	$(GOBUILD) -o bin/bank2 stability-tester/bank2/*.go
 
 block_writer:
-	$(GOBUILD) -o bin/bank2 stability-tester/block_writer/*.go
+	$(GOBUILD) -o bin/block_writer stability-tester/block_writer/*.go
 
 crud:
-	$(GOBUILD) -o bin/bank2 stability-tester/crud/*.go
+	$(GOBUILD) -o bin/crudstability-tester/crud/*.go
+
+ledger:
+	$(GOBUILD) -o bin/ledger stability-tester/ledger/*.go
+
+log:
+	$(GOBUILD) -o bin/log stability-tester/log/*.go
+
+small_writer:
+	$(GOBUILD) -o bin/small_writer stability-tester/small_writer/*.go
 
 test:
 	$(GOTEST) --race $(PACKAGES)
