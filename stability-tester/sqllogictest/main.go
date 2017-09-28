@@ -17,20 +17,19 @@ import (
 )
 
 var (
-	logFile     string
-	logLevel    string
-	user        string
-	password    string
-	dbName      string
-	accounts    int
-	interval    time.Duration
-	tables      int
-	concurrency int
-	pds         string
-	tidbs       string
-	tikvs       string
-	lb          string
-	metricAddr  string
+	logFile    string
+	logLevel   string
+	user       string
+	password   string
+	dbName     string
+	testPath   string
+	parallel   int
+	skipError  bool
+	pds        string
+	tidbs      string
+	tikvs      string
+	lb         string
+	metricAddr string
 )
 
 var defaultPushMetricsInterval = 15 * time.Second
@@ -41,10 +40,9 @@ func init() {
 	flag.StringVar(&user, "user", "root", "db username")
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
-	flag.IntVar(&accounts, "accounts", 1000000, "the number of accounts")
-	flag.DurationVar(&interval, "interval", 2*time.Second, "the interval")
-	flag.IntVar(&tables, "tables", 1, "the number of the tables")
-	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
+	flag.StringVar(&testPath, "test-path", "./sqllogictest", "test data path")
+	flag.IntVar(&parallel, "parallel", 8, "parallel count")
+	flag.BoolVar(&skipError, "skip-errors", true, "the number of the tables")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
@@ -80,24 +78,28 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if len(metricAddr) > 0 {
-		log.Info("enable metrics")
-		go util.PushPrometheus("ledger", metricAddr, defaultPushMetricsInterval)
-	}
-
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
 	db, err := util.OpenDB(dbDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ledger := NewLedgerCase(accounts, concurrency, interval)
-	err = ledger.Initialize(ctx, db)
+	cfg := &SqllogicTestCaseConfig{
+		TestPath:  testPath,
+		SkipError: skipError,
+		Parallel:  parallel,
+		DBName:    dbName,
+		Host:      lb,
+		User:      user,
+		Password:  password,
+	}
+	sqllogic := NewSqllogictest(cfg)
+	err = sqllogic.Initialize(ctx, db)
 	if err != nil {
-		log.Fatalf("initialize %s error %v", ledger, err)
+		log.Fatalf("initialize %s error %v", sqllogic, err)
 	}
 
-	err = ledger.Execute(ctx, db)
+	err = sqllogic.Execute(ctx, db)
 	if err != nil {
 		log.Fatalf("bank execution error %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/prometheus/client_golang/prometheus"

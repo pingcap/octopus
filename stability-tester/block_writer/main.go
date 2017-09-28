@@ -78,7 +78,7 @@ func main() {
 
 	if len(metricAddr) > 0 {
 		log.Info("enable metrics")
-		go util.PushPrometheus("bank2", metricAddr, defaultPushMetricsInterval)
+		go util.PushPrometheus("block_writer", metricAddr, defaultPushMetricsInterval)
 	}
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)

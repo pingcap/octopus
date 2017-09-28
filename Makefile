@@ -44,6 +44,12 @@ log:
 small_writer:
 	$(GOBUILD) -o bin/small_writer stability-tester/small_writer/*.go
 
+mvcc_bank:
+	$(GOBUILD) -o bin/mvcc_bank stability-tester/mvcc_bank/*.go
+
+sqllogictest:
+	$(GOBUILD) -o bin/sqllogictest stability-tester/sqllogictest/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 

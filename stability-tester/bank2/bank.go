@@ -38,14 +38,14 @@ type Bank2CaseConfig struct {
 // in the form of a transaction record and two transaction "legs" per database
 // transaction.
 type Bank2Case struct {
-	cfg   Bank2CaseConfig
+	cfg   *Bank2CaseConfig
 	wg    sync.WaitGroup
 	stop  int32
 	txnID int32
 }
 
 // NewBank2Case returns a Bank2Case.
-func NewBank2Case(cfg Bank2CaseConfig) *Bank2Case {
+func NewBank2Case(cfg *Bank2CaseConfig) *Bank2Case {
 	b := &Bank2Case{
 		cfg: cfg,
 	}
