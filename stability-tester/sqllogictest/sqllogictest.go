@@ -106,7 +106,7 @@ func (s *SqllogictestCase) ExecuteSqllogic(ctx context.Context, db *sql.DB) erro
 	startTime := time.Now()
 	var fileNames []string
 	filepath.Walk(s.TestPath, func(testPath string, info os.FileInfo, err error) error {
-		if info.IsDir() {
+		if info == nil || info.IsDir() {
 			return nil
 		}
 

@@ -42,7 +42,7 @@ func init() {
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.IntVar(&tables, "tables", 1, "the number of the tables")
-	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
+	flag.IntVar(&concurrency, "concurrency", 200, "concurrency of worker")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
@@ -84,18 +84,18 @@ func main() {
 	}
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	small_writer := NewSmallWriterCase(tables, concurrency)
-	err = small_writer.Initialize(ctx, db)
+	smallWriter := NewSmallWriterCase(tables, concurrency)
+	err = smallWriter.Initialize(ctx, db)
 	if err != nil {
-		log.Fatalf("initialize %s error %v", small_writer, err)
+		log.Fatalf("initialize %s error %v", smallWriter, err)
 	}
 
-	err = small_writer.Execute(ctx, db)
+	err = smallWriter.Execute(ctx, db)
 	if err != nil {
 		log.Fatalf("bank execution error %v", err)
 	}

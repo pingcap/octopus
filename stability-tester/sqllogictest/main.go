@@ -32,7 +32,10 @@ var (
 	metricAddr string
 )
 
-var defaultPushMetricsInterval = 15 * time.Second
+var (
+	defaultPushMetricsInterval = 15 * time.Second
+	defaultConcurrency         = 10
+)
 
 func init() {
 	flag.StringVar(&logFile, "log-file", "", "log file")
@@ -42,7 +45,7 @@ func init() {
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.StringVar(&testPath, "test-path", "./sqllogictest", "test data path")
 	flag.IntVar(&parallel, "parallel", 8, "parallel count")
-	flag.BoolVar(&skipError, "skip-errors", true, "the number of the tables")
+	flag.BoolVar(&skipError, "skip-error", true, "skip error")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
@@ -79,7 +82,7 @@ func main() {
 	}()
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, defaultConcurrency)
 	if err != nil {
 		log.Fatal(err)
 	}

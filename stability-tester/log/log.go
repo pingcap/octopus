@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/util"
 	"golang.org/x/net/context"
 )
@@ -110,7 +110,7 @@ func (c *LogCase) truncate(ctx context.Context, db *sql.DB) error {
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		log.Errorf("truncate table log%s", s)
+		log.Infof("truncate table log%s", s)
 		err := util.RunWithRetry(ctx, 200, 3*time.Second, func() error {
 			_, err := db.Exec(fmt.Sprintf("truncate table log%s", s))
 			return err
@@ -217,7 +217,6 @@ func (c *LogCase) Execute(ctx context.Context, db *sql.DB) error {
 
 		wg.Wait()
 	}
-	return nil
 }
 
 func (lw *logWriter) randomLogData() []byte {

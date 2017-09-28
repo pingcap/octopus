@@ -103,11 +103,13 @@ func MustExec(db *sql.DB, query string, args ...interface{}) sql.Result {
 }
 
 // OpenDB opens db
-func OpenDB(dsn string) (*sql.DB, error) {
+func OpenDB(dsn string, maxIdeleConns int) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxIdleConns(maxIdeleConns)
 	log.Info("DB opens successfully")
 	return db, nil
 }

@@ -43,11 +43,9 @@ func init() {
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.IntVar(&userCount, "user-count", 1000, "the number of user")
-	flag.IntVar(&postCount, "user-count", 10000, "the number of post")
+	flag.IntVar(&postCount, "post-count", 1000, "the number of post")
 	flag.IntVar(&updateUsers, "update-users", 20, "the number of users updated")
 	flag.IntVar(&updatePosts, "update-posts", 200, "the number of post updated")
-	flag.DurationVar(&interval, "interval", 2*time.Second, "the interval")
-	flag.IntVar(&tables, "tables", 1, "the number of the tables")
 	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
@@ -85,19 +83,20 @@ func main() {
 	}()
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	cfg := &CRUDCaseConfig{
-		userCount:   userCount,
-		postCount:   postCount,
-		updateUsers: updateUsers,
-		updatePosts: updatePosts,
-		interval:    interval,
-		concurrency: concurrency,
+		UserCount:   userCount,
+		PostCount:   postCount,
+		UpdateUsers: updateUsers,
+		UpdatePosts: updatePosts,
+		Concurrency: concurrency,
 	}
+
+	log.Infof("config: %+v", cfg)
 	crud := NewCRUDCase(cfg)
 	err = crud.Initialize(ctx, db)
 	if err != nil {

@@ -33,7 +33,7 @@ block_writer:
 	$(GOBUILD) -o bin/block_writer stability-tester/block_writer/*.go
 
 crud:
-	$(GOBUILD) -o bin/crudstability-tester/crud/*.go
+	$(GOBUILD) -o bin/crud stability-tester/crud/*.go
 
 ledger:
 	$(GOBUILD) -o bin/ledger stability-tester/ledger/*.go

@@ -42,9 +42,8 @@ func init() {
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.IntVar(&accounts, "accounts", 1000000, "the number of accounts")
-	flag.DurationVar(&interval, "interval", 2*time.Second, "the interval")
-	flag.IntVar(&tables, "tables", 1, "the number of the tables")
-	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
+	flag.DurationVar(&interval, "interval", 2*time.Second, "check interval")
+	flag.IntVar(&concurrency, "concurrency", 200, "concurrency of worker")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
@@ -86,12 +85,17 @@ func main() {
 	}
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ledger := NewLedgerCase(accounts, concurrency, interval)
+	cfg := &LedgerConfig{
+		NumAccounts: accounts,
+		Concurrency: concurrency,
+		Interval:    interval,
+	}
+	ledger := NewLedgerCase(cfg)
 	err = ledger.Initialize(ctx, db)
 	if err != nil {
 		log.Fatalf("initialize %s error %v", ledger, err)

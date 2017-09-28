@@ -21,22 +21,25 @@ var (
 	maxTransfer       = 100
 )
 
+// LedgerConfig is for ledger test case.
+type LedgerConfig struct {
+	NumAccounts int           `toml:"num_accounts"`
+	Interval    time.Duration `toml:"interval"`
+	Concurrency int           `toml:"concurrency"`
+}
+
 // LedgerCase simulates a complete record of financial transactions over the
 // life of a bank (or other company).
 type LedgerCase struct {
-	numAccounts int
-	interval    time.Duration
-	concurrency int
-	wg          sync.WaitGroup
-	stop        int32
+	*LedgerConfig
+	wg   sync.WaitGroup
+	stop int32
 }
 
 // NewLedgerCase returns the case for test.
-func NewLedgerCase(numAccounts, concurrency int, interval time.Duration) *LedgerCase {
+func NewLedgerCase(cfg *LedgerConfig) *LedgerCase {
 	c := &LedgerCase{
-		numAccounts: numAccounts,
-		interval:    interval,
-		concurrency: concurrency,
+		LedgerConfig: cfg,
 	}
 	return c
 }
@@ -78,7 +81,6 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 	for i := 0; i < insertConcurrency; i++ {
 		wg.Add(1)
 		start := time.Now()
-		var execInsert []string
 		go func() {
 			defer wg.Done()
 			for job := range ch {
@@ -100,17 +102,16 @@ func (c *LedgerCase) Initialize(ctx context.Context, db *sql.DB) error {
 				if err != nil {
 					log.Fatalf("exec %s err %s", query, err)
 				}
-				execInsert = append(execInsert, fmt.Sprintf("%d_%d", job.begin, job.end))
+				log.Infof("[%s] insert %d accounts, takes %s", c, job.end-job.begin, time.Since(start))
 			}
 		}()
-		log.Infof("[%s] insert [%s] accounts, takes %s", c, strings.Join(execInsert, ","), time.Since(start))
 	}
 
 	var begin, end int
-	for begin = 1; begin <= c.numAccounts; begin = end {
+	for begin = 1; begin <= c.NumAccounts; begin = end {
 		end = begin + insertBatchSize
-		if end > c.numAccounts {
-			end = c.numAccounts + 1
+		if end > c.NumAccounts {
+			end = c.NumAccounts + 1
 		}
 		select {
 		case <-ctx.Done():
@@ -146,7 +147,7 @@ func (c *LedgerCase) Execute(ctx context.Context, db *sql.DB) error {
 		log.Infof("[%s] test end...", c)
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < c.concurrency; i++ {
+	for i := 0; i < c.Concurrency; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -178,8 +179,8 @@ func (c *LedgerCase) ExecuteLedger(db *sql.DB) error {
 
 	req := postingRequest{
 		Group:    rand.Int63(),
-		AccountA: fmt.Sprintf("acc%d", rand.Intn(c.numAccounts)+1),
-		AccountB: fmt.Sprintf("acc%d", rand.Intn(c.numAccounts)+1),
+		AccountA: fmt.Sprintf("acc%d", rand.Intn(c.NumAccounts)+1),
+		AccountB: fmt.Sprintf("acc%d", rand.Intn(c.NumAccounts)+1),
 		Amount:   rand.Intn(maxTransfer),
 	}
 
@@ -265,7 +266,7 @@ func (c *LedgerCase) startVerify(ctx context.Context, db *sql.DB) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(c.interval):
+			case <-time.After(c.Interval):
 				c.verify(db)
 			}
 		}

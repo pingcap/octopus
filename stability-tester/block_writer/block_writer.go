@@ -76,6 +76,7 @@ func (c *BlockWriterCase) newBlockWriter() *blockWriter {
 // TODO: configure it from outside.
 
 func (bw *blockWriter) batchExecute(db *sql.DB, tableNum int) error {
+	log.Infof("table %d batch execution", tableNum)
 	// buffer values
 	for i := 0; i < blockWriterBatchSize; i++ {
 		blockID := bw.rand.Int63()
@@ -153,7 +154,7 @@ func (c *BlockWriterCase) truncate(ctx context.Context, db *sql.DB) error {
 		if i > 0 {
 			s = fmt.Sprintf("%d", i)
 		}
-		log.Errorf("truncate table block_writer%s", s)
+		log.Infof("truncate table block_writer%s", s)
 		err := util.RunWithRetry(ctx, 200, 3*time.Second, func() error {
 			_, err := db.Exec(fmt.Sprintf("truncate table block_writer%s", s))
 			return err

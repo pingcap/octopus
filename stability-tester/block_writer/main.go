@@ -40,7 +40,7 @@ func init() {
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.IntVar(&tables, "tables", 1, "the number of the tables")
-	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
+	flag.IntVar(&concurrency, "concurrency", 200, "concurrencyof worker")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
@@ -82,7 +82,7 @@ func main() {
 	}
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}

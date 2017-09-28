@@ -17,14 +17,13 @@ var errNotExist = errors.New("the request row does not exist")
 
 // CRUDCaseConfig is for CRUD test case.
 type CRUDCaseConfig struct {
-	userCount int `toml:"user_count"`
-	postCount int `toml:"post_count"`
+	UserCount int `toml:"user_count"`
+	PostCount int `toml:"post_count"`
 	// Insert/delete users every interval.
-	updateUsers int `toml:"update_users"`
+	UpdateUsers int `toml:"update_users"`
 	// Insert/delete posts every interval.
-	updatePosts int           `toml:"update_posts"`
-	interval    time.Duration `toml:"interval"`
-	concurrency int
+	UpdatePosts int `toml:"update_posts"`
+	Concurrency int `toml:"concurrency"`
 }
 
 // CRUDCase simulates a typical CMS system that contains Users and Posts.
@@ -70,7 +69,7 @@ func (c *CRUDCase) Execute(ctx context.Context, db *sql.DB) error {
 		log.Infof("[%s] test end...", c.String())
 	}()
 	var wg sync.WaitGroup
-	for i := 0; i < c.cfg.concurrency; i++ {
+	for i := 0; i < c.cfg.Concurrency; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -104,8 +103,9 @@ func (c *CRUDCase) ExecuteCrud(db *sql.DB, index int) error {
 	}()
 
 	// Add new users.
-	for i := 0; i < c.cfg.updateUsers && c.userIDs.len() < c.cfg.userCount+c.cfg.updateUsers; i++ {
+	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() < c.cfg.UserCount+c.cfg.UpdateUsers; i++ {
 		id := c.userIDs.allocID()
+		log.Infof("create user %d", id)
 		if err := c.createUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
@@ -113,11 +113,12 @@ func (c *CRUDCase) ExecuteCrud(db *sql.DB, index int) error {
 	}
 
 	// Delete random users.
-	for i := 0; i < c.cfg.updateUsers && c.userIDs.len() > c.cfg.userCount; i++ {
+	for i := 0; i < c.cfg.UpdateUsers && c.userIDs.len() > c.cfg.UserCount; i++ {
 		id, ok := c.userIDs.randomID()
 		if !ok {
 			break
 		}
+		log.Infof("delete user %d", id)
 		if err := c.deleteUser(db, id); err != nil {
 			return errors.Trace(err)
 		}
@@ -125,12 +126,13 @@ func (c *CRUDCase) ExecuteCrud(db *sql.DB, index int) error {
 	}
 
 	// Add new posts.
-	for i := 0; i < c.cfg.updatePosts && c.postIDs.len() < c.cfg.postCount+c.cfg.updatePosts; i++ {
+	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() < c.cfg.PostCount+c.cfg.UpdatePosts; i++ {
 		id := c.postIDs.allocID()
 		author, ok := c.userIDs.randomID()
 		if !ok {
 			break
 		}
+		log.Infof("add post %d by author %d", id, author)
 		if err := c.addPost(db, id, author); err != nil {
 			return errors.Trace(err)
 		}
@@ -139,11 +141,12 @@ func (c *CRUDCase) ExecuteCrud(db *sql.DB, index int) error {
 	}
 
 	// Delete random posts.
-	for i := 0; i < c.cfg.updatePosts && c.postIDs.len() > c.cfg.postCount; i++ {
+	for i := 0; i < c.cfg.UpdatePosts && c.postIDs.len() > c.cfg.PostCount; i++ {
 		id, ok := c.postIDs.randomID()
 		if !ok {
 			break
 		}
+		log.Infof("delete post %d", id)
 		if err := c.deletePost(db, id); err != nil {
 			return errors.Trace(err)
 		}

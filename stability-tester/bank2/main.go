@@ -42,13 +42,12 @@ func init() {
 	flag.StringVar(&password, "password", "", "user password")
 	flag.StringVar(&dbName, "db", "test", "database name")
 	flag.IntVar(&accounts, "accounts", 1000000, "the number of accounts")
-	flag.DurationVar(&interval, "interval", 2*time.Second, "the interval")
-	flag.IntVar(&tables, "tables", 1, "the number of the tables")
-	flag.IntVar(&concurrency, "concurrency", 200, "concurrency")
+	flag.DurationVar(&interval, "interval", 2*time.Second, "check interval")
+	flag.IntVar(&concurrency, "concurrency", 200, "concurrency of worker")
 	flag.StringVar(&pds, "pds", "", "separated by \",\"")
 	flag.StringVar(&tidbs, "tidbs", "", "separated by \",\"")
 	flag.StringVar(&tikvs, "tikvs", "", "separated by \",\"")
-	flag.StringVar(&lb, "lb-service", "", "lb")
+	flag.StringVar(&lb, "lb-service", "", "lb, like 127.0.0.1:2379")
 	flag.StringVar(&metricAddr, "metric-addr", "", "metric address")
 
 }
@@ -86,17 +85,18 @@ func main() {
 	}
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lb, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cfg := Bank2CaseConfig{
+	cfg := &Bank2CaseConfig{
 		NumAccounts: accounts,
 		Interval:    interval,
 		Contention:  "low",
 		Concurrency: concurrency,
 	}
+	log.Infof("config: %+v", cfg)
 	bank := NewBank2Case(cfg)
 	err = bank.Initialize(ctx, db)
 	if err != nil {
