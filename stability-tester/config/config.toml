@@ -14,7 +14,7 @@ pd = ""
 # shuffle-region = false
 
 [suite]
-names = ["bank", "bank2", "ledger", "crud", "block_writer","log"]
+names = ["bank", "bank2", "ledger", "crud", "block_writer", "log", "ddl]
 concurrency = 10000
 
 [suite.bank]
@@ -46,6 +46,17 @@ table_num = 1
 
 [suite.block_writer]
 table_num = 1
+
+[suite.ddl]
+insert_rows = 100
+initial_columns = 10
+update_ratio = 0.5
+delete_ratio = 0.5
+add_index_probability = 0.8
+drop_index_probability = 0.4
+add_column_probability = 0.8
+drop_column_probability = 0.4
+rename_column_probability = 0.8
 
 [mvcc]
 names = ["bank"]

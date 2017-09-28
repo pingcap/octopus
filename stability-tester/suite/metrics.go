@@ -175,6 +175,14 @@ var (
 			Name:      "log_write_total",
 			Help:      "Counter of log operations.",
 		}, []string{"action"})
+
+	ddlFailedCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "tidb_test",
+			Subsystem: "stability",
+			Name:      "ddl_failed_total",
+			Help:      "Counter of failed ddl operations.",
+		})
 )
 
 func init() {
@@ -193,4 +201,5 @@ func init() {
 	prometheus.MustRegister(smallWriteFailedCounter)
 	prometheus.MustRegister(logDurationVec)
 	prometheus.MustRegister(logFailedCounterVec)
+	prometheus.MustRegister(ddlFailedCounter)
 }
