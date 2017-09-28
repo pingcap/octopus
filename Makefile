@@ -50,6 +50,9 @@ mvcc_bank:
 sqllogictest:
 	$(GOBUILD) -o bin/sqllogictest stability-tester/sqllogictest/*.go
 
+shuffle:
+	$(GOBUILD) -o bin/shuffle stability-tester/shuffle/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 
