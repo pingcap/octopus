@@ -23,6 +23,7 @@ type SuiteConfig struct {
 	Concurrency int                   `toml:"concurrency"`
 	Bank        BankCaseConfig        `toml:"bank"`
 	Bank2       Bank2CaseConfig       `toml:"bank2"`
+	BankMult    BankMultCaseConfig    `toml:"bank_mult"`
 	Ledger      LedgerConfig          `toml:"ledger"`
 	CRUD        CRUDCaseConfig        `toml:"crud"`
 	Log         LogCaseConfig         `toml:"log"`
@@ -43,6 +44,14 @@ type Bank2CaseConfig struct {
 	NumAccounts int      `toml:"num_accounts"`
 	Interval    Duration `toml:"interval"`
 	Contention  string   `toml:"contention"`
+}
+
+// BankMultCaseConfig is for bank_mult test case.
+type BankMultCaseConfig struct {
+	// NumAccounts is total accounts
+	NumAccounts int      `toml:"num_accounts"`
+	Interval    Duration `toml:"interval"`
+	TableNum    int      `toml:"table_num"`
 }
 
 // LedgerConfig is for ledger test case.
