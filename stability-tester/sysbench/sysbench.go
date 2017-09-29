@@ -26,7 +26,7 @@ type Config struct {
 	TableSize  int           `toml:"table_size"`
 	Threads    int           `toml:"threads"`
 	MaxTime    int           `toml:"max_time"`
-	Interval   util.Duration `toml:"interval"`
+	Interval   time.Duration `toml:"interval"`
 	DBName     string        `toml:"database"`
 	LuaPath    string        `toml:"lua_path"`
 }
@@ -53,7 +53,7 @@ func (s *SysbenchCase) Execute(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(s.cfg.Interval.Duration)
+	ticker := time.NewTicker(s.cfg.Interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -134,12 +134,18 @@ func (s *SysbenchCase) run() error {
 }
 
 func (s *SysbenchCase) clean() error {
-	cmdStrArgs := fmt.Sprintf(`/usr/bin/mysql -h%s -P%d -u%s -e"drop database if exists sbtest"`, s.cfg.Host, s.cfg.Port, s.cfg.User)
-	fmt.Println("clean command: ", cmdStrArgs)
-	cmd := exec.Command("/bin/sh", "-c", cmdStrArgs)
-	if err := cmd.Run(); err != nil {
-		fmt.Println("run drop database failed", err)
+	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", s.cfg.User, s.cfg.Password, s.cfg.Host, s.cfg.Port, "sbtest")
+	db, err := util.OpenDB(dbAddr)
+	if err != nil {
+		log.Errorf("open db failed: ", err)
 		return err
 	}
+	defer db.Close()
+	_, err = db.Exec("drop database if exists sbtest")
+	if err != nil {
+		log.Errorf("run drop database failed: %v", err)
+		return err
+	}
+
 	return nil
 }

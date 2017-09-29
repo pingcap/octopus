@@ -63,11 +63,9 @@ func main() {
 		TableSize:  *tableSize,
 		Threads:    *threads,
 		MaxTime:    *maxTime,
-		Interval: util.Duration{
-			*interval,
-		},
-		DBName:  *dbName,
-		LuaPath: *luaPath,
+		Interval:   *interval,
+		DBName:     *dbName,
+		LuaPath:    *luaPath,
 	}
 	sysbench := NewSysbenchCase(&cfg)
 	if err := sysbench.Initialize(); err != nil {

@@ -26,7 +26,7 @@ type BankCase struct {
 type Config struct {
 	// NumAccounts is total accounts
 	NumAccounts int           `toml:"num_accounts"`
-	Interval    util.Duration `toml:"interval"`
+	Interval    time.Duration `toml:"interval"`
 	TableNum    int           `toml:"table_num"`
 	Concurrency int           `toml:"concurrency"`
 }
@@ -147,7 +147,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 	c.verify(db, index)
 	start := time.Now()
 	go func(index string) {
-		ticker := time.NewTicker(c.cfg.Interval.Duration)
+		ticker := time.NewTicker(c.cfg.Interval)
 		defer ticker.Stop()
 
 		for {

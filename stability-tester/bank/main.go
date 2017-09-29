@@ -45,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db.SetMaxIdleConns(concurrency)
+	db.SetMaxIdleConns(*concurrency)
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -65,7 +65,7 @@ func main() {
 	}
 	cfg := Config{
 		NumAccounts: *accounts,
-		Interval:    util.Duration{*interval},
+		Interval:    *interval,
 		TableNum:    *tables,
 		Concurrency: *concurrency,
 	}
