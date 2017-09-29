@@ -41,7 +41,7 @@ func main() {
 	flag.Parse()
 	util.InitLog(*logFile, *logLevel)
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, lbService, dbName)
-	db, err := util.OpenDB(dbDSN)
+	db, err := util.OpenDB(dbDSN, *concurrency)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strconv"
@@ -68,6 +69,11 @@ func main() {
 		LuaPath:    *luaPath,
 	}
 	sysbench := NewSysbenchCase(&cfg)
+	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", sysbench.cfg.User, sysbench.cfg.Password, sysbench.cfg.Host, sysbench.cfg.Port, "sbtest")
+	sysbench.db, err = util.OpenDB(dbAddr, 2)
+	if err != nil {
+		log.Fatalf("open db failed: %v", err)
+	}
 	if err := sysbench.Initialize(); err != nil {
 		log.Fatal(err)
 	}

@@ -2,18 +2,19 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"os/exec"
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/octopus/stability-tester/util"
 	"golang.org/x/net/context"
 )
 
 // SysbenchCase is configuration for sysbench.
 type SysbenchCase struct {
 	cfg *Config
+	db  *sql.DB
 }
 
 // Config is the configuration for the sysbench test.
@@ -89,15 +90,10 @@ func (s *SysbenchCase) runAction() error {
 }
 
 func (s *SysbenchCase) prepare() error {
-	var err error
-	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", s.cfg.User, s.cfg.Password, s.cfg.Host, s.cfg.Port, "sbtest")
-	db, err := util.OpenDB(dbAddr)
-	if err != nil {
-		log.Errorf("open db failed: ", err)
-		return err
+	if s.db == nil {
+		log.Fatal("sysbench db is nil")
 	}
-	defer db.Close()
-	_, err = db.Exec("create database IF NOT EXISTS sbtest")
+	_, err := s.db.Exec("create database IF NOT EXISTS sbtest")
 	if err != nil {
 		log.Errorf("create database failed: %v", err)
 		return err
@@ -134,14 +130,10 @@ func (s *SysbenchCase) run() error {
 }
 
 func (s *SysbenchCase) clean() error {
-	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", s.cfg.User, s.cfg.Password, s.cfg.Host, s.cfg.Port, "sbtest")
-	db, err := util.OpenDB(dbAddr)
-	if err != nil {
-		log.Errorf("open db failed: ", err)
-		return err
+	if s.db == nil {
+		log.Fatal("sysbench db is nil")
 	}
-	defer db.Close()
-	_, err = db.Exec("drop database if exists sbtest")
+	_, err := s.db.Exec("drop database if exists sbtest")
 	if err != nil {
 		log.Errorf("run drop database failed: %v", err)
 		return err
