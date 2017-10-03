@@ -29,7 +29,7 @@ var (
 	tidbs      = flag.String("tidbs", "", "tidbs addr, separated by \",\"")
 	tikvs      = flag.String("tikvs", "", "tikvs addr, separated by \",\"")
 	lbService  = flag.String("lb-service", "", "load balance service")
-	metricAddr = flag.String("metic-addr", "", "metric address")
+	metricAddr = flag.String("metric-addr", "", "metric address")
 )
 
 func main() {
