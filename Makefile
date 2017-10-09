@@ -26,6 +26,12 @@ tidb-stability:
 tidb-ycsb:
 	$(GOBUILD) -o bin/tidb-ycsb ycsb/*.go
 
+bank:
+	$(GOBUILD) -o bin/bank stability-tester/bank/*.go
+
+sysbench-test:
+	$(GOBUILD) -o bin/sysbench-test stability-tester/sysbench/*.go
+
 bank2:
 	$(GOBUILD) -o bin/bank2 stability-tester/bank2/*.go
 
