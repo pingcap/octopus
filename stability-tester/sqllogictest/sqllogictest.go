@@ -225,18 +225,11 @@ func closeDatabases(mdbs []*sql.DB) {
 }
 
 func addTasks(ctx context.Context, tasks []string, taskChan chan string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		for _, task := range tasks {
-			log.Infof("add task %s", task)
-			taskChan <- task
-		}
-		close(taskChan)
+	for _, task := range tasks {
+		log.Infof("add task %s", task)
+		taskChan <- task
 	}
+	close(taskChan)
 }
 
 func doProcess(ctx context.Context, doneChan chan struct{}, taskChan chan string, resultChan chan *result,
