@@ -228,17 +228,9 @@ func closeDatabases(mdbs []*sql.DB) {
 }
 
 func addTasks(ctx context.Context, tasks []string, taskChan chan string, logger *log.Logger) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		for _, task := range tasks {
-			logger.Infof("add task %s", task)
-			taskChan <- task
-		}
-		close(taskChan)
+	for _, task := range tasks {
+		logger.Infof("add task %s", task)
+		taskChan <- task
 	}
 }
 
