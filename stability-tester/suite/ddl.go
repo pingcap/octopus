@@ -326,7 +326,7 @@ func (c *DDLCase) generateAddTable() error {
 }
 
 func (c *DDLCase) executeAddTable(cfg interface{}) error {
-	columnCount := rand.Intn(5) + 5
+	columnCount := rand.Intn(c.cfg.TablesToCreate) + 2
 	tableColumns := make([]*ddlTestColumn, columnCount)
 	for i := 0; i < columnCount; i++ {
 		column := ddlTestColumn{
