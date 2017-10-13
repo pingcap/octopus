@@ -173,7 +173,7 @@ var (
 func createDatabases(num int, port int, host string, user string, password string, dbname string) []*sql.DB {
 	mdbs := make([]*sql.DB, 0, num)
 	for i := 0; i < num; i++ {
-		dbstring := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?strict=true", user, password, host, port, dbname)
+		dbstring := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", user, password, host, port, dbname)
 		mdb, err := sql.Open("mysql", dbstring)
 		if err != nil {
 			log.Fatal(err)
