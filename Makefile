@@ -29,10 +29,6 @@ tidb-ycsb:
 bank:
 	$(GOBUILD) -o bin/bank stability-tester/bank/*.go
 
-
-bank2y:
-        $(GOBUILD) -o bin/bank2 stability-tester/bank2/*.go
-
 sysbench-test:
 	$(GOBUILD) -o bin/sysbench-test stability-tester/sysbench/*.go
 
