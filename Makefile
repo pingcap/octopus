@@ -59,6 +59,9 @@ sqllogictest:
 shuffle:
 	$(GOBUILD) -o bin/shuffle stability-tester/shuffle/*.go
 
+ddl:
+	$(GOBUILD) -o bin/ddl stability-tester/ddl/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 
