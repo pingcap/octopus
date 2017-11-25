@@ -29,6 +29,9 @@ tidb-ycsb:
 bank:
 	$(GOBUILD) -o bin/bank stability-tester/bank/*.go
 
+stmt_retry:
+	$(GOBUILD) -o bin/stmt_retry stability-tester/stmt_retry/*.go
+
 sysbench-test:
 	$(GOBUILD) -o bin/sysbench-test stability-tester/sysbench/*.go
 

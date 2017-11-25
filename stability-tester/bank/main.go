@@ -45,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db.SetMaxIdleConns(*concurrency)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -76,5 +76,4 @@ func main() {
 	if err := bank.Execute(ctx, db); err != nil {
 		log.Fatal(err)
 	}
-	select {}
 }
