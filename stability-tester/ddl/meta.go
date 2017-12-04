@@ -38,8 +38,8 @@ func (err ddlTestErrorConflict) Error() string {
 	return "Conflict operation"
 }
 
-// pickupRandomTables picks a table randomly. It is callee's responsibility to ensure
-// that a table list lock is acquired.
+// pickupRandomTables picks a table randomly. The callee should ensure that
+// during this function call the table list is not modified.
 func (c *testCase) pickupRandomTable() *ddlTestTable {
 	tableNames := make([]string, 0)
 	for name := range c.tables {
