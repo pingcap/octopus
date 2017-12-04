@@ -40,6 +40,11 @@ func (err ddlTestErrorConflict) Error() string {
 
 // pickupRandomTables picks a table randomly. The callee should ensure that
 // during this function call the table list is not modified.
+//
+// Normally the DML op callee should acquire a lock before calling this function
+// because the table list may be modified by another parallel DDL op. However
+// the DDL op callee doesn't need to acquire a lock because no one will modify the
+// table list in parallel ---- DDL ops are executed one by one.
 func (c *testCase) pickupRandomTable() *ddlTestTable {
 	tableNames := make([]string, 0)
 	for name := range c.tables {
