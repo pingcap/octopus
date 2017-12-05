@@ -26,6 +26,28 @@ import (
 	"github.com/ngaut/log"
 )
 
+// The DDL test case is intended to test the correctness of DDL operations. It
+// generates test cases by probability so that it should be run in background for
+// enough time to see if there are any issues.
+//
+// The DDL test case have two go routines run in parallel, one for DDL operations,
+// one for DML operations. The feature of each operation (for example, covering
+// what kind of scenario) is determined and generated at start up time (See
+// `generateDMLOps`, `generateDDLOps``), while the order of each operation is
+// randomized in each round.
+//
+// If there are remaining DDL operations while all DML operations are performed, a
+// new round of DML operations will be started (with new randomized order) and when
+// all DDL operations are done, the remaining DML operations are discarded. vice
+// versa.
+//
+// Since there are some conflicts between some DDL operations and DML operations,
+// for example, inserting a row while removing a column may cause errors in
+// inserting because of incorrect column numbers, some locks and some conflicting
+// detections are introduced. The conflicting detection will ignore errors raised
+// in such scenarios. In addition, the data in memory is stored by column instead
+// of by row to minimize data conflicts in adding and removing columns.
+
 type DDLCaseConfig struct {
 	Concurrency    int `toml:"concurrency"`
 	TablesToCreate int `toml:"tables_to_create"`

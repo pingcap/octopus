@@ -80,5 +80,4 @@ func main() {
 	if err := ddl.Execute(ctx, db); err != nil {
 		log.Fatal(err)
 	}
-	select {}
 }

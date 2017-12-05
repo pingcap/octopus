@@ -55,7 +55,7 @@ func (c *testCase) executeAddTable(cfg interface{}) error {
 	for i := 0; i < columnCount; i++ {
 		column := ddlTestColumn{
 			name:         uuid.NewV4().String(),
-			fieldType:    "int",
+			fieldType:    "int", // TODO: Add more field types and values
 			defaultValue: rand.Int31(),
 			rows:         make([]int32, 0),
 		}
@@ -168,10 +168,6 @@ func (c *testCase) executeAddIndex(cfg interface{}) error {
 	}
 	config := cfg.(ddlTestAddIndexConfig)
 
-	if len(table.columns) == 0 {
-		return nil
-	}
-
 	// build index definition
 	index := ddlTestIndex{
 		name:      uuid.NewV4().String(),
@@ -187,15 +183,11 @@ func (c *testCase) executeAddIndex(cfg interface{}) error {
 	case ddlTestIndexStrategySingleColumnRandom:
 		index.columns = append(index.columns, table.columns[rand.Intn(len(table.columns))])
 	case ddlTestIndexStrategyMultipleColumnRandom:
-		numberOfColumns := rand.Intn(len(table.columns))
+		numberOfColumns := rand.Intn(len(table.columns)) + 1
 		perm := rand.Perm(numberOfColumns)
 		for _, idx := range perm {
 			index.columns = append(index.columns, table.columns[idx])
 		}
-	}
-
-	if len(index.columns) == 0 {
-		return nil
 	}
 
 	signature := ""
@@ -307,7 +299,7 @@ func (c *testCase) executeAddColumn(cfg interface{}) error {
 
 	newColumn := ddlTestColumn{
 		name:         uuid.NewV4().String(),
-		fieldType:    "int",
+		fieldType:    "int", // TODO: Add more field types and values
 		defaultValue: rand.Int31(),
 	}
 
