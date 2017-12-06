@@ -18,50 +18,46 @@ import (
 
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/types"
+	goctx "golang.org/x/net/context"
 )
-
-var colIDs = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 type txnKV struct {
 	db kv.Storage
 }
 
-func (c *txnKV) ReadRow(key uint64) (bool, error) {
+func (c *txnKV) ReadKey(k string) (string, error) {
 	tx, err := c.db.Begin()
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
-	rowKey := tablecodec.EncodeRowKeyWithHandle(1, int64(key))
-	data, err := tx.Get(rowKey)
+	key := []byte(k)
+	data, err := tx.Get(key)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 
 	defer tx.Rollback()
 
-	if err := tx.Commit(); err != nil {
-		return false, err
+	if err := tx.Commit(goctx.Background()); err != nil {
+		return "", err
 	}
 
-	return data == nil, nil
+	return string(data), nil
 }
 
-func (c *txnKV) InsertRow(key uint64, fields []string) error {
-	// Simulate TiDB data
-	rowKey := tablecodec.EncodeRowKeyWithHandle(1, int64(key))
-	cols := make([]types.Datum, len(fields))
-	for i, v := range fields {
-		cols[i].SetString(v)
-	}
+// func (c *txnKV) ReadKeys(key []byte) ([]byte, error) {
+//     tx, err := c.db.Begin()
+//     if err != nil {
+//         return []byte{}, err
+//     }
+//
+//     ts = tx.StartTS()
+//     snapshot, err = c.db.GetSnapshot()
+//     snapshot.BatchGet([][]byte)
+// }
 
-	rowData, err := tablecodec.EncodeRow(cols, colIDs, nil)
-	if err != nil {
-		return err
-	}
-
+func (c *txnKV) InsertKey(k, v string) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -69,11 +65,12 @@ func (c *txnKV) InsertRow(key uint64, fields []string) error {
 
 	defer tx.Rollback()
 
-	if err = tx.Set(rowKey, rowData); err != nil {
+	key, value := []byte(k), []byte(v)
+	if err = tx.Set(key, value); err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	return tx.Commit(goctx.Background())
 }
 
 func (c *txnKV) Clone() Database {
