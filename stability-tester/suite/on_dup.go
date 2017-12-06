@@ -27,6 +27,9 @@ import (
 )
 
 // OnDupCase tests insert statement with on duplicate update.
+// We start insert worker, replace worker and delete worker to
+// run concurrently, each worker uses a random id to execute the
+// statement at a time, so there will be retries, but should never fail.
 type OnDupCase struct {
 	NumRows int
 	wg      sync.WaitGroup
