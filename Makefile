@@ -26,6 +26,45 @@ tidb-stability:
 tidb-ycsb:
 	$(GOBUILD) -o bin/tidb-ycsb ycsb/*.go
 
+bank:
+	$(GOBUILD) -o bin/bank stability-tester/bank/*.go
+
+stmt_retry:
+	$(GOBUILD) -o bin/stmt_retry stability-tester/stmt_retry/*.go
+
+sysbench-test:
+	$(GOBUILD) -o bin/sysbench-test stability-tester/sysbench/*.go
+
+bank2:
+	$(GOBUILD) -o bin/bank2 stability-tester/bank2/*.go
+
+block_writer:
+	$(GOBUILD) -o bin/block_writer stability-tester/block_writer/*.go
+
+crud:
+	$(GOBUILD) -o bin/crud stability-tester/crud/*.go
+
+ledger:
+	$(GOBUILD) -o bin/ledger stability-tester/ledger/*.go
+
+log:
+	$(GOBUILD) -o bin/log stability-tester/log/*.go
+
+small_writer:
+	$(GOBUILD) -o bin/small_writer stability-tester/small_writer/*.go
+
+mvcc_bank:
+	$(GOBUILD) -o bin/mvcc_bank stability-tester/mvcc_bank/*.go
+
+sqllogictest:
+	$(GOBUILD) -o bin/sqllogictest stability-tester/sqllogictest/*.go
+
+shuffle:
+	$(GOBUILD) -o bin/shuffle stability-tester/shuffle/*.go
+
+ddl:
+	$(GOBUILD) -o bin/ddl stability-tester/ddl/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 
