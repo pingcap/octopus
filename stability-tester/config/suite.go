@@ -28,6 +28,7 @@ type SuiteConfig struct {
 	CRUD        CRUDCaseConfig        `toml:"crud"`
 	Log         LogCaseConfig         `toml:"log"`
 	BlockWriter BlockWriterCaseConfig `toml:"block_writer"`
+	OnDup       OnDupConfig           `toml:"on_dup"`
 }
 
 // BankCaseConfig is for bank test case.
@@ -118,4 +119,9 @@ type SqllogictestConfig struct {
 	SkipError bool   `toml:"skipError"`
 	Parallel  int    `toml:"parallel"`
 	DBName    string `toml:"database"`
+}
+
+// OnDupConfig is for on_dup test case.
+type OnDupConfig struct {
+	NumRows int      `toml:"num_rows"`
 }
