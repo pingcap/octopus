@@ -29,18 +29,19 @@ import (
 var defaultPushMetricsInterval = 15 * time.Second
 
 var (
-	logFile        = flag.String("log-file", "", "log file")
-	logLevel       = flag.String("L", "info", "log level: info, debug, warn, error, faltal")
-	user           = flag.String("user", "root", "db username")
-	password       = flag.String("password", "", "user password")
-	dbName         = flag.String("db", "test", "database name")
-	concurrency    = flag.Int("concurrency", 200, "concurrency")
-	pds            = flag.String("pds", "", "separated by \",\"")
-	tidbs          = flag.String("tidbs", "", "separated by \",\"")
-	tikvs          = flag.String("tikvs", "", "separated by \",\"")
-	lbService      = flag.String("lb-service", "", "lb")
-	metricAddr     = flag.String("metric-addr", "", "metric address")
-	tablesToCreate = flag.Int("tables", 1, "the number of the tables to create")
+	logFile         = flag.String("log-file", "", "log file")
+	logLevel        = flag.String("L", "info", "log level: info, debug, warn, error, faltal")
+	user            = flag.String("user", "root", "db username")
+	password        = flag.String("password", "", "user password")
+	dbName          = flag.String("db", "test", "database name")
+	concurrency     = flag.Int("concurrency", 200, "concurrency")
+	pds             = flag.String("pds", "", "separated by \",\"")
+	tidbs           = flag.String("tidbs", "", "separated by \",\"")
+	tikvs           = flag.String("tikvs", "", "separated by \",\"")
+	lbService       = flag.String("lb-service", "", "lb")
+	metricAddr      = flag.String("metric-addr", "", "metric address")
+	tablesToCreate  = flag.Int("tables", 1, "the number of the tables to create")
+	mysqlCompatible = flag.Bool("mysql-compatible", false, "disable TiDB-only features")
 )
 
 func main() {
@@ -70,8 +71,9 @@ func main() {
 		go util.PushPrometheus("ddl", *metricAddr, defaultPushMetricsInterval)
 	}
 	cfg := DDLCaseConfig{
-		Concurrency:    *concurrency,
-		TablesToCreate: *tablesToCreate,
+		Concurrency:     *concurrency,
+		TablesToCreate:  *tablesToCreate,
+		MySQLCompatible: *mysqlCompatible,
 	}
 	ddl := NewDDLCase(&cfg)
 	if err := ddl.Initialize(ctx, db); err != nil {

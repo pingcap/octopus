@@ -49,8 +49,9 @@ import (
 // of by row to minimize data conflicts in adding and removing columns.
 
 type DDLCaseConfig struct {
-	Concurrency    int `toml:"concurrency"`
-	TablesToCreate int `toml:"tables_to_create"`
+	Concurrency     int  `toml:"concurrency"`
+	MySQLCompatible bool `toml:"mysql_compactible"`
+	TablesToCreate  int  `toml:"tables_to_create"`
 }
 
 type DDLCase struct {
@@ -79,7 +80,10 @@ func (c *DDLCase) Execute(ctx context.Context, db *sql.DB) error {
 					return
 				default:
 				}
-				c.cases[i].execute(db, i)
+				err := c.cases[i].execute(db)
+				if err != nil {
+					log.Fatalf("[ddl] [instance %d] ERROR: %s", i, errors.ErrorStack(err))
+				}
 			}
 		}(i)
 	}
@@ -103,10 +107,11 @@ func NewDDLCase(cfg *DDLCaseConfig) *DDLCase {
 	cases := make([]*testCase, cfg.Concurrency)
 	for i := 0; i < cfg.Concurrency; i++ {
 		cases[i] = &testCase{
-			cfg:    cfg,
-			tables: make(map[string]*ddlTestTable),
-			ddlOps: make([]ddlTestOpExecutor, 0),
-			dmlOps: make([]ddlTestOpExecutor, 0),
+			cfg:       cfg,
+			tables:    make(map[string]*ddlTestTable),
+			ddlOps:    make([]ddlTestOpExecutor, 0),
+			dmlOps:    make([]ddlTestOpExecutor, 0),
+			caseIndex: i,
 		}
 	}
 	b := &DDLCase{
@@ -174,8 +179,7 @@ func (c *testCase) executeOperations(ops []ddlTestOpExecutor, postOp func() erro
 // ddl operations, one is dml operations.
 // When one list completes, it starts over from the beginning again.
 // When both of them ONCE complete, it exits.
-func (c *testCase) execute(db *sql.DB, testCaseIndex int) error {
-	c.caseIndex = testCaseIndex
+func (c *testCase) execute(db *sql.DB) error {
 	ddlAllComplete, dmlAllComplete := false, false
 
 	err := parallel(func() error {
@@ -204,11 +208,18 @@ func (c *testCase) execute(db *sql.DB, testCaseIndex int) error {
 
 	if err != nil {
 		ddlFailedCounter.Inc()
-		log.Fatalf("[ddl] [instance %d] ERROR: %s", testCaseIndex, errors.ErrorStack(err))
-		return nil
+		return errors.Trace(err)
 	}
 
-	log.Infof("[ddl] [instance %d] Round compeleted", testCaseIndex)
+	log.Infof("[ddl] [instance %d] Round completed", c.caseIndex)
+	log.Infof("[ddl] [instance %d] Executing post round operations...", c.caseIndex)
+
+	if !c.cfg.MySQLCompatible {
+		err := c.executeAdminCheck()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	return nil
 }
@@ -336,6 +347,27 @@ func (c *testCase) executeVerifyIntegrity() error {
 				return errors.Trace(fmt.Errorf("Unexpected row %s in table `%s`", rowString, table.name))
 			}
 		}
+	}
+	return nil
+}
+
+func (c *testCase) executeAdminCheck() error {
+	// build SQL
+	sql := "ADMIN CHECK TABLE "
+	i := 0
+	for _, table := range c.tables {
+		if i > 0 {
+			sql += ", "
+		}
+		sql += fmt.Sprintf("`%s`", table.name)
+		i++
+	}
+
+	// execute
+	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
+	_, err := c.db.Exec(sql)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
