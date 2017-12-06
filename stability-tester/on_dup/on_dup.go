@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package suite
+package main
 
 import (
 	"context"
@@ -19,11 +19,9 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/octopus/stability-tester/config"
 )
 
 // OnDupCase tests insert statement with on duplicate update.
@@ -32,17 +30,14 @@ import (
 // statement at a time, so there will be retries, but should never fail.
 type OnDupCase struct {
 	NumRows int
-	wg      sync.WaitGroup
-	errs    []error
-	mu      sync.Mutex
-	Done    chan bool
+	errCh   chan error
 }
 
 // NewOnDupCase creates a new OnDupCase.
-func NewOnDupCase(cfg *config.Config) Case {
+func NewOnDupCase(numRows int) *OnDupCase {
 	return &OnDupCase{
-		NumRows: cfg.Suite.OnDup.NumRows,
-		Done:    make(chan bool),
+		NumRows: numRows,
+		errCh:   make(chan error, 3),
 	}
 }
 
@@ -66,24 +61,21 @@ CREATE TABLE IF NOT EXISTS on_dup (
 	return nil
 }
 
-func (c *OnDupCase) String() string {
-	return "on_dup"
-}
-
-func (c *OnDupCase) Execute(db *sql.DB, concurrentIndex int) error {
-	c.wg.Add(3)
-	go c.runInsert(db)
-	go c.runDelete(db)
-	go c.runReplace(db)
-	c.wg.Wait()
-	if len(c.errs) != 0 {
-		return c.errs[0]
+func (c *OnDupCase) Execute(ctx context.Context, db *sql.DB) error {
+	childCtx, cancelFunc := context.WithCancel(ctx)
+	go c.runInsert(childCtx, db)
+	go c.runDelete(childCtx, db)
+	go c.runReplace(childCtx, db)
+	select {
+	case err := <-c.errCh:
+		cancelFunc()
+		return errors.Trace(err)
+	case <-ctx.Done():
+		return nil
 	}
-	return nil
 }
 
-func (c *OnDupCase) runInsert(db *sql.DB) {
-	defer c.wg.Done()
+func (c *OnDupCase) runInsert(ctx context.Context, db *sql.DB) {
 	ran := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 	for {
 		id := ran.Intn(c.NumRows)
@@ -92,40 +84,36 @@ func (c *OnDupCase) runInsert(db *sql.DB) {
 		query := fmt.Sprintf("INSERT on_dup VALUES (%d, '%d', %d) ON DUPLICATE KEY UPDATE score = values(score)", id, name, score)
 		_, err := db.Exec(query)
 		if err != nil {
-			c.mu.Lock()
-			c.errs = append(c.errs, err)
-			c.mu.Unlock()
+			c.errCh <- errors.Trace(err)
 			return
 		}
 		select {
-		case <-c.Done:
+		case <-ctx.Done():
 			return
+		default:
 		}
 	}
 }
 
-func (c *OnDupCase) runDelete(db *sql.DB) {
-	defer c.wg.Done()
+func (c *OnDupCase) runDelete(ctx context.Context, db *sql.DB) {
 	ran := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 	for {
 		id := ran.Intn(c.NumRows)
 		query := fmt.Sprintf("DELETE from on_dup where id = %d", id)
 		_, err := db.Exec(query)
 		if err != nil {
-			c.mu.Lock()
-			c.errs = append(c.errs, err)
-			c.mu.Unlock()
+			c.errCh <- errors.Trace(err)
 			return
 		}
 		select {
-		case <-c.Done:
+		case <-ctx.Done():
 			return
+		default:
 		}
 	}
 }
 
-func (c *OnDupCase) runReplace(db *sql.DB) {
-	defer c.wg.Done()
+func (c *OnDupCase) runReplace(ctx context.Context, db *sql.DB) {
 	ran := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
 	for {
 		id := ran.Intn(c.NumRows)
@@ -134,16 +122,13 @@ func (c *OnDupCase) runReplace(db *sql.DB) {
 		query := fmt.Sprintf("REPLACE on_dup VALUES (%d, '%d', %d)", id, name, score)
 		_, err := db.Exec(query)
 		if err != nil {
-			c.errs = append(c.errs, errors.Trace(err))
+			c.errCh <- errors.Trace(err)
 			return
 		}
 		select {
-		case <-c.Done:
+		case <-ctx.Done():
 			return
+		default:
 		}
 	}
-}
-
-func init() {
-	RegisterSuite("on_dup", NewOnDupCase)
 }
