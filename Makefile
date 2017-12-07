@@ -65,6 +65,9 @@ shuffle:
 ddl:
 	$(GOBUILD) -o bin/ddl stability-tester/ddl/*.go
 
+on_dup:
+	$(GOBUILD) -o bin/on_dup stability-tester/on_dup/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 
