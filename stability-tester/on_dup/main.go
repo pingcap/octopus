@@ -66,10 +66,6 @@ func main() {
 		cancel()
 		os.Exit(0)
 	}()
-	if len(*metricAddr) > 0 {
-		log.Info("enable metrics")
-		go util.PushPrometheus("ddl", *metricAddr, defaultPushMetricsInterval)
-	}
 	onDup := NewOnDupCase(*numRows)
 	if err := onDup.Initialize(ctx, db); err != nil {
 		log.Fatal(err)
