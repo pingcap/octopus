@@ -268,6 +268,9 @@ func (yw *ycsbWorker) randString(length int) string {
 }
 
 func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
+	start := time.Now()
+	defer cmdDuration.WithLabelValues("insert").Observe(time.Since(start).Seconds())
+
 	fields := make([]string, numTableFields)
 	for i := 0; i < len(fields); i++ {
 		fields[i] = yw.randString(fieldLength)
@@ -286,6 +289,9 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 }
 
 func (yw *ycsbWorker) readRow() error {
+	start := time.Now()
+	defer cmdDuration.WithLabelValues("read").Observe(time.Since(start).Seconds())
+
 	empty, err := yw.db.ReadRow(yw.nextReadKey())
 	if err != nil {
 		return err
@@ -299,6 +305,9 @@ func (yw *ycsbWorker) readRow() error {
 }
 
 func (yw *ycsbWorker) scanRows() error {
+	start := time.Now()
+	defer cmdDuration.WithLabelValues("scan").Observe(time.Since(start).Seconds())
+
 	atomic.AddUint64(&globalStats[scans], 1)
 	return errors.Errorf("not implemented yet")
 }
