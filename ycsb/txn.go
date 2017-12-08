@@ -19,7 +19,8 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tidb/types"
+	goctx "golang.org/x/net/context"
 )
 
 var colIDs = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -42,7 +43,7 @@ func (c *txnKV) ReadRow(key uint64) (bool, error) {
 
 	defer tx.Rollback()
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(goctx.Background()); err != nil {
 		return false, err
 	}
 
@@ -73,7 +74,7 @@ func (c *txnKV) InsertRow(key uint64, fields []string) error {
 		return err
 	}
 
-	return tx.Commit()
+	return tx.Commit(goctx.Background())
 }
 
 func (c *txnKV) Clone() Database {
