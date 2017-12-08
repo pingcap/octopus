@@ -31,6 +31,15 @@ var (
 			Name:      "cmd_err_total",
 			Help:      "Error counter of commands.",
 		}, []string{"type"})
+
+	cmdDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "octopus",
+			Subsystem: "ycsb",
+			Name:      "cmd_duration_seconds",
+			Help:      "Duration of commands.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 20),
+		}, []string{"type"})
 )
 
 func init() {
