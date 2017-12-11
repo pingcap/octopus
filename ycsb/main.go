@@ -269,7 +269,7 @@ func (yw *ycsbWorker) randString(length int) string {
 
 func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 	start := time.Now()
-	defer cmdDuration.WithLabelValues("insert").Observe(time.Since(start).Seconds())
+	defer func() { cmdDuration.WithLabelValues("insert").Observe(time.Since(start).Seconds()) }()
 
 	fields := make([]string, numTableFields)
 	for i := 0; i < len(fields); i++ {
@@ -290,7 +290,7 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 
 func (yw *ycsbWorker) readRow() error {
 	start := time.Now()
-	defer cmdDuration.WithLabelValues("read").Observe(time.Since(start).Seconds())
+	defer func() { cmdDuration.WithLabelValues("read").Observe(time.Since(start).Seconds()) }()
 
 	empty, err := yw.db.ReadRow(yw.nextReadKey())
 	if err != nil {
@@ -352,8 +352,8 @@ func main() {
 	log.SetLevelByString(*logLevel)
 
 	go func() {
-		http.ListenAndServe(*statusAddr, nil)
 		http.Handle("/metrics", prometheus.Handler())
+		http.ListenAndServe(*statusAddr, nil)
 	}()
 
 	PushMetrics(*pushAddr)

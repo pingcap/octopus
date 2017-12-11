@@ -45,4 +45,5 @@ var (
 func init() {
 	prometheus.MustRegister(cmdCounter)
 	prometheus.MustRegister(cmdErrorCounter)
+	prometheus.MustRegister(cmdDuration)
 }
