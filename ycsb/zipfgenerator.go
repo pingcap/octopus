@@ -47,7 +47,7 @@ type ZipfGenerator struct {
 
 // ZipfGeneratorMu holds variables which must be globally synced.
 type ZipfGeneratorMu struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	iMax     uint64
 	iMaxHead uint64
 	eta      float64
@@ -116,7 +116,7 @@ func computeZetaFromScratch(n uint64, theta float64) (float64, error) {
 // Uint64 draws a new value between iMin and iMax, with probabilities
 // according to the Zipf distribution.
 func (z *ZipfGenerator) Uint64(u float64) uint64 {
-	z.zipfGenMu.mu.Lock()
+	z.zipfGenMu.mu.RLock()
 	uz := u * z.zipfGenMu.zetaN
 	var result uint64
 	if uz < 1.0 {
@@ -130,7 +130,7 @@ func (z *ZipfGenerator) Uint64(u float64) uint64 {
 
 	log.Debugf("Zip Generator: Uint64[%d, %d] -> %d", z.iMin, z.zipfGenMu.iMax, result)
 
-	z.zipfGenMu.mu.Unlock()
+	z.zipfGenMu.mu.RUnlock()
 	return result
 }
 
