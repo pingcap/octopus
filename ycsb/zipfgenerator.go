@@ -23,9 +23,7 @@ package main
 
 import (
 	"math"
-	"math/rand"
 	"sync"
-	"time"
 
 	"github.com/ngaut/log"
 	"github.com/pkg/errors"
@@ -49,8 +47,7 @@ type ZipfGenerator struct {
 
 // ZipfGeneratorMu holds variables which must be globally synced.
 type ZipfGeneratorMu struct {
-	mu       sync.Mutex
-	r        *rand.Rand
+	mu       sync.RWMutex
 	iMax     uint64
 	iMaxHead uint64
 	eta      float64
@@ -70,7 +67,6 @@ func NewZipfGenerator(iMin, iMax uint64, theta float64) (*ZipfGenerator, error) 
 	z := ZipfGenerator{
 		iMin: iMin,
 		zipfGenMu: ZipfGeneratorMu{
-			r:    rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
 			iMax: iMax,
 		},
 		theta: theta,
@@ -119,9 +115,8 @@ func computeZetaFromScratch(n uint64, theta float64) (float64, error) {
 
 // Uint64 draws a new value between iMin and iMax, with probabilities
 // according to the Zipf distribution.
-func (z *ZipfGenerator) Uint64() uint64 {
-	z.zipfGenMu.mu.Lock()
-	u := z.zipfGenMu.r.Float64()
+func (z *ZipfGenerator) Uint64(u float64) uint64 {
+	z.zipfGenMu.mu.RLock()
 	uz := u * z.zipfGenMu.zetaN
 	var result uint64
 	if uz < 1.0 {
@@ -135,7 +130,7 @@ func (z *ZipfGenerator) Uint64() uint64 {
 
 	log.Debugf("Zip Generator: Uint64[%d, %d] -> %d", z.iMin, z.zipfGenMu.iMax, result)
 
-	z.zipfGenMu.mu.Unlock()
+	z.zipfGenMu.mu.RUnlock()
 	return result
 }
 

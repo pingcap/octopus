@@ -195,7 +195,7 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() uint64 {
 	var hashedKey uint64
-	key := yw.zipfR.Uint64()
+	key := yw.zipfR.Uint64(yw.r.Float64())
 	hashedKey = yw.hashKey(key)
 	return hashedKey
 }

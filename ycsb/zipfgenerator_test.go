@@ -20,6 +20,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"sort"
 	"testing"
 )
@@ -36,7 +37,7 @@ var gens = []params{
 
 func TestCreateZipfGenerator(t *testing.T) {
 	for _, gen := range gens {
-		_, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta, false)
+		_, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +101,7 @@ func TestZetaIncrementally(t *testing.T) {
 
 func runZipfGenerators(t *testing.T, withIncrements bool) {
 	gen := gens[0]
-	z, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta, false)
+	z, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 	x := make([]int, ROLLS)
 
 	for i := 0; i < ROLLS; i++ {
-		x[i] = int(z.Uint64())
+		x[i] = int(z.Uint64(rand.Float64()))
 		z.zipfGenMu.mu.Lock()
 		if x[i] < int(z.iMin) || x[i] > int(z.zipfGenMu.iMax) {
 			t.Fatalf("zipf(%d,%d,%f) rolled %d at index %d", z.iMin, z.zipfGenMu.iMax, z.theta, x[i], i)
