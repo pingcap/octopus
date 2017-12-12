@@ -57,6 +57,7 @@ func (c *rawKV) Clone() Database {
 
 func setupRawKV(pdAddr string) (Database, error) {
 	// Open connection to server and create a database.
+	tikv.MaxConnectionCount = 128
 	db, err := tikv.NewRawKVClient(strings.Split(pdAddr, ","))
 	if err != nil {
 		return nil, err

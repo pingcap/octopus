@@ -83,6 +83,7 @@ func (c *txnKV) Clone() Database {
 
 func setupTxnKV(pdAddr string) (Database, error) {
 	// Open connection to server and create a database.
+	tikv.MaxConnectionCount = 128
 	driver := tikv.Driver{}
 	db, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", pdAddr))
 	if err != nil {
