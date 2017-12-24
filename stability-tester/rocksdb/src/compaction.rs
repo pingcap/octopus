@@ -32,23 +32,44 @@ fn do_check_count(db: &DB, expected: u64) {
     }
 }
 
-fn test_rocksdb_compaction_case1() {
-    let path = TempDir::new("_rocksdb_compact").unwrap();
+fn test_rocksdb_compaction_in_memtable() {
+    let path = TempDir::new("_rocksdb_compaction_in_memtable").unwrap();
     let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
 
-    let total = 10;
+    // the memtable size is 128MB, after insertion there should be 4 memtables
+    let total = 15;
+    let val = &[0; 8 << 20];
     for cf in ALL_CFS {
         let cf_handle = db.cf_handle(cf).unwrap();
-        for i in 0..total {
-            db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes()).unwrap();
+        for _ in 0..4 {
+            for i in 0..total {
+                db.put_cf(cf_handle, make_key(i).as_bytes(), val).unwrap();
+            }
+        }
+    }
+    db.compact_range(None, None);
+    do_check_count(&db, total);
+}
+
+fn test_rocksdb_compaction_cross_level() {
+    let path = TempDir::new("_rocksdb_compaction_cross_level").unwrap();
+    let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
+
+    let total = 15;
+    for cf in ALL_CFS {
+        let cf_handle = db.cf_handle(cf).unwrap();
+        for _ in 0..10 {
+            for i in 0..total {
+                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes()).unwrap();
+            }
             db.flush(true).unwrap();
         }
     }
     db.compact_range(None, None);
     do_check_count(&db, total);
-    do_check_exist(&db, 0, total, 0);
 }
 
 pub fn test_rocksdb_compaction() {
-    test_rocksdb_compaction_case1();
+    test_rocksdb_compaction_in_memtable();
+    test_rocksdb_compaction_cross_level();
 }

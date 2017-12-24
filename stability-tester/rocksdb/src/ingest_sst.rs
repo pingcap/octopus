@@ -46,11 +46,11 @@ fn gen_sst_from_db(opt: ColumnFamilyOptions, cf: &CFHandle, path: &str, db: &DB)
     writer.finish().unwrap();
 }
 
-fn test_rocksdb_ingest_sst_case1() {
-    let path = TempDir::new("_rocksdb_ingest_sst_1").unwrap();
+fn test_rocksdb_ingest_sst_basic() {
+    let path = TempDir::new("_rocksdb_ingest_sst_basic").unwrap();
     let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
 
-    let sst_dir = TempDir::new("_rocksdb_sst_file_1").unwrap();
+    let sst_dir = TempDir::new("_rocksdb_sst_file_basic").unwrap();
     let start = 11111;
     let end = 99999;
     for cf in ALL_CFS {
@@ -72,13 +72,13 @@ fn test_rocksdb_ingest_sst_case1() {
     do_check_exist(&db, start, end, start);
 }
 
-fn test_rocksdb_ingest_sst_case2() {
-    let path = TempDir::new("_rocksdb_ingest_sst_2").unwrap();
+fn test_rocksdb_ingest_sst_from_db() {
+    let path = TempDir::new("_rocksdb_ingest_sst_from_db").unwrap();
     let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
 
     let start = 11111;
     let end = 99999;
-    let sst_dir = TempDir::new("_rocksdb_sst_file_2").unwrap();
+    let sst_dir = TempDir::new("_rocksdb_sst_file_from_db").unwrap();
     for cf in ALL_CFS {
         let cf_handle = db.cf_handle(cf).unwrap();
         let file_path = sst_dir.path().join(cf);
@@ -96,9 +96,9 @@ fn test_rocksdb_ingest_sst_case2() {
         ).unwrap();
     }
 
-    let dst_path = TempDir::new("_rocksdb_ingest_sst_dst_2").unwrap();
+    let dst_path = TempDir::new("_rocksdb_ingest_sst_dst_from_db").unwrap();
     let dst_db = new_rocksdb(dst_path.path().to_str().unwrap()).unwrap();
-    let dst_sst_dir = TempDir::new("_rocksdb_sst_file_dst_2").unwrap();
+    let dst_sst_dir = TempDir::new("_rocksdb_sst_file_dst_from_db").unwrap();
     for cf in ALL_CFS {
         let cf_handle = db.cf_handle(cf).unwrap();
         let file_path = dst_sst_dir.path().join(cf);
@@ -121,6 +121,6 @@ fn test_rocksdb_ingest_sst_case2() {
 }
 
 pub fn test_rocksdb_ingest_sst() {
-    test_rocksdb_ingest_sst_case1();
-    test_rocksdb_ingest_sst_case2();
+    test_rocksdb_ingest_sst_basic();
+    test_rocksdb_ingest_sst_from_db();
 }
