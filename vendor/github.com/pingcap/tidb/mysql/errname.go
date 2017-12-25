@@ -70,7 +70,7 @@ var MySQLErrName = map[uint16]string{
 	ErrNonUniq:                                  "Column '%-.192s' in %-.192s is ambiguous",
 	ErrServerShutdown:                           "Server shutdown in progress",
 	ErrBadField:                                 "Unknown column '%-.192s' in '%-.192s'",
-	ErrWrongFieldWithGroup:                      "'%-.192s' isn't in GROUP BY",
+	ErrFieldNotInGroupBy:                        "Expression #%d of %s is not in GROUP BY clause and contains nonaggregated column '%s' which is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by",
 	ErrWrongGroupField:                          "Can't group on '%-.192s'",
 	ErrWrongSumSelect:                           "Statement has sum functions and columns in same statement",
 	ErrWrongValueCount:                          "Column count doesn't match value count",
@@ -191,7 +191,7 @@ var MySQLErrName = map[uint16]string{
 	ErrRequiresPrimaryKey:                       "This table type requires a primary key",
 	ErrNoRaidCompiled:                           "This version of MySQL is not compiled with RAID support",
 	ErrUpdateWithoutKeyInSafeMode:               "You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column",
-	ErrKeyDoesNotExits:                          "Key '%-.192s' doesn't exist in table '%-.192s'",
+	ErrKeyDoesNotExist:                          "Key '%-.192s' doesn't exist in table '%-.192s'",
 	ErrCheckNoSuchTable:                         "Can't open table",
 	ErrCheckNotImplemented:                      "The storage engine for the table doesn't support %s",
 	ErrCantDoThisDuringAnTransaction:            "You are not allowed to execute this command in a transaction",
@@ -703,7 +703,7 @@ var MySQLErrName = map[uint16]string{
 	ErrInsideTransactionPreventsSwitchBinlogDirect:           "Cannot modify @@session.binlogDirectNonTransactionalUpdates inside a transaction",
 	ErrStoredFunctionPreventsSwitchBinlogDirect:              "Cannot change the binlog direct flag inside a stored function or trigger",
 	ErrSpatialMustHaveGeomCol:                                "A SPATIAL index may only contain a geometrical type column",
-	ErrTooLongIndexComment:                                   "Comment for index '%-.64s' is too long (max = %lu)",
+	ErrTooLongIndexComment:                                   "Comment for index '%-.64s' is too long (max = %d)",
 	ErrLockAborted:                                           "Wait on a lock was aborted due to a pending exclusive lock",
 	ErrDataOutOfRange:                                        "%s value is out of range in '%s'",
 	ErrWrongSpvarTypeInLimit:                                 "A variable of a non-integer based type in LIMIT clause",
@@ -887,4 +887,14 @@ var MySQLErrName = map[uint16]string{
 	ErrInvalidJSONPath:                                       "Invalid JSON path expression %s.",
 	ErrInvalidJSONData:                                       "Invalid data type for JSON data",
 	ErrJSONUsedAsKey:                                         "JSON column '%-.192s' cannot be used in key specification.",
+
+	// TiKV/PD errors.
+	ErrPDServerTimeout:    "PD server timeout",
+	ErrTiKVServerTimeout:  "TiKV server timeout",
+	ErrTiKVServerBusy:     "TiKV server is busy",
+	ErrResolveLockTimeout: "Resolve lock timeout",
+	ErrRegionUnavailable:  "Region is unavailable",
+	ErrGCTooEarly:         "GC Interval shorter than transaction duration",
+
+	ErrTxnTooLarge: "Transaction is too large",
 }

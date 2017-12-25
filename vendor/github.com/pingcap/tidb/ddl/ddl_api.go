@@ -18,8 +18,8 @@
 package ddl
 
 import (
+	"bytes"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,11 +31,10 @@ import (
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/charset"
-	"github.com/pingcap/tidb/util/stringutil"
-	"github.com/pingcap/tidb/util/types"
 )
 
 func (d *ddl) CreateSchema(ctx context.Context, schema model.CIStr, charsetInfo *ast.CharsetOpt) (err error) {
@@ -95,14 +94,21 @@ func (d *ddl) DropSchema(ctx context.Context, schema model.CIStr) (err error) {
 
 func checkTooLongSchema(schema model.CIStr) error {
 	if len(schema.L) > mysql.MaxDatabaseNameLength {
-		return ErrTooLongIdent.Gen("too long schema %s", schema)
+		return ErrTooLongIdent.GenByArgs(schema)
 	}
 	return nil
 }
 
 func checkTooLongTable(table model.CIStr) error {
 	if len(table.L) > mysql.MaxTableNameLength {
-		return ErrTooLongIdent.Gen("too long table %s", table)
+		return ErrTooLongIdent.GenByArgs(table)
+	}
+	return nil
+}
+
+func checkTooLongIndex(index model.CIStr) error {
+	if len(index.L) > mysql.MaxIndexIdentifierLen {
+		return ErrTooLongIdent.GenByArgs(index)
 	}
 	return nil
 }
@@ -202,12 +208,18 @@ func setCharsetCollationFlenDecimal(tp *types.FieldType) error {
 			}
 		}
 	}
-	// If flen is not assigned, assigned it by type.
+	// Use default value for flen or decimal when they are unspecified.
+	defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(tp.Tp)
 	if tp.Flen == types.UnspecifiedLength {
-		tp.Flen = mysql.GetDefaultFieldLength(tp.Tp)
+		tp.Flen = defaultFlen
+		if mysql.HasUnsignedFlag(tp.Flag) && tp.Tp != mysql.TypeLonglong && mysql.IsIntegerType(tp.Tp) {
+			// Issue #4684: the flen of unsigned integer(except bigint) is 1 digit shorter than signed integer
+			// because it has no prefix "+" or "-" character.
+			tp.Flen--
+		}
 	}
 	if tp.Decimal == types.UnspecifiedLength {
-		tp.Decimal = mysql.GetDefaultDecimal(tp.Tp)
+		tp.Decimal = defaultDecimal
 	}
 	return nil
 }
@@ -258,10 +270,6 @@ func columnDefToCol(ctx context.Context, offset int, colDef *ast.ColumnDef) (*ta
 	if colDef.Options != nil {
 		len := types.UnspecifiedLength
 
-		if types.IsTypePrefixable(colDef.Tp.Tp) {
-			len = colDef.Tp.Flen
-		}
-
 		keys := []*ast.IndexColName{
 			{
 				Column: colDef.Name,
@@ -274,7 +282,7 @@ func columnDefToCol(ctx context.Context, offset int, colDef *ast.ColumnDef) (*ta
 			case ast.ColumnOptionNotNull:
 				col.Flag |= mysql.NotNullFlag
 			case ast.ColumnOptionNull:
-				col.Flag &= ^uint(mysql.NotNullFlag)
+				col.Flag &= ^mysql.NotNullFlag
 				removeOnUpdateNowFlag(col)
 			case ast.ColumnOptionAutoIncrement:
 				col.Flag |= mysql.AutoIncrementFlag
@@ -299,7 +307,7 @@ func columnDefToCol(ctx context.Context, offset int, colDef *ast.ColumnDef) (*ta
 				removeOnUpdateNowFlag(col)
 			case ast.ColumnOptionOnUpdate:
 				// TODO: Support other time functions.
-				if !expression.IsCurrentTimeExpr(v.Expr) {
+				if !expression.IsCurrentTimestampExpr(v.Expr) {
 					return nil, nil, ErrInvalidOnUpdate.Gen("invalid ON UPDATE for - %s", col.Name)
 				}
 				col.Flag |= mysql.OnUpdateNowFlag
@@ -310,7 +318,9 @@ func columnDefToCol(ctx context.Context, offset int, colDef *ast.ColumnDef) (*ta
 					return nil, nil, errors.Trace(err)
 				}
 			case ast.ColumnOptionGenerated:
-				col.GeneratedExprString = stringutil.RemoveBlanks(v.Expr.Text())
+				var buf = bytes.NewBuffer([]byte{})
+				v.Expr.Format(buf)
+				col.GeneratedExprString = buf.String()
 				col.GeneratedStored = v.Stored
 				_, dependColNames := findDependedColumnNames(colDef)
 				col.Dependences = dependColNames
@@ -328,6 +338,16 @@ func columnDefToCol(ctx context.Context, offset int, colDef *ast.ColumnDef) (*ta
 
 	if col.Charset == charset.CharsetBin {
 		col.Flag |= mysql.BinaryFlag
+	}
+	if col.Tp == mysql.TypeBit {
+		// For BIT field, it's charset is binary but does not have binary flag.
+		col.Flag &= ^mysql.BinaryFlag
+		col.Flag |= mysql.UnsignedFlag
+	}
+	if col.Tp == mysql.TypeYear {
+		// For Year field, it's charset is binary but does not have binary flag.
+		col.Flag &= ^mysql.BinaryFlag
+		col.Flag |= mysql.UnsignedFlag | mysql.ZerofillFlag
 	}
 	err := checkDefaultValue(ctx, col, hasDefaultValue)
 	if err != nil {
@@ -365,8 +385,24 @@ func getDefaultValue(ctx context.Context, c *ast.ColumnOption, tp byte, fsp int)
 		return nil, nil
 	}
 
-	if v.Kind() == types.KindMysqlHex {
-		return strconv.FormatInt(v.GetMysqlHex().Value, 10), nil
+	if v.Kind() == types.KindBinaryLiteral || v.Kind() == types.KindMysqlBit {
+		if tp == mysql.TypeBit ||
+			tp == mysql.TypeString || tp == mysql.TypeVarchar || tp == mysql.TypeVarString ||
+			tp == mysql.TypeBlob || tp == mysql.TypeLongBlob || tp == mysql.TypeMediumBlob || tp == mysql.TypeTinyBlob ||
+			tp == mysql.TypeJSON {
+			// For BinaryLiteral / string fields, when getting default value we cast the value into BinaryLiteral{}, thus we return
+			// its raw string content here.
+			return v.GetBinaryLiteral().ToString(), nil
+		}
+		// For other kind of fields (e.g. INT), we supply its integer value so that it acts as integers.
+		return v.GetBinaryLiteral().ToInt()
+	}
+
+	if tp == mysql.TypeBit {
+		if v.Kind() == types.KindInt64 || v.Kind() == types.KindUint64 {
+			// For BIT fields, convert int into BinaryLiteral.
+			return types.NewBinaryLiteralFromUint(v.GetUint64(), -1).ToString(), nil
+		}
 	}
 
 	return v.ToString()
@@ -376,7 +412,7 @@ func removeOnUpdateNowFlag(c *table.Column) {
 	// For timestamp Col, if it is set null or default value,
 	// OnUpdateNowFlag should be removed.
 	if mysql.HasTimestampFlag(c.Flag) {
-		c.Flag &= ^uint(mysql.OnUpdateNowFlag)
+		c.Flag &= ^mysql.OnUpdateNowFlag
 	}
 }
 
@@ -388,9 +424,9 @@ func setTimestampDefaultValue(c *table.Column, hasDefaultValue bool, setOnUpdate
 	// For timestamp Col, if is not set default value or not set null, use current timestamp.
 	if mysql.HasTimestampFlag(c.Flag) && mysql.HasNotNullFlag(c.Flag) {
 		if setOnUpdateNow {
-			c.DefaultValue = expression.ZeroTimestamp
+			c.DefaultValue = types.ZeroDatetimeStr
 		} else {
-			c.DefaultValue = expression.CurrentTimestamp
+			c.DefaultValue = strings.ToUpper(ast.CurrentTimestamp)
 		}
 	}
 }
@@ -417,15 +453,15 @@ func checkDefaultValue(ctx context.Context, c *table.Column, hasDefaultValue boo
 
 	if c.DefaultValue != nil {
 		_, err := table.GetColDefaultValue(ctx, c.ToInfo())
-		if terror.ErrorEqual(err, types.ErrTruncated) {
-			return errInvalidDefault.GenByArgs(c.Name)
+		if types.ErrTruncated.Equal(err) {
+			return types.ErrInvalidDefault.GenByArgs(c.Name)
 		}
 		return errors.Trace(err)
 	}
 
 	// Set not null but default null is invalid.
 	if mysql.HasNotNullFlag(c.Flag) {
-		return errInvalidDefault.GenByArgs(c.Name)
+		return types.ErrInvalidDefault.GenByArgs(c.Name)
 	}
 
 	return nil
@@ -472,8 +508,15 @@ func checkGeneratedColumn(colDefs []*ast.ColumnDef) error {
 func checkTooLongColumn(colDefs []*ast.ColumnDef) error {
 	for _, colDef := range colDefs {
 		if len(colDef.Name.Name.O) > mysql.MaxColumnNameLength {
-			return ErrTooLongIdent.Gen("too long column %s", colDef.Name.Name)
+			return ErrTooLongIdent.GenByArgs(colDef.Name.Name)
 		}
+	}
+	return nil
+}
+
+func checkTooManyColumns(colDefs []*ast.ColumnDef) error {
+	if len(colDefs) > TableColumnCountLimit {
+		return errTooManyFields
 	}
 	return nil
 }
@@ -547,7 +590,7 @@ func checkConstraintNames(constraints []*ast.Constraint) error {
 	return nil
 }
 
-func (d *ddl) buildTableInfo(tableName model.CIStr, cols []*table.Column, constraints []*ast.Constraint) (tbInfo *model.TableInfo, err error) {
+func (d *ddl) buildTableInfo(tableName model.CIStr, cols []*table.Column, constraints []*ast.Constraint, ctx context.Context) (tbInfo *model.TableInfo, err error) {
 	tbInfo = &model.TableInfo{
 		Name: tableName,
 	}
@@ -595,7 +638,7 @@ func (d *ddl) buildTableInfo(tableName model.CIStr, cols []*table.Column, constr
 					return nil, errKeyColumnDoesNotExits.Gen("key column %s doesn't exist in table", key.Column.Name)
 				}
 				// Virtual columns cannot be used in primary key.
-				if len(col.GeneratedExprString) != 0 && !col.GeneratedStored {
+				if col.IsGenerated() && !col.GeneratedStored {
 					return nil, errUnsupportedOnGeneratedColumn.GenByArgs("Defining a virtual generated column as primary key")
 				}
 			}
@@ -630,7 +673,13 @@ func (d *ddl) buildTableInfo(tableName model.CIStr, cols []*table.Column, constr
 		}
 		// set index type.
 		if constr.Option != nil {
-			idxInfo.Comment = constr.Option.Comment
+			idxInfo.Comment, err = validateCommentLength(ctx.GetSessionVars(),
+				constr.Option.Comment,
+				maxCommentLength,
+				errTooLongIndexComment.GenByArgs(idxInfo.Name.String(), maxCommentLength))
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 			if constr.Option.Tp == model.IndexTypeInvalid {
 				// Use btree as default index type.
 				idxInfo.Tp = model.IndexTypeBtree
@@ -708,6 +757,9 @@ func (d *ddl) CreateTable(ctx context.Context, ident ast.Ident, colDefs []*ast.C
 	if err = checkTooLongColumn(colDefs); err != nil {
 		return errors.Trace(err)
 	}
+	if err = checkTooManyColumns(colDefs); err != nil {
+		return errors.Trace(err)
+	}
 
 	cols, newConstraints, err := buildColumnsAndConstraints(ctx, colDefs, constraints)
 	if err != nil {
@@ -719,7 +771,7 @@ func (d *ddl) CreateTable(ctx context.Context, ident ast.Ident, colDefs []*ast.C
 		return errors.Trace(err)
 	}
 
-	tbInfo, err := d.buildTableInfo(ident.Name, cols, newConstraints)
+	tbInfo, err := d.buildTableInfo(ident.Name, cols, newConstraints, ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -738,7 +790,7 @@ func (d *ddl) CreateTable(ctx context.Context, ident ast.Ident, colDefs []*ast.C
 		if tbInfo.AutoIncID > 1 {
 			// Default tableAutoIncID base is 0.
 			// If the first id is expected to greater than 1, we need to do rebase.
-			d.handleAutoIncID(tbInfo, schema.ID)
+			err = d.handleAutoIncID(tbInfo, schema.ID)
 		}
 	}
 	err = d.callHookOnChanged(err)
@@ -748,11 +800,7 @@ func (d *ddl) CreateTable(ctx context.Context, ident ast.Ident, colDefs []*ast.C
 // handleAutoIncID handles auto_increment option in DDL. It creates a ID counter for the table and initiates the counter to a proper value.
 // For example if the option sets auto_increment to 10. The counter will be set to 9. So the next allocated ID will be 10.
 func (d *ddl) handleAutoIncID(tbInfo *model.TableInfo, schemaID int64) error {
-	if tbInfo.OldSchemaID != 0 {
-		schemaID = tbInfo.OldSchemaID
-	}
-	alloc := autoid.NewAllocator(d.store, schemaID)
-
+	alloc := autoid.NewAllocator(d.store, tbInfo.GetDBID(schemaID))
 	tbInfo.State = model.StatePublic
 	tb, err := table.TableFromMeta(alloc, tbInfo)
 	if err != nil {
@@ -761,7 +809,7 @@ func (d *ddl) handleAutoIncID(tbInfo *model.TableInfo, schemaID int64) error {
 	// The operation of the minus 1 to make sure that the current value doesn't be used,
 	// the next Alloc operation will get this value.
 	// Its behavior is consistent with MySQL.
-	if err = tb.RebaseAutoID(tbInfo.AutoIncID-1, false); err != nil {
+	if err = tb.RebaseAutoID(nil, tbInfo.AutoIncID-1, false); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -801,7 +849,10 @@ func (d *ddl) AlterTable(ctx context.Context, ident ast.Ident, specs []*ast.Alte
 
 	for _, spec := range validSpecs {
 		switch spec.Tp {
-		case ast.AlterTableAddColumn:
+		case ast.AlterTableAddColumns:
+			if len(spec.NewColumns) != 1 {
+				return errRunMultiSchemaChanges
+			}
 			err = d.AddColumn(ctx, ident, spec)
 		case ast.AlterTableDropColumn:
 			err = d.DropColumn(ctx, ident, spec.OldColumnName.Name)
@@ -859,8 +910,9 @@ func checkColumnConstraint(constraints []*ast.ColumnOption) error {
 
 // AddColumn will add a new column to the table.
 func (d *ddl) AddColumn(ctx context.Context, ti ast.Ident, spec *ast.AlterTableSpec) error {
+	specNewColumn := spec.NewColumns[0]
 	// Check whether the added column constraints are supported.
-	err := checkColumnConstraint(spec.NewColumn.Options)
+	err := checkColumnConstraint(specNewColumn.Options)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -876,7 +928,7 @@ func (d *ddl) AddColumn(ctx context.Context, ti ast.Ident, spec *ast.AlterTableS
 	}
 
 	// Check whether added column has existed.
-	colName := spec.NewColumn.Name.Name.O
+	colName := specNewColumn.Name.Name.O
 	col := table.FindCol(t.Cols(), colName)
 	if col != nil {
 		return infoschema.ErrColumnExists.GenByArgs(colName)
@@ -886,13 +938,13 @@ func (d *ddl) AddColumn(ctx context.Context, ti ast.Ident, spec *ast.AlterTableS
 	// NOTE: Because now we can only append columns to table,
 	// we dont't need check whether the column refers other
 	// generated columns occurring later in table.
-	for _, option := range spec.NewColumn.Options {
+	for _, option := range specNewColumn.Options {
 		if option.Tp == ast.ColumnOptionGenerated {
 			referableColNames := make(map[string]struct{}, len(t.Cols()))
 			for _, col := range t.Cols() {
 				referableColNames[col.Name.L] = struct{}{}
 			}
-			_, dependColNames := findDependedColumnNames(spec.NewColumn)
+			_, dependColNames := findDependedColumnNames(specNewColumn)
 			if err = columnNamesCover(referableColNames, dependColNames); err != nil {
 				return errors.Trace(err)
 			}
@@ -900,13 +952,13 @@ func (d *ddl) AddColumn(ctx context.Context, ti ast.Ident, spec *ast.AlterTableS
 	}
 
 	if len(colName) > mysql.MaxColumnNameLength {
-		return ErrTooLongIdent.Gen("too long column %s", colName)
+		return ErrTooLongIdent.GenByArgs(colName)
 	}
 
 	// Ingore table constraints now, maybe return error later.
 	// We use length(t.Cols()) as the default offset firstly, we will change the
 	// column's offset later.
-	col, _, err = buildColumnAndConstraint(ctx, len(t.Cols()), spec.NewColumn)
+	col, _, err = buildColumnAndConstraint(ctx, len(t.Cols()), specNewColumn)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -919,7 +971,7 @@ func (d *ddl) AddColumn(ctx context.Context, ti ast.Ident, spec *ast.AlterTableS
 		}
 	}
 
-	if col.OriginDefaultValue == expression.CurrentTimestamp &&
+	if col.OriginDefaultValue == strings.ToUpper(ast.CurrentTimestamp) &&
 		(col.Tp == mysql.TypeTimestamp || col.Tp == mysql.TypeDatetime) {
 		col.OriginDefaultValue = time.Now().Format(types.TimeFormat)
 	}
@@ -998,8 +1050,8 @@ func modifiable(origin *types.FieldType, to *types.FieldType) error {
 		msg := fmt.Sprintf("collate %s not match origin %s", to.Collate, origin.Collate)
 		return errUnsupportedModifyColumn.GenByArgs(msg)
 	}
-	toUnsigned := mysql.HasUnsignedFlag(uint(to.Flag))
-	originUnsigned := mysql.HasUnsignedFlag(uint(origin.Flag))
+	toUnsigned := mysql.HasUnsignedFlag(to.Flag)
+	originUnsigned := mysql.HasUnsignedFlag(origin.Flag)
 	if originUnsigned != toUnsigned {
 		msg := fmt.Sprintf("unsigned %v not match origin %v", toUnsigned, originUnsigned)
 		return errUnsupportedModifyColumn.GenByArgs(msg)
@@ -1072,20 +1124,22 @@ func setDefaultAndComment(ctx context.Context, col *table.Column, options []*ast
 		case ast.ColumnOptionNotNull:
 			col.Flag |= mysql.NotNullFlag
 		case ast.ColumnOptionNull:
-			col.Flag &= ^uint(mysql.NotNullFlag)
+			col.Flag &= ^mysql.NotNullFlag
 		case ast.ColumnOptionAutoIncrement:
 			col.Flag |= mysql.AutoIncrementFlag
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
 			return errUnsupportedModifyColumn.Gen("unsupported modify column constraint - %v", opt.Tp)
 		case ast.ColumnOptionOnUpdate:
 			// TODO: Support other time functions.
-			if !expression.IsCurrentTimeExpr(opt.Expr) {
+			if !expression.IsCurrentTimestampExpr(opt.Expr) {
 				return ErrInvalidOnUpdate.Gen("invalid ON UPDATE for - %s", col.Name)
 			}
 			col.Flag |= mysql.OnUpdateNowFlag
 			setOnUpdateNow = true
 		case ast.ColumnOptionGenerated:
-			col.GeneratedExprString = stringutil.RemoveBlanks(opt.Expr.Text())
+			var buf = bytes.NewBuffer([]byte{})
+			opt.Expr.Format(buf)
+			col.GeneratedExprString = buf.String()
 			col.GeneratedStored = opt.Stored
 			col.Dependences = make(map[string]struct{})
 			for _, colName := range findColumnNamesInExpr(opt.Expr) {
@@ -1112,6 +1166,7 @@ func setDefaultAndComment(ctx context.Context, col *table.Column, options []*ast
 
 func (d *ddl) getModifiableColumnJob(ctx context.Context, ident ast.Ident, originalColName model.CIStr,
 	spec *ast.AlterTableSpec) (*model.Job, error) {
+	specNewColumn := spec.NewColumns[0]
 	is := d.infoHandle.Get()
 	schema, ok := is.SchemaByName(ident.Schema)
 	if !ok {
@@ -1129,7 +1184,7 @@ func (d *ddl) getModifiableColumnJob(ctx context.Context, ident ast.Ident, origi
 
 	// Constraints in the new column means adding new constraints. Errors should thrown,
 	// which will be done by `setDefaultAndComment` later.
-	if spec.NewColumn.Tp == nil {
+	if specNewColumn.Tp == nil {
 		// Make sure the column definition is simple field type.
 		return nil, errors.Trace(errUnsupportedModifyColumn)
 	}
@@ -1139,8 +1194,8 @@ func (d *ddl) getModifiableColumnJob(ctx context.Context, ident ast.Ident, origi
 		Offset:             col.Offset,
 		State:              col.State,
 		OriginDefaultValue: col.OriginDefaultValue,
-		FieldType:          *spec.NewColumn.Tp,
-		Name:               spec.NewColumn.Name.Name,
+		FieldType:          *specNewColumn.Tp,
+		Name:               specNewColumn.Name.Name,
 	})
 
 	err = setCharsetCollationFlenDecimal(&newCol.FieldType)
@@ -1151,7 +1206,7 @@ func (d *ddl) getModifiableColumnJob(ctx context.Context, ident ast.Ident, origi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err = setDefaultAndComment(ctx, newCol, spec.NewColumn.Options); err != nil {
+	if err = setDefaultAndComment(ctx, newCol, specNewColumn.Options); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -1191,14 +1246,15 @@ func (d *ddl) getModifiableColumnJob(ctx context.Context, ident ast.Ident, origi
 // currently we only support limited kind of changes
 // that do not need to change or check data on the table.
 func (d *ddl) ChangeColumn(ctx context.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	if len(spec.NewColumn.Name.Schema.O) != 0 && ident.Schema.L != spec.NewColumn.Name.Schema.L {
-		return ErrWrongDBName.GenByArgs(spec.NewColumn.Name.Schema.O)
+	specNewColumn := spec.NewColumns[0]
+	if len(specNewColumn.Name.Schema.O) != 0 && ident.Schema.L != specNewColumn.Name.Schema.L {
+		return ErrWrongDBName.GenByArgs(specNewColumn.Name.Schema.O)
 	}
 	if len(spec.OldColumnName.Schema.O) != 0 && ident.Schema.L != spec.OldColumnName.Schema.L {
 		return ErrWrongDBName.GenByArgs(spec.OldColumnName.Schema.O)
 	}
-	if len(spec.NewColumn.Name.Table.O) != 0 && ident.Name.L != spec.NewColumn.Name.Table.L {
-		return ErrWrongTableName.GenByArgs(spec.NewColumn.Name.Table.O)
+	if len(specNewColumn.Name.Table.O) != 0 && ident.Name.L != specNewColumn.Name.Table.L {
+		return ErrWrongTableName.GenByArgs(specNewColumn.Name.Table.O)
 	}
 	if len(spec.OldColumnName.Table.O) != 0 && ident.Name.L != spec.OldColumnName.Table.L {
 		return ErrWrongTableName.GenByArgs(spec.OldColumnName.Table.O)
@@ -1217,14 +1273,15 @@ func (d *ddl) ChangeColumn(ctx context.Context, ident ast.Ident, spec *ast.Alter
 // ModifyColumn does modification on an existing column, currently we only support limited kind of changes
 // that do not need to change or check data on the table.
 func (d *ddl) ModifyColumn(ctx context.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
-	if len(spec.NewColumn.Name.Schema.O) != 0 && ident.Schema.L != spec.NewColumn.Name.Schema.L {
-		return ErrWrongDBName.GenByArgs(spec.NewColumn.Name.Schema.O)
+	specNewColumn := spec.NewColumns[0]
+	if len(specNewColumn.Name.Schema.O) != 0 && ident.Schema.L != specNewColumn.Name.Schema.L {
+		return ErrWrongDBName.GenByArgs(specNewColumn.Name.Schema.O)
 	}
-	if len(spec.NewColumn.Name.Table.O) != 0 && ident.Name.L != spec.NewColumn.Name.Table.L {
-		return ErrWrongTableName.GenByArgs(spec.NewColumn.Name.Table.O)
+	if len(specNewColumn.Name.Table.O) != 0 && ident.Name.L != specNewColumn.Name.Table.L {
+		return ErrWrongTableName.GenByArgs(specNewColumn.Name.Table.O)
 	}
 
-	originalColName := spec.NewColumn.Name.Name
+	originalColName := specNewColumn.Name.Name
 	job, err := d.getModifiableColumnJob(ctx, ident, originalColName, spec)
 	if err != nil {
 		return errors.Trace(err)
@@ -1236,6 +1293,7 @@ func (d *ddl) ModifyColumn(ctx context.Context, ident ast.Ident, spec *ast.Alter
 }
 
 func (d *ddl) AlterColumn(ctx context.Context, ident ast.Ident, spec *ast.AlterTableSpec) error {
+	specNewColumn := spec.NewColumns[0]
 	is := d.infoHandle.Get()
 	schema, ok := is.SchemaByName(ident.Schema)
 	if !ok {
@@ -1246,7 +1304,7 @@ func (d *ddl) AlterColumn(ctx context.Context, ident ast.Ident, spec *ast.AlterT
 		return infoschema.ErrTableNotExists.GenByArgs(ident.Schema, ident.Name)
 	}
 
-	colName := spec.NewColumn.Name.Name
+	colName := specNewColumn.Name.Name
 	// Check whether alter column has existed.
 	col := table.FindCol(t.Cols(), colName.L)
 	if col == nil {
@@ -1254,12 +1312,12 @@ func (d *ddl) AlterColumn(ctx context.Context, ident ast.Ident, spec *ast.AlterT
 	}
 
 	// Clean the NoDefaultValueFlag value.
-	col.Flag &= ^uint(mysql.NoDefaultValueFlag)
-	if len(spec.NewColumn.Options) == 0 {
+	col.Flag &= ^mysql.NoDefaultValueFlag
+	if len(specNewColumn.Options) == 0 {
 		col.DefaultValue = nil
 		setNoDefaultValueFlag(col, false)
 	} else {
-		err = setDefaultValue(ctx, col, spec.NewColumn.Options[0])
+		err = setDefaultValue(ctx, col, specNewColumn.Options[0])
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -1393,6 +1451,21 @@ func (d *ddl) CreateIndex(ctx context.Context, ti ast.Ident, unique bool, indexN
 
 	if indexInfo := findIndexByName(indexName.L, t.Meta().Indices); indexInfo != nil {
 		return errDupKeyName.Gen("index already exist %s", indexName)
+	}
+
+	if err = checkTooLongIndex(indexName); err != nil {
+		return errors.Trace(err)
+	}
+
+	if indexOption != nil {
+		// May be truncate comment here, when index comment too long and sql_mode is't strict.
+		indexOption.Comment, err = validateCommentLength(ctx.GetSessionVars(),
+			indexOption.Comment,
+			maxCommentLength,
+			errTooLongIndexComment.GenByArgs(indexName.String(), maxCommentLength))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	job := &model.Job{
@@ -1545,4 +1618,18 @@ func isDroppableColumn(tblInfo *model.TableInfo, colName model.CIStr) error {
 		return errCantDropColWithIndex.Gen("can't drop column %s with index covered now", colName)
 	}
 	return nil
+}
+
+// validateCommentLength checks comment length of table, column, index and partition.
+// If comment length is more than the standard length truncate it
+// and store the comment length upto the standard comment length size.
+func validateCommentLength(vars *variable.SessionVars, comment string, maxLen int, err error) (string, error) {
+	if len(comment) > maxLen {
+		if vars.StrictSQLMode {
+			return "", err
+		}
+		vars.StmtCtx.AppendWarning(err)
+		return comment[:maxLen], nil
+	}
+	return comment, nil
 }

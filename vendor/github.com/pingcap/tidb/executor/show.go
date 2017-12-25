@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,8 +31,11 @@ import (
 	"github.com/pingcap/tidb/sessionctx/varsutil"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/auth"
 	"github.com/pingcap/tidb/util/charset"
-	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tidb/util/format"
+	goctx "golang.org/x/net/context"
 )
 
 // ShowExec represents a show executor.
@@ -44,7 +48,7 @@ type ShowExec struct {
 	Column *ast.ColumnName // Used for `desc table column`.
 	Flag   int             // Some flag parsed from sql, such as FULL.
 	Full   bool
-	User   string // Used for show grants.
+	User   *auth.UserIdentity // Used for show grants.
 
 	// GlobalScope is used by show variables
 	GlobalScope bool
@@ -57,11 +61,23 @@ type ShowExec struct {
 }
 
 // Next implements Execution Next interface.
-func (e *ShowExec) Next() (Row, error) {
+func (e *ShowExec) Next(goCtx goctx.Context) (Row, error) {
 	if e.rows == nil {
 		err := e.fetchAll()
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		for i := 0; e.rows != nil && i < len(e.rows); i++ {
+			for j, row := 0, e.rows[i]; j < len(row); j++ {
+				if row[j].Kind() != types.KindString {
+					continue
+				}
+				val := row[j].GetString()
+				retType := e.Schema().Columns[j].RetType
+				if valLen := len(val); retType.Flen < valLen {
+					retType.Flen = valLen
+				}
+			}
 		}
 	}
 	if e.cursor >= len(e.rows) {
@@ -116,6 +132,10 @@ func (e *ShowExec) fetchAll() error {
 		return e.fetchShowStatsHistogram()
 	case ast.ShowStatsBuckets:
 		return e.fetchShowStatsBuckets()
+	case ast.ShowPlugins:
+		return e.fetchShowPlugins()
+	case ast.ShowProfiles:
+		// empty result
 	}
 	return nil
 }
@@ -159,6 +179,14 @@ func (e *ShowExec) fetchShowProcessList() error {
 		if len(pi.Info) != 0 {
 			t = uint64(time.Since(pi.Time) / time.Second)
 		}
+
+		var info string
+		if e.Full {
+			info = pi.Info
+		} else {
+			info = fmt.Sprintf("%.100v", pi.Info)
+		}
+
 		row := []types.Datum{
 			types.NewUintDatum(pi.ID),
 			types.NewStringDatum(pi.User),
@@ -167,10 +195,11 @@ func (e *ShowExec) fetchShowProcessList() error {
 			types.NewStringDatum(pi.Command),
 			types.NewUintDatum(t),
 			types.NewStringDatum(fmt.Sprintf("%d", pi.State)),
-			types.NewStringDatum(pi.Info),
+			types.NewStringDatum(info),
 		}
 		e.rows = append(e.rows, row)
 	}
+
 	return nil
 }
 
@@ -263,6 +292,8 @@ func (e *ShowExec) fetchShowColumns() error {
 	return nil
 }
 
+// TODO: index collation can have values A (ascending) or NULL (not sorted).
+// see: https://dev.mysql.com/doc/refman/5.7/en/show-index.html
 func (e *ShowExec) fetchShowIndex() error {
 	tb, err := e.getTable()
 	if err != nil {
@@ -282,7 +313,7 @@ func (e *ShowExec) fetchShowIndex() error {
 			"PRIMARY",        // Key_name
 			1,                // Seq_in_index
 			pkCol.Name.O,     // Column_name
-			"utf8_bin",       // Colation
+			"A",              // Collation
 			0,                // Cardinality
 			nil,              // Sub_part
 			nil,              // Packed
@@ -309,7 +340,7 @@ func (e *ShowExec) fetchShowIndex() error {
 				idx.Meta().Name.O, // Key_name
 				i+1,               // Seq_in_index
 				col.Name.O,        // Column_name
-				"utf8_bin",        // Colation
+				"A",               // Collation
 				0,                 // Cardinality
 				subPart,           // Sub_part
 				nil,               // Packed
@@ -340,22 +371,49 @@ func (e *ShowExec) fetchShowCharset() error {
 	return nil
 }
 
-func (e *ShowExec) fetchShowVariables() error {
-	sessionVars := e.ctx.GetSessionVars()
+func (e *ShowExec) fetchShowVariables() (err error) {
+	var (
+		value         string
+		ok            bool
+		sessionVars   = e.ctx.GetSessionVars()
+		unreachedVars = make([]string, 0, len(variable.SysVars))
+	)
 	for _, v := range variable.SysVars {
-		var err error
-		var value string
 		if !e.GlobalScope {
-			// Try to get Session Scope variable value first.
-			value, err = varsutil.GetSessionSystemVar(sessionVars, v.Name)
+			// For a session scope variable,
+			// 1. try to fetch value from SessionVars.Systems;
+			// 2. if this variable is session-only, fetch value from SysVars
+			//		otherwise, fetch the value from table `mysql.Global_Variables`.
+			value, ok, err = varsutil.GetSessionOnlySysVars(sessionVars, v.Name)
 		} else {
-			value, err = varsutil.GetGlobalSystemVar(sessionVars, v.Name)
+			// If the scope of a system variable is ScopeNone,
+			// it's a read-only variable, so we return the default value of it.
+			// Otherwise, we have to fetch the values from table `mysql.Global_Variables` for global variable names.
+			value, ok, err = varsutil.GetScopeNoneSystemVar(v.Name)
 		}
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if !ok {
+			unreachedVars = append(unreachedVars, v.Name)
+			continue
+		}
 		row := types.MakeDatums(v.Name, value)
 		e.rows = append(e.rows, row)
+	}
+	if len(unreachedVars) != 0 {
+		systemVars, err := sessionVars.GlobalVarsAccessor.GetAllSysVars()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		for _, varName := range unreachedVars {
+			varValue, ok := systemVars[varName]
+			if !ok {
+				varValue = variable.SysVars[varName].Value
+			}
+			row := types.MakeDatums(varName, varValue)
+			e.rows = append(e.rows, row)
+		}
 	}
 	return nil
 }
@@ -394,9 +452,13 @@ func (e *ShowExec) fetchShowCreateTable() error {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("CREATE TABLE `%s` (\n", tb.Meta().Name.O))
 	var pkCol *table.Column
+	var hasAutoIncID bool
 	for i, col := range tb.Cols() {
+		if col.State != model.StatePublic {
+			continue
+		}
 		buf.WriteString(fmt.Sprintf("  `%s` %s", col.Name.O, col.GetTypeDesc()))
-		if len(col.GeneratedExprString) != 0 {
+		if col.IsGenerated() {
 			// It's a generated column.
 			buf.WriteString(fmt.Sprintf(" GENERATED ALWAYS AS (%s)", col.GeneratedExprString))
 			if col.GeneratedStored {
@@ -406,6 +468,7 @@ func (e *ShowExec) fetchShowCreateTable() error {
 			}
 		}
 		if mysql.HasAutoIncrementFlag(col.Flag) {
+			hasAutoIncID = true
 			buf.WriteString(" NOT NULL AUTO_INCREMENT")
 		} else {
 			if mysql.HasNotNullFlag(col.Flag) {
@@ -423,7 +486,13 @@ func (e *ShowExec) fetchShowCreateTable() error {
 				case "CURRENT_TIMESTAMP":
 					buf.WriteString(" DEFAULT CURRENT_TIMESTAMP")
 				default:
-					buf.WriteString(fmt.Sprintf(" DEFAULT '%v'", col.DefaultValue))
+					defaultValStr := fmt.Sprintf("%v", col.DefaultValue)
+					if col.Tp == mysql.TypeBit {
+						defaultValBinaryLiteral := types.BinaryLiteral(defaultValStr)
+						buf.WriteString(fmt.Sprintf(" DEFAULT %s", defaultValBinaryLiteral.ToBitLiteralString(true)))
+					} else {
+						buf.WriteString(fmt.Sprintf(" DEFAULT '%s'", format.OutputFormat(defaultValStr)))
+					}
 				}
 			}
 			if mysql.HasOnUpdateNowFlag(col.Flag) {
@@ -431,7 +500,7 @@ func (e *ShowExec) fetchShowCreateTable() error {
 			}
 		}
 		if len(col.Comment) > 0 {
-			buf.WriteString(fmt.Sprintf(" COMMENT '%s'", col.Comment))
+			buf.WriteString(fmt.Sprintf(" COMMENT '%s'", format.OutputFormat(col.Comment)))
 		}
 		if i != len(tb.Cols())-1 {
 			buf.WriteString(",\n")
@@ -453,6 +522,9 @@ func (e *ShowExec) fetchShowCreateTable() error {
 
 	for i, idx := range tb.Indices() {
 		idxInfo := idx.Meta()
+		if idxInfo.State != model.StatePublic {
+			continue
+		}
 		if idxInfo.Primary {
 			buf.WriteString("  PRIMARY KEY ")
 		} else if idxInfo.Unique {
@@ -463,9 +535,13 @@ func (e *ShowExec) fetchShowCreateTable() error {
 
 		cols := make([]string, 0, len(idxInfo.Columns))
 		for _, c := range idxInfo.Columns {
-			cols = append(cols, c.Name.O)
+			colInfo := fmt.Sprintf("`%s`", c.Name.String())
+			if c.Length != types.UnspecifiedLength {
+				colInfo = fmt.Sprintf("%s(%s)", colInfo, strconv.Itoa(c.Length))
+			}
+			cols = append(cols, colInfo)
 		}
-		buf.WriteString(fmt.Sprintf("(`%s`)", strings.Join(cols, "`,`")))
+		buf.WriteString(fmt.Sprintf("(%s)", strings.Join(cols, ",")))
 		if i != len(tb.Indices())-1 {
 			buf.WriteString(",\n")
 		}
@@ -490,7 +566,7 @@ func (e *ShowExec) fetchShowCreateTable() error {
 		}
 
 		refCols := make([]string, 0, len(fk.RefCols))
-		for _, c := range fk.Cols {
+		for _, c := range fk.RefCols {
 			refCols = append(refCols, c.O)
 		}
 
@@ -520,12 +596,19 @@ func (e *ShowExec) fetchShowCreateTable() error {
 	// to make it work on MySQL server which has default collate utf8_general_ci.
 	buf.WriteString(fmt.Sprintf(" DEFAULT CHARSET=%s COLLATE=%s", charsetName, collate))
 
-	if tb.Meta().AutoIncID > 0 {
-		buf.WriteString(fmt.Sprintf(" AUTO_INCREMENT=%d", tb.Meta().AutoIncID))
+	if hasAutoIncID {
+		autoIncID, err := tb.Allocator(e.ctx).NextGlobalAutoID(tb.Meta().ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// It's campatible with MySQL.
+		if autoIncID > 1 {
+			buf.WriteString(fmt.Sprintf(" AUTO_INCREMENT=%d", autoIncID))
+		}
 	}
 
 	if len(tb.Meta().Comment) > 0 {
-		buf.WriteString(fmt.Sprintf(" COMMENT='%s'", tb.Meta().Comment))
+		buf.WriteString(fmt.Sprintf(" COMMENT='%s'", format.OutputFormat(tb.Meta().Comment)))
 	}
 
 	data := types.MakeDatums(tb.Meta().Name.O, buf.String())
@@ -593,6 +676,10 @@ func (e *ShowExec) fetchShowTriggers() error {
 }
 
 func (e *ShowExec) fetchShowProcedureStatus() error {
+	return nil
+}
+
+func (e *ShowExec) fetchShowPlugins() error {
 	return nil
 }
 

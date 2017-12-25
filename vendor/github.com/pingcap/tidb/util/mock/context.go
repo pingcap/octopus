@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/util/kvcache"
 	goctx "golang.org/x/net/context"
 )
 
@@ -35,6 +36,10 @@ type Context struct {
 	Store       kv.Storage     // mock global variable
 	sessionVars *variable.SessionVars
 	mux         sync.Mutex // fix data race in ddl test.
+	ctx         goctx.Context
+	cancel      goctx.CancelFunc
+	sm          util.SessionManager
+	pcache      *kvcache.SimpleLRUCache
 }
 
 // SetValue implements context.Context SetValue interface.
@@ -90,13 +95,18 @@ func (c *Context) SetGlobalSysVar(ctx context.Context, name string, value string
 	return nil
 }
 
+// PreparedPlanCache implements the context.Context interface.
+func (c *Context) PreparedPlanCache() *kvcache.SimpleLRUCache {
+	return c.pcache
+}
+
 // NewTxn implements the context.Context interface.
 func (c *Context) NewTxn() error {
 	if c.Store == nil {
 		return errors.New("store is not set")
 	}
 	if c.txn != nil && c.txn.Valid() {
-		err := c.txn.Commit()
+		err := c.txn.Commit(c.ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -110,7 +120,7 @@ func (c *Context) NewTxn() error {
 }
 
 // RefreshTxnCtx implements the context.Context interface.
-func (c *Context) RefreshTxnCtx() error {
+func (c *Context) RefreshTxnCtx(goCtx goctx.Context) error {
 	return errors.Trace(c.NewTxn())
 }
 
@@ -151,22 +161,36 @@ func (c *Context) GetStore() kv.Storage {
 
 // GetSessionManager implements the context.Context interface.
 func (c *Context) GetSessionManager() util.SessionManager {
-	return nil
+	return c.sm
+}
+
+// SetSessionManager set the session manager.
+func (c *Context) SetSessionManager(sm util.SessionManager) {
+	c.sm = sm
 }
 
 // Cancel implements the Session interface.
 func (c *Context) Cancel() {
+	c.cancel()
 }
 
 // GoCtx returns standard context.Context that bind with current transaction.
 func (c *Context) GoCtx() goctx.Context {
-	return goctx.Background()
+	return c.ctx
 }
+
+// StoreQueryFeedback stores the query feedback.
+func (c *Context) StoreQueryFeedback(_ interface{}) {}
 
 // NewContext creates a new mocked context.Context.
 func NewContext() *Context {
-	return &Context{
+	goCtx, cancel := goctx.WithCancel(goctx.Background())
+	ctx := &Context{
 		values:      make(map[fmt.Stringer]interface{}),
 		sessionVars: variable.NewSessionVars(),
+		ctx:         goCtx,
+		cancel:      cancel,
 	}
+	ctx.sessionVars.MaxChunkSize = 2
+	return ctx
 }

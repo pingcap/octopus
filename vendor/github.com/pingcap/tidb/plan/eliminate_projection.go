@@ -20,7 +20,7 @@ import (
 
 // canProjectionBeEliminatedLoose checks whether a projection can be eliminated, returns true if
 // every expression is a single column.
-func canProjectionBeEliminatedLoose(p *Projection) bool {
+func canProjectionBeEliminatedLoose(p *LogicalProjection) bool {
 	for _, expr := range p.Exprs {
 		_, ok := expr.(*expression.Column)
 		if !ok {
@@ -32,7 +32,7 @@ func canProjectionBeEliminatedLoose(p *Projection) bool {
 
 // canProjectionBeEliminatedStrict checks whether a projection can be eliminated, returns true if
 // the projection just copy its child's output.
-func canProjectionBeEliminatedStrict(p *Projection) bool {
+func canProjectionBeEliminatedStrict(p *PhysicalProjection) bool {
 	child := p.Children()[0]
 	if p.Schema().Len() != child.Schema().Len() {
 		return false
@@ -59,6 +59,8 @@ func resolveExprAndReplace(origin expression.Expression, replace map[string]*exp
 	switch expr := origin.(type) {
 	case *expression.Column:
 		resolveColumnAndReplace(expr, replace)
+	case *expression.CorrelatedColumn:
+		resolveColumnAndReplace(&expr.Column, replace)
 	case *expression.ScalarFunction:
 		for _, arg := range expr.GetArgs() {
 			resolveExprAndReplace(arg, replace)
@@ -67,18 +69,15 @@ func resolveExprAndReplace(origin expression.Expression, replace map[string]*exp
 }
 
 func doPhysicalProjectionElimination(p PhysicalPlan) PhysicalPlan {
-	children := make([]Plan, 0, len(p.Children()))
-	for _, child := range p.Children() {
-		children = append(children, doPhysicalProjectionElimination(child.(PhysicalPlan)))
+	for i, child := range p.Children() {
+		p.Children()[i] = doPhysicalProjectionElimination(child.(PhysicalPlan))
 	}
-	p.SetChildren(children...)
 
-	proj, isProj := p.(*Projection)
+	proj, isProj := p.(*PhysicalProjection)
 	if !isProj || !canProjectionBeEliminatedStrict(proj) {
 		return p
 	}
 	child := p.Children()[0]
-	RemovePlan(p)
 	return child.(PhysicalPlan)
 }
 
@@ -93,6 +92,7 @@ func eliminatePhysicalProjection(p PhysicalPlan) PhysicalPlan {
 			newCols[i].DBName = oldCol.DBName
 			newCols[i].TblName = oldCol.TblName
 			newCols[i].ColName = oldCol.ColName
+			newCols[i].OrigTblName = oldCol.OrigTblName
 		}
 	}
 	return newRoot
@@ -102,29 +102,26 @@ type projectionEliminater struct {
 }
 
 // optimize implements the logicalOptRule interface.
-func (pe *projectionEliminater) optimize(lp LogicalPlan, _ context.Context, _ *idAllocator) (LogicalPlan, error) {
+func (pe *projectionEliminater) optimize(lp LogicalPlan, _ context.Context) (LogicalPlan, error) {
 	root := pe.eliminate(lp, make(map[string]*expression.Column), false)
 	return root.(LogicalPlan), nil
 }
 
 // eliminate eliminates the redundant projection in a logical plan.
 func (pe *projectionEliminater) eliminate(p LogicalPlan, replace map[string]*expression.Column, canEliminate bool) LogicalPlan {
-	proj, isProj := p.(*Projection)
-	children := make([]Plan, 0, len(p.Children()))
-
+	proj, isProj := p.(*LogicalProjection)
 	childFlag := canEliminate
-	if _, isUnion := p.(*Union); isUnion {
+	if _, isUnion := p.(*LogicalUnionAll); isUnion {
 		childFlag = false
-	} else if isProj {
+	} else if _, isAgg := p.(*LogicalAggregation); isAgg || isProj {
 		childFlag = true
 	}
-	for _, child := range p.Children() {
-		children = append(children, pe.eliminate(child.(LogicalPlan), replace, childFlag))
+	for i, child := range p.Children() {
+		p.Children()[i] = pe.eliminate(child.(LogicalPlan), replace, childFlag)
 	}
-	p.SetChildren(children...)
 
 	switch p.(type) {
-	case *Sort, *TopN, *Limit, *Selection, *MaxOneRow, *Update, *SelectLock:
+	case *LogicalSort, *LogicalTopN, *LogicalLimit, *LogicalSelection, *LogicalMaxOneRow, *LogicalLock:
 		p.SetSchema(p.Children()[0].Schema())
 	case *LogicalJoin, *LogicalApply:
 		var joinTp JoinType
@@ -136,9 +133,9 @@ func (pe *projectionEliminater) eliminate(p LogicalPlan, replace map[string]*exp
 		switch joinTp {
 		case InnerJoin, LeftOuterJoin, RightOuterJoin:
 			p.SetSchema(expression.MergeSchema(p.Children()[0].Schema(), p.Children()[1].Schema()))
-		case SemiJoin:
+		case SemiJoin, AntiSemiJoin:
 			p.SetSchema(p.Children()[0].Schema().Clone())
-		case LeftOuterSemiJoin:
+		case LeftOuterSemiJoin, AntiLeftOuterSemiJoin:
 			newSchema := p.Children()[0].Schema().Clone()
 			newSchema.Append(p.Schema().Columns[len(p.Schema().Columns)-1])
 			p.SetSchema(newSchema)
@@ -153,14 +150,11 @@ func (pe *projectionEliminater) eliminate(p LogicalPlan, replace map[string]*exp
 	if !(isProj && canEliminate && canProjectionBeEliminatedLoose(proj)) {
 		return p
 	}
-
-	child := p.Children()[0]
 	exprs := proj.Exprs
 	for i, col := range proj.Schema().Columns {
 		replace[string(col.HashCode())] = exprs[i].(*expression.Column)
 	}
-	RemovePlan(p)
-	return child.(LogicalPlan)
+	return p.Children()[0].(LogicalPlan)
 }
 
 func (p *LogicalJoin) replaceExprColumns(replace map[string]*expression.Column) {
@@ -178,7 +172,7 @@ func (p *LogicalJoin) replaceExprColumns(replace map[string]*expression.Column) 
 	}
 }
 
-func (p *Projection) replaceExprColumns(replace map[string]*expression.Column) {
+func (p *LogicalProjection) replaceExprColumns(replace map[string]*expression.Column) {
 	for _, expr := range p.Exprs {
 		resolveExprAndReplace(expr, replace)
 	}
@@ -196,7 +190,7 @@ func (p *LogicalAggregation) replaceExprColumns(replace map[string]*expression.C
 	p.collectGroupByColumns()
 }
 
-func (p *Selection) replaceExprColumns(replace map[string]*expression.Column) {
+func (p *LogicalSelection) replaceExprColumns(replace map[string]*expression.Column) {
 	for _, expr := range p.Conditions {
 		resolveExprAndReplace(expr, replace)
 	}
@@ -212,13 +206,13 @@ func (p *LogicalApply) replaceExprColumns(replace map[string]*expression.Column)
 	}
 }
 
-func (p *Sort) replaceExprColumns(replace map[string]*expression.Column) {
+func (p *LogicalSort) replaceExprColumns(replace map[string]*expression.Column) {
 	for _, byItem := range p.ByItems {
 		resolveExprAndReplace(byItem.Expr, replace)
 	}
 }
 
-func (p *TopN) replaceExprColumns(replace map[string]*expression.Column) {
+func (p *LogicalTopN) replaceExprColumns(replace map[string]*expression.Column) {
 	for _, byItem := range p.ByItems {
 		resolveExprAndReplace(byItem.Expr, replace)
 	}

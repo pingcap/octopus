@@ -22,14 +22,15 @@ import (
 	"unicode/utf8"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/hack"
-	"github.com/pingcap/tidb/util/types"
+	log "github.com/sirupsen/logrus"
 )
 
 // Column provides meta data describing a table column.
@@ -189,7 +190,7 @@ const defaultPrivileges string = "select,insert,update,references"
 // GetTypeDesc gets the description for column type.
 func (c *Column) GetTypeDesc() string {
 	desc := c.FieldType.CompactStr()
-	if mysql.HasUnsignedFlag(c.Flag) {
+	if mysql.HasUnsignedFlag(c.Flag) && c.Tp != mysql.TypeBit {
 		desc += " UNSIGNED"
 	}
 	return desc
@@ -224,7 +225,7 @@ func NewColDesc(col *Column) *ColDesc {
 		extra = "auto_increment"
 	} else if mysql.HasOnUpdateNowFlag(col.Flag) {
 		extra = "on update CURRENT_TIMESTAMP"
-	} else if col.GeneratedExprString != "" {
+	} else if col.IsGenerated() {
 		if col.GeneratedStored {
 			extra = "STORED GENERATED"
 		} else {
@@ -241,7 +242,7 @@ func NewColDesc(col *Column) *ColDesc {
 		DefaultValue: defaultValue,
 		Extra:        extra,
 		Privileges:   defaultPrivileges,
-		Comment:      "",
+		Comment:      col.Comment,
 	}
 }
 
@@ -341,7 +342,7 @@ func getColDefaultValueFromNil(ctx context.Context, col *model.ColumnInfo) (type
 		// TODO: add warning.
 		return GetZeroValue(col), nil
 	}
-	return types.Datum{}, errNoDefaultValue.Gen("Field '%s' doesn't have a default value", col.Name)
+	return types.Datum{}, ErrNoDefaultValue.Gen("Field '%s' doesn't have a default value", col.Name)
 }
 
 // GetZeroValue gets zero value for given column type.
@@ -373,11 +374,13 @@ func GetZeroValue(col *model.ColumnInfo) types.Datum {
 	case mysql.TypeDatetime:
 		d.SetMysqlTime(types.ZeroDatetime)
 	case mysql.TypeBit:
-		d.SetMysqlBit(types.Bit{Value: 0, Width: types.MinBitWidth})
+		d.SetMysqlBit(types.ZeroBinaryLiteral)
 	case mysql.TypeSet:
 		d.SetMysqlSet(types.Set{})
 	case mysql.TypeEnum:
 		d.SetMysqlEnum(types.Enum{})
+	case mysql.TypeJSON:
+		d.SetMysqlJSON(json.CreateBinary(nil))
 	}
 	return d
 }

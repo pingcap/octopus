@@ -84,6 +84,7 @@ type Meta struct {
 // NewMeta creates a Meta in transaction txn.
 func NewMeta(txn kv.Transaction) *Meta {
 	txn.SetOption(kv.Priority, kv.PriorityHigh)
+	txn.SetOption(kv.SyncLog, true)
 	t := structure.NewStructure(txn, txn, mMetaPrefix)
 	return &Meta{txn: t}
 }
@@ -121,7 +122,7 @@ func (m *Meta) parseDatabaseID(key string) (int64, error) {
 	return n, errors.Trace(err)
 }
 
-func (m *Meta) autoTalbeIDKey(tableID int64) []byte {
+func (m *Meta) autoTableIDKey(tableID int64) []byte {
 	return []byte(fmt.Sprintf("%s:%d", mTableIDPrefix, tableID))
 }
 
@@ -139,26 +140,32 @@ func (m *Meta) parseTableID(key string) (int64, error) {
 	return n, errors.Trace(err)
 }
 
-// GenAutoTableID adds step to the auto id of the table and returns the sum.
-func (m *Meta) GenAutoTableID(dbID int64, tableID int64, step int64) (int64, error) {
-	// Check if db exists.
+// GenAutoTableIDIDKeyValue generate meta key by dbID, tableID and coresponding value by autoID.
+func (m *Meta) GenAutoTableIDIDKeyValue(dbID, tableID, autoID int64) (key, value []byte) {
+	dbKey := m.dbKey(dbID)
+	autoTableIDKey := m.autoTableIDKey(tableID)
+	return m.txn.EncodeHashAutoIDKeyValue(dbKey, autoTableIDKey, autoID)
+}
+
+// GenAutoTableID adds step to the auto ID of the table and returns the sum.
+func (m *Meta) GenAutoTableID(dbID, tableID, step int64) (int64, error) {
+	// Check if DB exists.
 	dbKey := m.dbKey(dbID)
 	if err := m.checkDBExists(dbKey); err != nil {
 		return 0, errors.Trace(err)
 	}
-
 	// Check if table exists.
 	tableKey := m.tableKey(tableID)
 	if err := m.checkTableExists(dbKey, tableKey); err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	return m.txn.HInc(dbKey, m.autoTalbeIDKey(tableID), step)
+	return m.txn.HInc(dbKey, m.autoTableIDKey(tableID), step)
 }
 
 // GetAutoTableID gets current auto id with table id.
 func (m *Meta) GetAutoTableID(dbID int64, tableID int64) (int64, error) {
-	return m.txn.HGetInt64(m.dbKey(dbID), m.autoTalbeIDKey(tableID))
+	return m.txn.HGetInt64(m.dbKey(dbID), m.autoTableIDKey(tableID))
 }
 
 // GetSchemaVersion gets current global schema version.
@@ -293,7 +300,7 @@ func (m *Meta) DropDatabase(dbID int64) error {
 // DropTable drops table in database.
 // If delAutoID is true, it will delete the auto_increment id key-value of the table.
 // For rename table, we do not need to rename auto_increment id key-value.
-func (m *Meta) DropTable(dbID int64, tableID int64, delAutoID bool) error {
+func (m *Meta) DropTable(dbID int64, tblID int64, delAutoID bool) error {
 	// Check if db exists.
 	dbKey := m.dbKey(dbID)
 	if err := m.checkDBExists(dbKey); err != nil {
@@ -301,7 +308,7 @@ func (m *Meta) DropTable(dbID int64, tableID int64, delAutoID bool) error {
 	}
 
 	// Check if table exists.
-	tableKey := m.tableKey(tableID)
+	tableKey := m.tableKey(tblID)
 	if err := m.checkTableExists(dbKey, tableKey); err != nil {
 		return errors.Trace(err)
 	}
@@ -309,9 +316,8 @@ func (m *Meta) DropTable(dbID int64, tableID int64, delAutoID bool) error {
 	if err := m.txn.HDel(dbKey, tableKey); err != nil {
 		return errors.Trace(err)
 	}
-
 	if delAutoID {
-		if err := m.txn.HDel(dbKey, m.autoTalbeIDKey(tableID)); err != nil {
+		if err := m.txn.HDel(dbKey, m.autoTableIDKey(tblID)); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -605,61 +611,6 @@ func (m *Meta) RemoveDDLReorgHandle(job *model.Job) error {
 func (m *Meta) GetDDLReorgHandle(job *model.Job) (int64, error) {
 	value, err := m.txn.HGetInt64(mDDLJobReorgKey, m.jobIDKey(job.ID))
 	return value, errors.Trace(err)
-}
-
-// DDL background job structure
-//	BgJobOnwer: []byte
-//	BgJobList: list jobs
-//	BgJobHistory: hash
-//	BgJobReorg: hash
-//
-// for multi background worker, only one can become the owner
-// to operate background job, and dispatch them to MR background job.
-
-var (
-	mBgJobListKey    = []byte("BgJobList")
-	mBgJobHistoryKey = []byte("BgJobHistory")
-)
-
-// UpdateBgJob updates the background job with index.
-func (m *Meta) UpdateBgJob(index int64, job *model.Job) error {
-	return m.updateDDLJob(index, job, mBgJobListKey)
-}
-
-// GetBgJob returns the background job with index.
-func (m *Meta) GetBgJob(index int64) (*model.Job, error) {
-	job, err := m.getDDLJob(mBgJobListKey, index)
-
-	return job, errors.Trace(err)
-}
-
-// EnQueueBgJob adds a background job to the list.
-func (m *Meta) EnQueueBgJob(job *model.Job) error {
-	var updateRawArgs bool
-	if job.RawArgs == nil {
-		updateRawArgs = true
-	}
-	return m.enQueueDDLJob(mBgJobListKey, job, updateRawArgs)
-}
-
-// BgJobQueueLen returns the background job queue length.
-func (m *Meta) BgJobQueueLen() (int64, error) {
-	return m.txn.LLen(mBgJobListKey)
-}
-
-// AddHistoryBgJob adds background job to history.
-func (m *Meta) AddHistoryBgJob(job *model.Job) error {
-	return m.addHistoryDDLJob(mBgJobHistoryKey, job)
-}
-
-// GetHistoryBgJob gets a history background job.
-func (m *Meta) GetHistoryBgJob(id int64) (*model.Job, error) {
-	return m.getHistoryDDLJob(mBgJobHistoryKey, id)
-}
-
-// DeQueueBgJob pops a background job from the list.
-func (m *Meta) DeQueueBgJob() (*model.Job, error) {
-	return m.deQueueDDLJob(mBgJobListKey)
 }
 
 func (m *Meta) tableStatsKey(tableID int64) []byte {

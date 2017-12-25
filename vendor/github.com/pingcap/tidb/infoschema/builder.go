@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/perfschema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 )
@@ -72,7 +73,7 @@ func (b *Builder) ApplyDiff(m *meta.Meta, diff *model.SchemaDiff) ([]int64, erro
 	// We try to reuse the old allocator, so the cached auto ID can be reused.
 	var alloc autoid.Allocator
 	if tableIDIsValid(oldTableID) {
-		if oldTableID == newTableID {
+		if oldTableID == newTableID && diff.Type != model.ActionRenameTable {
 			alloc, _ = b.is.AllocByID(oldTableID)
 		}
 		if diff.Type == model.ActionRenameTable {
@@ -161,10 +162,7 @@ func (b *Builder) applyCreateTable(m *meta.Meta, roDBInfo *model.DBInfo, tableID
 	}
 	if alloc == nil {
 		schemaID := roDBInfo.ID
-		if tblInfo.OldSchemaID != 0 {
-			schemaID = tblInfo.OldSchemaID
-		}
-		alloc = autoid.NewAllocator(b.handle.store, schemaID)
+		alloc = autoid.NewAllocator(b.handle.store, tblInfo.GetDBID(schemaID))
 	}
 	tbl, err := tables.TableFromMeta(alloc, tblInfo)
 	if err != nil {
@@ -266,10 +264,7 @@ func (b *Builder) createSchemaTablesForDB(di *model.DBInfo) error {
 	b.is.schemaMap[di.Name.L] = schTbls
 	for _, t := range di.Tables {
 		schemaID := di.ID
-		if t.OldSchemaID != 0 {
-			schemaID = t.OldSchemaID
-		}
-		alloc := autoid.NewAllocator(b.handle.store, schemaID)
+		alloc := autoid.NewAllocator(b.handle.store, t.GetDBID(schemaID))
 		var tbl table.Table
 		tbl, err := tables.TableFromMeta(alloc, t)
 		if err != nil {
@@ -283,15 +278,14 @@ func (b *Builder) createSchemaTablesForDB(di *model.DBInfo) error {
 }
 
 func (b *Builder) createSchemaTablesForPerfSchemaDB() {
-	perfHandle := b.handle.perfHandle
-	perfSchemaDB := perfHandle.GetDBMeta()
+	perfSchemaDB := perfschema.GetDBMeta()
 	perfSchemaTblNames := &schemaTables{
 		dbInfo: perfSchemaDB,
 		tables: make(map[string]table.Table, len(perfSchemaDB.Tables)),
 	}
 	b.is.schemaMap[perfSchemaDB.Name.L] = perfSchemaTblNames
 	for _, t := range perfSchemaDB.Tables {
-		tbl, ok := perfHandle.GetTable(t.Name.O)
+		tbl, ok := perfschema.GetTable(t.Name.O)
 		if !ok {
 			continue
 		}

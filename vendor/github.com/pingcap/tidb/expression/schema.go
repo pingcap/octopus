@@ -18,6 +18,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/types"
 )
 
 // KeyInfo stores the columns of one unique key or primary key.
@@ -70,11 +71,20 @@ func (s *Schema) Clone() *Schema {
 	}
 	schema := NewSchema(cols...)
 	schema.SetUniqueKeys(keys)
-	schema.TblID2Handle = make(map[int64][]*Column)
 	for id, cols := range s.TblID2Handle {
 		schema.TblID2Handle[id] = make([]*Column, 0, len(cols))
 		for _, col := range cols {
-			schema.TblID2Handle[id] = append(schema.TblID2Handle[id], col.Clone().(*Column))
+			var inColumns = false
+			for i, colInColumns := range s.Columns {
+				if col == colInColumns {
+					schema.TblID2Handle[id] = append(schema.TblID2Handle[id], schema.Columns[i])
+					inColumns = true
+					break
+				}
+			}
+			if !inColumns {
+				schema.TblID2Handle[id] = append(schema.TblID2Handle[id], col.Clone().(*Column))
+			}
 		}
 	}
 	return schema
@@ -105,7 +115,15 @@ func (s *Schema) FindColumnAndIndex(astCol *ast.ColumnName) (*Column, int, error
 			if idx == -1 {
 				idx = i
 			} else {
-				return nil, -1, errors.Errorf("Column %s is ambiguous", col.String())
+				// For query like:
+				// create table t1(a int); create table t2(d int);
+				// select 1 from t1, t2 where 1 = (select d from t2 where a > 1) and d = 1;
+				// we will get an Apply operator whose schema is [test.t1.a, test.t2.d, test.t2.d],
+				// we check whether the column of the schema comes from a subquery to avoid
+				// causing the ambiguous error when resolve the column `d` in the Selection.
+				if !col.IsAggOrSubq {
+					return nil, -1, errors.Errorf("Column %s is ambiguous", col.String())
+				}
 			}
 		}
 	}
@@ -189,6 +207,15 @@ func (s *Schema) ColumnsByIndices(offsets []int) []*Column {
 		cols = append(cols, s.Columns[offset])
 	}
 	return cols
+}
+
+// GetTypes creates a field type slice.
+func (s *Schema) GetTypes() []*types.FieldType {
+	fields := make([]*types.FieldType, len(s.Columns))
+	for i := range fields {
+		fields[i] = s.Columns[i].RetType
+	}
+	return fields
 }
 
 // MergeSchema will merge two schema into one schema.

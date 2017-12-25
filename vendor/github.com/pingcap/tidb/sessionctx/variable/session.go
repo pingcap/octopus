@@ -14,12 +14,15 @@
 package variable
 
 import (
-	"math"
+	"crypto/tls"
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/util/auth"
 )
 
 const (
@@ -98,6 +101,11 @@ func (tc *TransactionContext) UpdateDeltaForTable(tableID int64, delta int64, co
 	tc.TableDeltaMap[tableID] = item
 }
 
+// ClearDelta clears the delta map.
+func (tc *TransactionContext) ClearDelta() {
+	tc.TableDeltaMap = nil
+}
+
 // SessionVars is to handle user-defined or global variables in the current session.
 type SessionVars struct {
 	// UsersLock is a lock for user defined variables.
@@ -111,6 +119,8 @@ type SessionVars struct {
 	PreparedStmtNameToID map[string]uint32
 	// preparedStmtID is id of prepared statement.
 	preparedStmtID uint32
+	// params for prepared statements
+	PreparedParams []interface{}
 
 	// retry information
 	RetryInfo *RetryInfo
@@ -123,15 +133,23 @@ type SessionVars struct {
 	PrevLastInsertID uint64 // PrevLastInsertID is the last insert ID of previous statement.
 	LastInsertID     uint64 // LastInsertID is the auto-generated ID in the current statement.
 	InsertID         uint64 // InsertID is the given insert ID of an auto_increment column.
+	// PrevAffectedRows is the affected-rows value(DDL is 0, DML is the number of affected rows).
+	PrevAffectedRows int64
 
 	// ClientCapability is client's capability.
 	ClientCapability uint32
 
+	// TLSConnectionState is the TLS connection state (nil if not using TLS).
+	TLSConnectionState *tls.ConnectionState
+
 	// ConnectionID is the connection id of the current session.
 	ConnectionID uint64
 
-	// User is the username with which the session login.
-	User string
+	// PlanID is the unique id of logical and physical plan.
+	PlanID int
+
+	// User is the user identity with which the session login.
+	User *auth.UserIdentity
 
 	// CurrentDB is the default database of this session.
 	CurrentDB string
@@ -162,7 +180,7 @@ type SessionVars struct {
 	LastFoundRows uint64
 
 	// StmtCtx holds variables for current executing statement.
-	StmtCtx *StatementContext
+	StmtCtx *stmtctx.StatementContext
 
 	// AllowAggPushDown can be set to false to forbid aggregation push down.
 	AllowAggPushDown bool
@@ -209,11 +227,26 @@ type SessionVars struct {
 	// BatchInsert indicates if we should split insert data into multiple batches.
 	BatchInsert bool
 
+	// BatchDelete indicates if we should split delete data into multiple batches.
+	BatchDelete bool
+
+	// DMLBatchSize indicates the size of batches for DML.
+	// It will be used when BatchInsert or BatchDelete is on.
+	DMLBatchSize int
+
 	// MaxRowCountForINLJ defines max row count that the outer table of index nested loop join could be without force hint.
 	MaxRowCountForINLJ int
 
-	// CBO indicates if we use new planner with cbo.
-	CBO bool
+	// IDAllocator is provided by kvEncoder, if it is provided, we will use it to alloc auto id instead of using
+	// Table.alloc.
+	IDAllocator autoid.Allocator
+
+	// MaxChunkSize defines max row count of a Chunk during query execution.
+	MaxChunkSize int
+
+	// EnableChunk indicates whether the chunk execution model is enabled.
+	// TODO: remove this after tidb-server configuration "enable-chunk' removed.
+	EnableChunk bool
 }
 
 // NewSessionVars creates a session vars object.
@@ -223,27 +256,23 @@ func NewSessionVars() *SessionVars {
 		Systems:                    make(map[string]string),
 		PreparedStmts:              make(map[uint32]interface{}),
 		PreparedStmtNameToID:       make(map[string]uint32),
+		PreparedParams:             make([]interface{}, 10),
 		TxnCtx:                     &TransactionContext{},
 		RetryInfo:                  &RetryInfo{},
 		StrictSQLMode:              true,
 		Status:                     mysql.ServerStatusAutocommit,
-		StmtCtx:                    new(StatementContext),
-		AllowAggPushDown:           true,
+		StmtCtx:                    new(stmtctx.StatementContext),
+		AllowAggPushDown:           false,
 		BuildStatsConcurrencyVar:   DefBuildStatsConcurrency,
 		IndexJoinBatchSize:         DefIndexJoinBatchSize,
 		IndexLookupSize:            DefIndexLookupSize,
 		IndexLookupConcurrency:     DefIndexLookupConcurrency,
 		IndexSerialScanConcurrency: DefIndexSerialScanConcurrency,
 		DistSQLScanConcurrency:     DefDistSQLScanConcurrency,
-		MaxRowCountForINLJ:         DefMaxRowCountForINLJ,
-		CBO:                        true,
+		MaxChunkSize:               DefMaxChunkSize,
+		DMLBatchSize:               DefDMLBatchSize,
 	}
 }
-
-const (
-	characterSetConnection = "character_set_connection"
-	collationConnection    = "collation_connection"
-)
 
 // GetCharsetInfo gets charset and collation for current context.
 // What character set should the server translate a statement to after receiving it?
@@ -255,8 +284,8 @@ const (
 // have their own collation, which has a higher collation precedence.
 // See https://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 func (s *SessionVars) GetCharsetInfo() (charset, collation string) {
-	charset = s.Systems[characterSetConnection]
-	collation = s.Systems[collationConnection]
+	charset = s.Systems[CharacterSetConnection]
+	collation = s.Systems[CollationConnection]
 	return
 }
 
@@ -307,6 +336,18 @@ func (s *SessionVars) GetTimeZone() *time.Location {
 	return loc
 }
 
+// ResetPrevAffectedRows reset the prev-affected-rows variable.
+func (s *SessionVars) ResetPrevAffectedRows() {
+	s.PrevAffectedRows = 0
+	if s.StmtCtx != nil {
+		if s.StmtCtx.InUpdateOrDeleteStmt || s.StmtCtx.InInsertStmt {
+			s.PrevAffectedRows = int64(s.StmtCtx.AffectedRows())
+		} else if s.StmtCtx.InSelectStmt {
+			s.PrevAffectedRows = -1
+		}
+	}
+}
+
 // special session variables.
 const (
 	SQLModeVar          = "sql_mode"
@@ -321,135 +362,4 @@ const (
 type TableDelta struct {
 	Delta int64
 	Count int64
-}
-
-// StatementContext contains variables for a statement.
-// It should be reset before executing a statement.
-type StatementContext struct {
-	// Set the following variables before execution
-
-	InInsertStmt         bool
-	InUpdateOrDeleteStmt bool
-	InSelectStmt         bool
-	IgnoreTruncate       bool
-	TruncateAsWarning    bool
-	OverflowAsWarning    bool
-	InShowWarning        bool
-
-	// mu struct holds variables that change during execution.
-	mu struct {
-		sync.Mutex
-		affectedRows uint64
-		foundRows    uint64
-		warnings     []error
-	}
-
-	// Copied from SessionVars.TimeZone.
-	TimeZone *time.Location
-	Priority mysql.PriorityEnum
-}
-
-// AddAffectedRows adds affected rows.
-func (sc *StatementContext) AddAffectedRows(rows uint64) {
-	sc.mu.Lock()
-	sc.mu.affectedRows += rows
-	sc.mu.Unlock()
-}
-
-// AffectedRows gets affected rows.
-func (sc *StatementContext) AffectedRows() uint64 {
-	sc.mu.Lock()
-	rows := sc.mu.affectedRows
-	sc.mu.Unlock()
-	return rows
-}
-
-// FoundRows gets found rows.
-func (sc *StatementContext) FoundRows() uint64 {
-	sc.mu.Lock()
-	rows := sc.mu.foundRows
-	sc.mu.Unlock()
-	return rows
-}
-
-// AddFoundRows adds found rows.
-func (sc *StatementContext) AddFoundRows(rows uint64) {
-	sc.mu.Lock()
-	sc.mu.foundRows += rows
-	sc.mu.Unlock()
-}
-
-// GetWarnings gets warnings.
-func (sc *StatementContext) GetWarnings() []error {
-	sc.mu.Lock()
-	warns := make([]error, len(sc.mu.warnings))
-	copy(warns, sc.mu.warnings)
-	sc.mu.Unlock()
-	return warns
-}
-
-// WarningCount gets warning count.
-func (sc *StatementContext) WarningCount() uint16 {
-	if sc.InShowWarning {
-		return 0
-	}
-	sc.mu.Lock()
-	wc := uint16(len(sc.mu.warnings))
-	sc.mu.Unlock()
-	return wc
-}
-
-// SetWarnings sets warnings.
-func (sc *StatementContext) SetWarnings(warns []error) {
-	sc.mu.Lock()
-	sc.mu.warnings = warns
-	sc.mu.Unlock()
-}
-
-// AppendWarning appends a warning.
-func (sc *StatementContext) AppendWarning(warn error) {
-	sc.mu.Lock()
-	if len(sc.mu.warnings) < math.MaxUint16 {
-		sc.mu.warnings = append(sc.mu.warnings, warn)
-	}
-	sc.mu.Unlock()
-}
-
-// HandleTruncate ignores or returns the error based on the StatementContext state.
-func (sc *StatementContext) HandleTruncate(err error) error {
-	// TODO: At present we have not checked whether the error can be ignored or treated as warning.
-	// We will do that later, and then append WarnDataTruncated instead of the error itself.
-	if err == nil {
-		return nil
-	}
-	if sc.IgnoreTruncate {
-		return nil
-	}
-	if sc.TruncateAsWarning {
-		sc.AppendWarning(err)
-		return nil
-	}
-	return err
-}
-
-// HandleOverflow treats ErrOverflow as warnings or returns the error based on the StmtCtx.OverflowAsWarning state.
-func (sc *StatementContext) HandleOverflow(err error, warnErr error) error {
-	if err == nil {
-		return nil
-	}
-
-	if sc.OverflowAsWarning {
-		sc.AppendWarning(warnErr)
-		return nil
-	}
-	return err
-}
-
-// ResetForRetry resets the changed states during execution.
-func (sc *StatementContext) ResetForRetry() {
-	sc.mu.Lock()
-	sc.mu.affectedRows = 0
-	sc.mu.foundRows = 0
-	sc.mu.warnings = nil
-	sc.mu.Unlock()
 }

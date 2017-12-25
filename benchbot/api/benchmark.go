@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"github.com/unrolled/render"
 
 	. "github.com/pingcap/octopus/benchbot/backend"

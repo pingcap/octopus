@@ -19,6 +19,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	goctx "golang.org/x/net/context"
 )
@@ -35,20 +36,32 @@ var (
 type RawKVClient struct {
 	clusterID   uint64
 	regionCache *RegionCache
+	pdClient    pd.Client
 	rpcClient   Client
 }
 
 // NewRawKVClient creates a client with PD cluster addrs.
-func NewRawKVClient(pdAddrs []string) (*RawKVClient, error) {
-	pdCli, err := pd.NewClient(pdAddrs)
+func NewRawKVClient(pdAddrs []string, security config.Security) (*RawKVClient, error) {
+	pdCli, err := pd.NewClient(pdAddrs, pd.SecurityOption{
+		CAPath:   security.ClusterSSLCA,
+		CertPath: security.ClusterSSLCert,
+		KeyPath:  security.ClusterSSLKey,
+	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &RawKVClient{
 		clusterID:   pdCli.GetClusterID(goctx.TODO()),
 		regionCache: NewRegionCache(pdCli),
-		rpcClient:   newRPCClient(),
+		pdClient:    pdCli,
+		rpcClient:   newRPCClient(security),
 	}, nil
+}
+
+// Close closes the client.
+func (c *RawKVClient) Close() error {
+	c.pdClient.Close()
+	return c.rpcClient.Close()
 }
 
 // ClusterID returns the TiKV cluster ID.
@@ -73,7 +86,7 @@ func (c *RawKVClient) Get(key []byte) ([]byte, error) {
 	}
 	cmdResp := resp.RawGet
 	if cmdResp == nil {
-		return nil, errors.Trace(errBodyMissing)
+		return nil, errors.Trace(ErrBodyMissing)
 	}
 	if cmdResp.GetError() != "" {
 		return nil, errors.New(cmdResp.GetError())
@@ -108,7 +121,7 @@ func (c *RawKVClient) Put(key, value []byte) error {
 	}
 	cmdResp := resp.RawPut
 	if cmdResp == nil {
-		return errors.Trace(errBodyMissing)
+		return errors.Trace(ErrBodyMissing)
 	}
 	if cmdResp.GetError() != "" {
 		return errors.New(cmdResp.GetError())
@@ -133,7 +146,7 @@ func (c *RawKVClient) Delete(key []byte) error {
 	}
 	cmdResp := resp.RawDelete
 	if cmdResp == nil {
-		return errors.Trace(errBodyMissing)
+		return errors.Trace(ErrBodyMissing)
 	}
 	if cmdResp.GetError() != "" {
 		return errors.New(cmdResp.GetError())
@@ -165,7 +178,7 @@ func (c *RawKVClient) Scan(startKey []byte, limit int) (keys [][]byte, values []
 		}
 		cmdResp := resp.RawScan
 		if cmdResp == nil {
-			return nil, nil, errors.Trace(errBodyMissing)
+			return nil, nil, errors.Trace(ErrBodyMissing)
 		}
 		for _, pair := range cmdResp.Kvs {
 			keys = append(keys, pair.Key)
@@ -181,7 +194,7 @@ func (c *RawKVClient) Scan(startKey []byte, limit int) (keys [][]byte, values []
 
 func (c *RawKVClient) sendReq(key []byte, req *tikvrpc.Request) (*tikvrpc.Response, *KeyLocation, error) {
 	bo := NewBackoffer(rawkvMaxBackoff, goctx.Background())
-	sender := NewRegionRequestSender(c.regionCache, c.rpcClient, kvrpcpb.IsolationLevel_SI)
+	sender := NewRegionRequestSender(c.regionCache, c.rpcClient)
 	for {
 		loc, err := c.regionCache.LocateKey(bo, key)
 		if err != nil {
@@ -196,7 +209,7 @@ func (c *RawKVClient) sendReq(key []byte, req *tikvrpc.Request) (*tikvrpc.Respon
 			return nil, nil, errors.Trace(err)
 		}
 		if regionErr != nil {
-			err := bo.Backoff(boRegionMiss, errors.New(regionErr.String()))
+			err := bo.Backoff(BoRegionMiss, errors.New(regionErr.String()))
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}

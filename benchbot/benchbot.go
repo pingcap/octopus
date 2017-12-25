@@ -9,8 +9,8 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/ngaut/log"
+	"github.com/sirupsen/logrus"
 
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
