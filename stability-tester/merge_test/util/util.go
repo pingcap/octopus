@@ -14,10 +14,7 @@
 package util
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"strconv"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -147,70 +144,6 @@ func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
 	return false
 }
 
-func GetRegionCount() (int, error) {
-	prefix := regionsPrefix
-
-	r, err := doRequest(prefix, http.MethodGet)
-	if err != nil {
-		return 0, fmt.Errorf("Failed to get region count: %s", err)
-	}
-
-	regions := &regionsInfo{}
-	err = json.Unmarshal(r, regions)
-	if err != nil {
-		return 0, fmt.Errorf("Failed to get region count: %s", err)
-	}
-	return regions.Count, nil
-}
-
-func GetRegions() ([]*RegionInfo, error) {
-	prefix := regionsPrefix
-
-	r, err := doRequest(prefix, http.MethodGet)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get regions: %s", err)
-	}
-
-	regions := &regionsInfo{}
-	err = json.Unmarshal(r, regions)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get regions: %s", err)
-	}
-	return regions.Regions, nil
-}
-
-func GetRegionInfo(regionID uint64) (*RegionInfo, error) {
-	prefix := regionIDPrefix + "/" + strconv.Itoa(int(regionID))
-
-	r, err := doRequest(prefix, http.MethodGet)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get region %v info: %s", regionID, err)
-	}
-
-	region := &RegionInfo{}
-	err = json.Unmarshal(r, region)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get region %v info: %s", regionID, err)
-	}
-	return region, nil
-}
-
-func StartShuffleRegions() error {
-	input := make(map[string]interface{})
-	input["name"] = "shuffle-region-scheduler"
-	return postJSON(schedulersPrefix, input)
-}
-
-func StopShuffleRegions() error {
-	path := schedulersPrefix + "/shuffle-region-scheduler"
-	_, err := doRequest(path, http.MethodDelete)
-	return errors.Trace(err)
-}
-
-func Clean() {
-	conn.Close()
-}
-
 func checkRegionsTableID(tableID int64, one, other uint64) error {
 	regions, err := GetRegions()
 	if err != nil {
@@ -251,6 +184,9 @@ func DiffTableRegions(prevRegions, nowRegions []*RegionInfo, tableID int64) (int
 
 	for _, region := range nowRegions {
 		id := GetTableID(region)
+		if id != tableID {
+			continue
+		}
 		if _, ok := set[region.ID]; ok {
 			delete(set, region.ID)
 		} else {

@@ -17,24 +17,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"google.golang.org/grpc"
 )
 
-var (
-	tikvClient tikvpb.TikvClient
-	conn       *grpc.ClientConn
-)
-
-func InitTikvClient(addr string) error {
+func NewTikvClient(addr string) (tikvpb.TikvClient, *grpc.ClientConn, error) {
 	var err error
-	conn, err = grpc.Dial(addr, grpc.WithInsecure())
+	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	tikvClient = tikvpb.NewTikvClient(conn)
-	return nil
+	tikvClient := tikvpb.NewTikvClient(conn)
+	return tikvClient, conn, nil
 }
 
 func SplitRegion(region *RegionInfo) (uint64, uint64, error) {
@@ -43,8 +39,18 @@ func SplitRegion(region *RegionInfo) (uint64, uint64, error) {
 	splitKey[len(splitKey)-1] = splitKey[len(splitKey)-1] + 1
 	_, key, err := decodeBytes(splitKey)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, errors.Trace(err)
 	}
+
+	addr, err := GetStoreAddr(region.Leader.StoreId)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+	client, conn, err := NewTikvClient(addr)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
+	defer conn.Close()
 
 	req := &kvrpcpb.SplitRegionRequest{
 		Context: &kvrpcpb.Context{
@@ -55,14 +61,14 @@ func SplitRegion(region *RegionInfo) (uint64, uint64, error) {
 		SplitKey: key,
 	}
 
-	response, err := tikvClient.SplitRegion(context.Background(), req)
+	response, err := client.SplitRegion(context.Background(), req)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	regionErr := response.GetRegionError()
 	if regionErr != nil {
-		return 0, 0, fmt.Errorf("failed to split region: %v", regionErr.GetMessage())
+		return 0, 0, fmt.Errorf("failed to split region: %v, peer is %v", regionErr.GetMessage(), region.Leader)
 	}
 
 	return response.Left.Id, response.Right.Id, nil

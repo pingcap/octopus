@@ -22,7 +22,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
+	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 )
@@ -33,6 +35,7 @@ var (
 
 	regionsPrefix    = "pd/api/v1/regions"
 	regionIDPrefix   = "pd/api/v1/region/id"
+	storePrefix      = "pd/api/v1/store"
 	schedulersPrefix = "pd/api/v1/schedulers"
 )
 
@@ -54,6 +57,15 @@ type RegionInfo struct {
 	WrittenBytes    uint64            `json:"written_bytes,omitempty"`
 	ReadBytes       uint64            `json:"read_bytes,omitempty"`
 	ApproximateSize int64             `json:"approximate_size,omitempty"`
+}
+
+type metaStore struct {
+	*metapb.Store
+	StateName string `json:"state_name"`
+}
+type StoreInfo struct {
+	Store *metaStore `json:"store"`
+	//Status *storeStatus `json:"status"`
 }
 
 func dail(req *http.Request) ([]byte, error) {
@@ -132,4 +144,80 @@ func getAddress(prefix string) string {
 	}
 	s := fmt.Sprintf("%s/%s", u, prefix)
 	return s
+}
+
+func GetRegionCount() (int, error) {
+	prefix := regionsPrefix
+
+	r, err := doRequest(prefix, http.MethodGet)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to get region count: %s", err)
+	}
+
+	regions := &regionsInfo{}
+	err = json.Unmarshal(r, regions)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to get region count: %s", err)
+	}
+	return regions.Count, nil
+}
+
+func GetRegions() ([]*RegionInfo, error) {
+	prefix := regionsPrefix
+
+	r, err := doRequest(prefix, http.MethodGet)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get regions: %s", err)
+	}
+
+	regions := &regionsInfo{}
+	err = json.Unmarshal(r, regions)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get regions: %s", err)
+	}
+	return regions.Regions, nil
+}
+
+func GetRegionInfo(regionID uint64) (*RegionInfo, error) {
+	prefix := regionIDPrefix + "/" + strconv.Itoa(int(regionID))
+
+	r, err := doRequest(prefix, http.MethodGet)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get region %v info: %s", regionID, err)
+	}
+
+	region := &RegionInfo{}
+	err = json.Unmarshal(r, region)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get region %v info: %s", regionID, err)
+	}
+	return region, nil
+}
+
+func StartShuffleRegions() error {
+	input := make(map[string]interface{})
+	input["name"] = "shuffle-region-scheduler"
+	return postJSON(schedulersPrefix, input)
+}
+
+func StopShuffleRegions() error {
+	path := schedulersPrefix + "/shuffle-region-scheduler"
+	_, err := doRequest(path, http.MethodDelete)
+	return errors.Trace(err)
+}
+
+func GetStoreAddr(storeID uint64) (string, error) {
+	prefix := storePrefix + "/" + strconv.Itoa(int(storeID))
+
+	r, err := doRequest(prefix, http.MethodGet)
+	if err != nil {
+		return "", fmt.Errorf("Failed to get store %v addr: %s", storeID, err)
+	}
+
+	store := &StoreInfo{}
+	err = json.Unmarshal(r, store)
+	if err != nil {
+		return "", fmt.Errorf("Failed to get store %v info: %s", storeID, err)
+	}
+	return store.Store.GetAddress(), nil
 }

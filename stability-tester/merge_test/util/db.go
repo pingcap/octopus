@@ -101,7 +101,33 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 	return &DB{DB: db}, nil
 }
 
-func (db *DB) Insert(regionID uint64) error {
+func (db *DB) Insert(ctx context.Context) error {
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		go func(ctx context.Context) {
+			wg.Add(1)
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				err := db.InsertBatch(id-1, 20)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+			}
+		}(ctx)
+	}
+
+	wg.Wait()
+	return nil
+}
+
+func (db *DB) InsertUntilSplit(regionID uint64) error {
 	time.Sleep(time.Second * 10)
 	originRegion, err := GetRegionInfo(regionID)
 	if err != nil {
