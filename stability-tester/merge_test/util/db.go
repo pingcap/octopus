@@ -103,6 +103,7 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 
 func (db *DB) Insert(ctx context.Context) error {
 	var wg sync.WaitGroup
+	flag = 1
 	for i := 0; i < concurrency; i++ {
 		go func(ctx context.Context) {
 			wg.Add(1)
@@ -114,11 +115,11 @@ func (db *DB) Insert(ctx context.Context) error {
 				default:
 				}
 
-				err := db.InsertBatch(id-1, 20)
+				err := db.InsertBatch(id-1, 100)
 				if err != nil {
 					log.Fatal(err)
 				}
-
+				flag++
 			}
 		}(ctx)
 	}
@@ -175,18 +176,14 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 	return nil
 }
 
-func (db *DB) InsertUntilMerge(oneRegion, otherRegion *RegionInfo) error {
+func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var tableID int64
-	oneKey := Key{}
-	fmt.Sscanf("\""+oneRegion.StartKey+"\"", "%q", &oneKey)
-	otherKey := Key{}
-	fmt.Sscanf("\""+otherRegion.StartKey+"\"", "%q", &otherKey)
-	if oneKey.TableID() != otherKey.TableID() {
-		return fmt.Errorf("unexpected table id for two regions")
-	} else {
-		tableID = oneKey.TableID()
+	tableID := GetTableID(tableRegions[0])
+	for _, region := range tableRegions {
+		if GetTableID(region) != tableID {
+			return fmt.Errorf("unexpected table regions")
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -215,38 +212,40 @@ func (db *DB) InsertUntilMerge(oneRegion, otherRegion *RegionInfo) error {
 	for {
 		time.Sleep(time.Second * 60)
 
-		one, err := GetRegionInfo(oneRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		other, err := GetRegionInfo(otherRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
+		isMerge, isChange := false, false
+		for i, region := range tableRegions {
+			nowRegion, err := GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			if nowRegion.ID == 0 {
+				isMerge = true
+				log.Infof("region %d was merged", region.ID)
+			}
+
+			if GetTableID(nowRegion) != tableID {
+				return fmt.Errorf("region %d's tableID has changed", region.ID)
+			}
+
+			if nowRegion.StartKey != region.StartKey || nowRegion.EndKey != region.EndKey {
+				isChange = true
+				log.Infof("region %d's key range has changed", region.ID)
+			}
+
+			log.Infof("[region %d] approximate size is %d", nowRegion.ID, nowRegion.ApproximateSize)
+			tableRegions[i] = nowRegion
 		}
 
-		x := one.ID != 0
-		y := other.ID != 0
-		if x && !y {
-			log.Infof("region %d merge into region %d", other.ID, one.ID)
+		if !isMerge && isChange {
+			return fmt.Errorf("region change unexpectedly when insert")
+		} else if isMerge && isChange {
 			return nil
-		} else if !x && y {
-			log.Infof("region %d merge into region %d", one.ID, other.ID)
-			return nil
 		}
 
-		log.Infof("[region %d] one region's approximate size is %d", one.ID, one.ApproximateSize)
-		log.Infof("[region %d] other region's approximate size is %d", other.ID, other.ApproximateSize)
-
-		if one.StartKey != oneRegion.StartKey || one.EndKey != oneRegion.EndKey {
-			return fmt.Errorf("region %d's key range has changed", one.ID)
-		} else if other.StartKey != otherRegion.StartKey || other.EndKey != otherRegion.EndKey {
-			return fmt.Errorf("region %d's key range has changed", other.ID)
-		}
-
-		if err = checkRegionsTableID(tableID, one.ID, other.ID); err != nil {
+		if err := checkRegionsTableID(tableID, tableRegions); err != nil {
 			return errors.Trace(err)
 		}
-		oneRegion, otherRegion = one, other
 	}
 }
 

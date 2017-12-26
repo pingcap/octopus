@@ -164,7 +164,7 @@ func checkSplitTableRegion(db *util.DB) error {
 	return nil
 }
 
-func cleanTableData(db *util.DB, fn func(*util.RegionInfo, *util.RegionInfo) error) error {
+func cleanTableData(db *util.DB, fn func([]*util.RegionInfo) error) error {
 	// for merge use
 	err := db.CreateTable(1)
 	if err != nil {
@@ -181,28 +181,20 @@ func cleanTableData(db *util.DB, fn func(*util.RegionInfo, *util.RegionInfo) err
 		return errors.Trace(err)
 	}
 
-	//time.Sleep(time.Second * 60)
+	time.Sleep(time.Second * 60)
 
-	nowRegions, err := util.GetRegions()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	newRegion, err := util.FindNewSplitRegion(nowRegions, tableRegion)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tableRegion, err = util.GetRegionInfo(tableRegion.ID)
+	tableRegions, err := util.FindNewSplitRegions(tableRegion)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = fn(newRegion, tableRegion)
+	err = fn(tableRegions)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// wait to merge
-	err = db.InsertUntilMerge(tableRegion, newRegion)
+	err = db.InsertUntilMerge(tableRegions)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -211,26 +203,29 @@ func cleanTableData(db *util.DB, fn func(*util.RegionInfo, *util.RegionInfo) err
 }
 
 func checkDropTable(db *util.DB) error {
-	callback := func(oneRegion, otherRegion *util.RegionInfo) error {
-		log.Infof("[region %d] one region's approximate size is %d before drop", oneRegion.ID, oneRegion.ApproximateSize)
-		log.Infof("[region %d] other region's approximate size is %d before drop", otherRegion.ID, otherRegion.ApproximateSize)
+	callback := func(regions []*util.RegionInfo) error {
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d before drop", nowRegion.ID, nowRegion.ApproximateSize)
+		}
 
 		err := db.DropTable()
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		oneRegion, err = util.GetRegionInfo(oneRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		otherRegion, err = util.GetRegionInfo(otherRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		time.Sleep(time.Second * 60)
 
-		log.Infof("[region %d] one region's approximate size is %d after drop", oneRegion.ID, oneRegion.ApproximateSize)
-		log.Infof("[region %d] other region's approximate size is %d after drop", otherRegion.ID, otherRegion.ApproximateSize)
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d after drop", nowRegion.ID, nowRegion.ApproximateSize)
+		}
 		return nil
 	}
 
@@ -238,26 +233,29 @@ func checkDropTable(db *util.DB) error {
 }
 
 func checkInsertAndDelete(db *util.DB) error {
-	callback := func(oneRegion, otherRegion *util.RegionInfo) error {
-		log.Infof("[region %d] one region's approximate size is %d before delete", oneRegion.ID, oneRegion.ApproximateSize)
-		log.Infof("[region %d] other region's approximate size is %d before delete", otherRegion.ID, otherRegion.ApproximateSize)
+	callback := func(regions []*util.RegionInfo) error {
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d before delete", nowRegion.ID, nowRegion.ApproximateSize)
+		}
 
 		err := db.DeleteAll()
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		oneRegion, err = util.GetRegionInfo(oneRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		otherRegion, err = util.GetRegionInfo(otherRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		time.Sleep(time.Second * 60)
 
-		log.Infof("[region %d] one region's approximate size is %d after delete", oneRegion.ID, oneRegion.ApproximateSize)
-		log.Infof("[region %d] other region's approximate size is %d after delete", otherRegion.ID, otherRegion.ApproximateSize)
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d after delete", nowRegion.ID, nowRegion.ApproximateSize)
+		}
 		return nil
 	}
 
@@ -270,22 +268,17 @@ func checkShuffle(db *util.DB) error {
 		return errors.Trace(err)
 	}
 
-	oneRegion, err := util.CreateNewRegion(db)
+	tableRegion, err := util.CreateNewRegion(db)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplit(oneRegion.ID)
+	err = db.InsertUntilSplit(tableRegion.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	nowRegions, err := util.GetRegions()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	otherRegion, err := util.FindNewSplitRegion(nowRegions, oneRegion)
+	tableRegions, err := util.FindNewSplitRegions(tableRegion)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -295,26 +288,28 @@ func checkShuffle(db *util.DB) error {
 		return errors.Trace(err)
 	}
 	for retry := 0; retry < 5; retry++ {
-
-		oneRegion, err = util.GetRegionInfo(oneRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		otherRegion, err = util.GetRegionInfo(otherRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if !util.IsSameLocation(oneRegion.Peers, otherRegion.Peers) {
-			err = util.StopShuffleRegions()
+		ok := false
+		for _, region := range tableRegions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			break
+
+			if !util.IsSameLocation(region.Peers, nowRegion.Peers) {
+				err = util.StopShuffleRegions()
+				if err != nil {
+					return errors.Trace(err)
+				}
+				ok = true
+				break
+			}
 		}
 
+		if ok {
+			break
+		}
 		// wait region peers to move
-		time.Sleep(120 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 
 	err = db.DropTable()
@@ -323,32 +318,9 @@ func checkShuffle(db *util.DB) error {
 	}
 
 	// wait to merge
-	err = db.InsertUntilMerge(oneRegion, otherRegion)
+	err = db.InsertUntilMerge(tableRegions)
 	if err != nil {
 		return errors.Trace(err)
-	}
-
-	nowRegions, err = util.GetRegions()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if util.IsRegionIDExist(nowRegions, oneRegion.ID) {
-		nowRegion, err := util.GetRegionInfo(oneRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !util.IsSameLocation(oneRegion.Peers, nowRegion.Peers) {
-			return fmt.Errorf("unexpected peer location for region %d after merge", oneRegion.ID)
-		}
-	} else if util.IsRegionIDExist(nowRegions, otherRegion.ID) {
-		nowRegion, err := util.GetRegionInfo(otherRegion.ID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if !util.IsSameLocation(otherRegion.Peers, nowRegion.Peers) {
-			return fmt.Errorf("unexpected peer location for region %d after merge", otherRegion.ID)
-		}
 	}
 
 	return nil

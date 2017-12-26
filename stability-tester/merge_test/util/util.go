@@ -65,32 +65,26 @@ func CreateNewRegion(db *DB) (*RegionInfo, error) {
 	return tableRegionInfo, nil
 }
 
-func FindNewSplitRegion(regions []*RegionInfo, origin *RegionInfo) (*RegionInfo, error) {
-	var find string
+func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
+	regions, err := GetRegions()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	tableID := GetTableID(origin)
+	find := []*RegionInfo{}
 
 	for _, region := range regions {
-		if region.ID == origin.ID {
-			if region.StartKey != origin.StartKey {
-				find = origin.StartKey
-			} else if region.EndKey != origin.EndKey {
-				find = origin.EndKey
-			} else {
-				return nil, fmt.Errorf("region %d doesn't split", origin.ID)
-			}
+		if GetTableID(region) == tableID {
+			find = append(find, region)
 		}
 	}
 
-	for _, item := range regions {
-		if item.StartKey == find {
-			region, err := GetRegionInfo(item.ID)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return region, nil
-		}
+	if len(find) == 0 {
+		return nil, fmt.Errorf("region %d doesn't split", origin.ID)
 	}
-
-	return nil, fmt.Errorf("can not find split reigon")
+	log.Infof("table %d has %d regions", tableID, len(find))
+	return find, nil
 }
 
 func FindNewTableRegion(region *RegionInfo) (*RegionInfo, error) {
@@ -144,20 +138,23 @@ func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
 	return false
 }
 
-func checkRegionsTableID(tableID int64, one, other uint64) error {
+func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) error {
 	regions, err := GetRegions()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+	set := make(map[uint64]struct{})
+	for _, region := range tableRegions {
+		set[region.ID] = struct{}{}
+	}
+
 	for _, region := range regions {
-		if region.ID == one || region.ID == other {
+		if _, ok := set[region.ID]; ok {
 			continue
 		}
-		key := Key{}
-		fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
-		if key.TableID() == tableID {
-			return fmt.Errorf("table id has changed")
+		if GetTableID(region) == tableID {
+			return fmt.Errorf("unexpected table id of region %d", region.ID)
 		}
 	}
 
