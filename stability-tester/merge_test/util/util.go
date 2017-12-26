@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/kvproto/pkg/metapb"
 )
@@ -40,27 +41,27 @@ func IsSameLocation(one, other []*metapb.Peer) bool {
 func CreateNewRegion(db *DB) (*RegionInfo, error) {
 	initRegions, err := GetRegions()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	err = db.CreateTable(1)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	nowRegions, err := GetRegions()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	region, err := GetNewRegionInfo(initRegions, nowRegions)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	log.Infof("new region is %d", region.ID)
 
 	tableRegionInfo, err := FindNewTableRegion(region)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	log.Infof("new table region is %d", tableRegionInfo.ID)
 
@@ -86,7 +87,7 @@ func FindNewSplitRegion(regions []*RegionInfo, origin *RegionInfo) (*RegionInfo,
 		if item.StartKey == find {
 			region, err := GetRegionInfo(item.ID)
 			if err != nil {
-				return nil, err
+				return nil, errors.Trace(err)
 			}
 			return region, nil
 		}
@@ -98,14 +99,14 @@ func FindNewSplitRegion(regions []*RegionInfo, origin *RegionInfo) (*RegionInfo,
 func FindNewTableRegion(region *RegionInfo) (*RegionInfo, error) {
 	regions, err := GetRegions()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	for _, item := range regions {
 		if item.StartKey == region.EndKey {
 			region, err := GetRegionInfo(item.ID)
 			if err != nil {
-				return nil, err
+				return nil, errors.Trace(err)
 			}
 			return region, nil
 		}
@@ -130,7 +131,7 @@ func GetNewRegionInfo(old, new []*RegionInfo) (*RegionInfo, error) {
 	for _, s := range set {
 		region, err := GetRegionInfo(s.ID)
 		if err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		return region, nil
 	}
@@ -203,9 +204,59 @@ func StartShuffleRegions() error {
 func StopShuffleRegions() error {
 	path := schedulersPrefix + "/shuffle-region-scheduler"
 	_, err := doRequest(path, http.MethodDelete)
-	return err
+	return errors.Trace(err)
 }
 
 func Clean() {
 	conn.Close()
+}
+
+func checkRegionsTableID(tableID int64, one, other uint64) error {
+	regions, err := GetRegions()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, region := range regions {
+		if region.ID == one || region.ID == other {
+			continue
+		}
+		key := Key{}
+		fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
+		if key.TableID() == tableID {
+			return fmt.Errorf("table id has changed")
+		}
+	}
+
+	return nil
+}
+
+func GetTableID(region *RegionInfo) int64 {
+	key := Key{}
+	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
+	return key.TableID()
+}
+
+func DiffTableRegions(prevRegions, nowRegions []*RegionInfo, tableID int64) (int, int) {
+	add := 0
+
+	set := make(map[uint64]struct{})
+
+	for _, region := range prevRegions {
+		id := GetTableID(region)
+		if id == tableID {
+			set[region.ID] = struct{}{}
+		}
+	}
+
+	for _, region := range nowRegions {
+		id := GetTableID(region)
+		if _, ok := set[region.ID]; ok {
+			delete(set, region.ID)
+		} else {
+			add++
+		}
+	}
+
+	return add, len(set)
 }

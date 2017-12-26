@@ -211,12 +211,16 @@ func (db *DB) InsertUntilMerge(oneRegion, otherRegion *RegionInfo) error {
 		log.Infof("[region %d] one region's approximate size is %d", one.ID, one.ApproximateSize)
 		log.Infof("[region %d] other region's approximate size is %d", other.ID, other.ApproximateSize)
 
-		key := Key{}
-		fmt.Sscanf("\""+one.StartKey+"\"", "%q", &key)
-		if key.TableID() != tableID {
-			return fmt.Errorf("table id has changed")
+		if one.StartKey != oneRegion.StartKey || one.EndKey != oneRegion.EndKey {
+			return fmt.Errorf("region %d's key range has changed", one.ID)
+		} else if other.StartKey != otherRegion.StartKey || other.EndKey != otherRegion.EndKey {
+			return fmt.Errorf("region %d's key range has changed", other.ID)
 		}
 
+		if err = checkRegionsTableID(tableID, one.ID, other.ID); err != nil {
+			return errors.Trace(err)
+		}
+		oneRegion, otherRegion = one, other
 	}
 }
 

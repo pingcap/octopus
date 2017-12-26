@@ -13,15 +13,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-test/merge_test/util"
+	"github.com/pingcap/octopus/stability-tester/merge_test/util"
 )
 
 var (
@@ -80,6 +82,12 @@ func main() {
 
 	log.Infof("check shuffle...")
 	err = checkShuffle(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
+
+	log.Info("check speed...")
+	err = checkSpeed(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
@@ -265,7 +273,7 @@ func checkInsertAndDelete(db *util.DB) error {
 }
 
 func checkShuffle(db *util.DB) error {
-	err := db.CreateTable(10)
+	err := db.CreateTable(1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -352,4 +360,57 @@ func checkShuffle(db *util.DB) error {
 	}
 
 	return nil
+}
+
+func checkSpeed(db *util.DB) error {
+	for i := 1; i <= 10; i++ {
+		tableRegion, err := util.CreateNewRegion(db)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		tableID := util.GetTableID(tableRegion)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		for i := 0; i < concurrency; i++ {
+			go func(ctx context.Context) {
+				wg.Add(1)
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+
+					err := db.InsertBatch(id-1, 20)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+				}
+			}(ctx)
+		}
+
+		time.Sleep(time.Minute * 5)
+		cancel()
+		wg.Wait()
+
+		db.DropTable()
+
+		begin := time.Now()
+		prevRegions, err := util.GetRegions()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		go func() {
+			time.Sleep(time.Second * 60)
+			nowRegions, err := util.GetRegions()
+			add, delete := util.DiffTableRegions(prevRegions, nowRegions, tableID)
+			log.Infof("table %d add %d regions and delete %d regions %d seconds after drop table", i, add, delete, time.Since(begin).Seconds())
+			prevRegions = nowRegions
+		}()
+	}
 }
