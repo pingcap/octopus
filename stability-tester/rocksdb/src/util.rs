@@ -270,29 +270,9 @@ impl ReadableDuration {
         ReadableDuration(Duration::new(secs, 0))
     }
 
-    // pub fn millis(millis: u64) -> ReadableDuration {
-    //     ReadableDuration(Duration::new(
-    //         millis / 1000,
-    //         (millis % 1000) as u32 * 1_000_000,
-    //     ))
-    // }
-
     pub fn minutes(minutes: u64) -> ReadableDuration {
         ReadableDuration::secs(minutes * 60)
     }
-
-    // pub fn hours(hours: u64) -> ReadableDuration {
-    //     ReadableDuration::minutes(hours * 60)
-    // }
-
-    // pub fn as_secs(&self) -> u64 {
-    //     self.0.as_secs()
-    // }
-
-    // pub fn as_millis(&self) -> u64 {
-    //     let nanos = self.0.subsec_nanos() as u64;
-    //     self.0.as_secs() * 1_000 + (nanos / 1_000_000)
-    // }
 }
 
 impl Serialize for ReadableDuration {
@@ -455,32 +435,6 @@ numeric_enum_mod!{recovery_mode_serde DBRecoveryMode {
     PointInTime = 2,
     SkipAnyCorruptedRecords = 3,
 }}
-
-// pub struct FixedPrefixSliceTransform {
-//     pub prefix_len: usize,
-// }
-
-// impl FixedPrefixSliceTransform {
-//     pub fn new(prefix_len: usize) -> FixedPrefixSliceTransform {
-//         FixedPrefixSliceTransform {
-//             prefix_len: prefix_len,
-//         }
-//     }
-// }
-
-// impl SliceTransform for FixedPrefixSliceTransform {
-//     fn transform<'a>(&mut self, key: &'a [u8]) -> &'a [u8] {
-//         &key[..self.prefix_len]
-//     }
-
-//     fn in_domain(&mut self, key: &[u8]) -> bool {
-//         key.len() >= self.prefix_len
-//     }
-
-//     fn in_range(&mut self, _: &[u8]) -> bool {
-//         true
-//     }
-// }
 
 pub struct FixedSuffixSliceTransform {
     pub suffix_len: usize,

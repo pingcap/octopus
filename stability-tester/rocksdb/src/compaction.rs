@@ -32,6 +32,20 @@ fn do_check_count(db: &DB, expected: u64) {
     }
 }
 
+fn do_check_kv(db: &DB, k_start: u64, k_end: u64, val: &[u8]) {
+    for cf in ALL_CFS {
+        let cf_handle = db.cf_handle(cf).unwrap();
+        for i in k_start..k_end {
+            assert_eq!(
+                db.get_cf(cf_handle, make_key(i).as_bytes())
+                    .unwrap()
+                    .unwrap(),
+                val
+            );
+        }
+    }
+}
+
 fn test_rocksdb_compaction_in_memtable() {
     let path = TempDir::new("_rocksdb_compaction_in_memtable").unwrap();
     let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
@@ -49,13 +63,14 @@ fn test_rocksdb_compaction_in_memtable() {
     }
     db.compact_range(None, None);
     do_check_count(&db, total);
+    do_check_kv(&db, 0, total, val);
 }
 
-fn test_rocksdb_compaction_cross_level() {
-    let path = TempDir::new("_rocksdb_compaction_cross_level").unwrap();
+fn test_rocksdb_compaction_cross_level_case1() {
+    let path = TempDir::new("_rocksdb_compaction_cross_level_case1").unwrap();
     let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
 
-    let total = 15;
+    let total = 32;
     for cf in ALL_CFS {
         let cf_handle = db.cf_handle(cf).unwrap();
         for _ in 0..10 {
@@ -67,9 +82,36 @@ fn test_rocksdb_compaction_cross_level() {
     }
     db.compact_range(None, None);
     do_check_count(&db, total);
+    do_check_exist(&db, 0, total, 0);
+}
+
+fn test_rocksdb_compaction_cross_level_case2() {
+    let path = TempDir::new("_rocksdb_compaction_cross_level_case2").unwrap();
+    let db = new_rocksdb(path.path().to_str().unwrap()).unwrap();
+
+    let total = 32;
+    for cf in ALL_CFS {
+        let cf_handle = db.cf_handle(cf).unwrap();
+        for _ in 0..10 {
+            for i in 0..total {
+                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes()).unwrap();
+            }
+            db.flush(true).unwrap();
+        }
+    }
+    for cf in ALL_CFS {
+        let cf_handle = db.cf_handle(cf).unwrap();
+        for i in 0..(total / 2) {
+            db.delete_cf(cf_handle, make_key(i).as_bytes()).unwrap();
+        }
+    }
+    db.compact_range(None, None);
+    do_check_count(&db, total / 2);
+    do_check_exist(&db, total / 2, total, total / 2);
 }
 
 pub fn test_rocksdb_compaction() {
     test_rocksdb_compaction_in_memtable();
-    test_rocksdb_compaction_cross_level();
+    test_rocksdb_compaction_cross_level_case1();
+    test_rocksdb_compaction_cross_level_case2();
 }

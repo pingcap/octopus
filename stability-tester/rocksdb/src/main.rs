@@ -24,10 +24,12 @@ mod basic;
 mod ingest_sst;
 mod delete_range;
 mod compaction;
+mod batch;
 
 fn main() {
     basic::test_rocksdb_basic();
     ingest_sst::test_rocksdb_ingest_sst();
     delete_range::test_rocksdb_delete_range();
     compaction::test_rocksdb_compaction();
+    batch::test_rocksdb_writebatch();
 }

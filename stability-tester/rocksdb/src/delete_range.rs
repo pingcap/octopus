@@ -49,7 +49,7 @@ fn test_rocksdb_delete_range_for_level0() {
         let cf_handle = db.cf_handle(cf).unwrap();
         let mut i = beg;
         while i < end {
-            for j in 0..10 {
+            for _ in 0..10 {
                 db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes());
                 i += 1;
             }
@@ -72,15 +72,15 @@ fn test_rocksdb_delete_cross_level() {
         let mut i = beg;
         // write to level 0 and level 1
         while i < end {
-            for j in 0..10 {
-                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes());
+            for _ in 0..10 {
+                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes()).unwrap();
                 i += 1;
             }
             db.flush(true).unwrap();
         }
         // write to memtable
         for j in beg..end {
-            db.put_cf(cf_handle, make_key(j).as_bytes(), make_val(j).as_bytes());
+            db.put_cf(cf_handle, make_key(j).as_bytes(), make_val(j).as_bytes()).unwrap();
         }
     }
     do_delete_range(&db, beg + 10, end - 10);

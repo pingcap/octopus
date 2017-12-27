@@ -3,7 +3,6 @@
 name = "rocksdb_stability_test"
 description = "A suite to test RocksDB's stability"
 version = "0.0.0"
-author = ["UncP<uncp.xu@gmail.com>"]
 
 [dependencies]
 serde = "1.0"

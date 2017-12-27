@@ -19,12 +19,12 @@ use rocksdb::*;
 pub const NUM: u64 = 100000;
 
 pub fn make_key(key: u64) -> String {
-    let key = format!("kkkkkkkk{}", key);
+    let key = format!("kkkkkkkk{}00000000", key);
     key
 }
 
 pub fn make_val(val: u64) -> String {
-    let val = format!("vvvvvvvv{}", val);
+    let val = format!("vvvvvvvv{}00000000", val);
     val
 }
 
