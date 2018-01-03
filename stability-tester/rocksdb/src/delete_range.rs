@@ -50,7 +50,7 @@ fn test_rocksdb_delete_range_for_level0() {
         let mut i = beg;
         while i < end {
             for _ in 0..10 {
-                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes());
+                db.put_cf(cf_handle, make_key(i).as_bytes(), make_val(i).as_bytes()).unwrap();
                 i += 1;
             }
             db.flush(true).unwrap();
