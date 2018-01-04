@@ -212,8 +212,9 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 	for {
 		time.Sleep(time.Second * 60)
 
-		isMerge, isChange := false, false
-		for i, region := range tableRegions {
+		isMerge := false
+		for i := len(tableRegions) - 1; i >= 0; i-- {
+			region := tableRegions[i]
 			nowRegion, err := GetRegionInfo(region.ID)
 			if err != nil {
 				return errors.Trace(err)
@@ -221,25 +222,20 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 
 			if nowRegion.ID == 0 {
 				isMerge = true
+				tableRegions = append(tableRegions[:i], tableRegions[i+1:]...)
 				log.Infof("region %d was merged", region.ID)
+				continue
 			}
 
 			if GetTableID(nowRegion) != tableID {
 				return fmt.Errorf("region %d's tableID has changed", region.ID)
 			}
 
-			if nowRegion.StartKey != region.StartKey || nowRegion.EndKey != region.EndKey {
-				isChange = true
-				log.Infof("region %d's key range has changed", region.ID)
-			}
-
 			log.Infof("[region %d] approximate size is %d", nowRegion.ID, nowRegion.ApproximateSize)
 			tableRegions[i] = nowRegion
 		}
 
-		if !isMerge && isChange {
-			return fmt.Errorf("region change unexpectedly when insert")
-		} else if isMerge && isChange {
+		if isMerge && len(tableRegions) == 1 {
 			return nil
 		}
 
@@ -268,14 +264,24 @@ func (db *DB) InsertBatch(tableId int, batchSize int) error {
 }
 
 func (db *DB) deleteBatch() error {
-	flag--
 	sql := fmt.Sprintf(`use merge_test; DELETE FROM table%d WHERE flag=%d;`, id-1, flag)
 	_, err := db.Exec(sql)
 	return errors.Trace(err)
 }
 
 func (db *DB) DeleteAll() error {
-	for flag != 1 {
+	for flag > 1 {
+		flag--
+		if err := db.deleteBatch(); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+func (db *DB) DeletePartial() error {
+	for flag > 1 {
+		flag -= 2
 		if err := db.deleteBatch(); err != nil {
 			return errors.Trace(err)
 		}

@@ -54,11 +54,11 @@ func main() {
 	// 	log.Fatal(errors.ErrorStack(err))
 	// }
 
-	log.Infof("check split table region mannualy...")
-	err = checkSplitTableRegion(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Infof("check split table region mannualy...")
+	// err = checkSplitTableRegion(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
 	log.Infof("check drop table...")
 	err = checkDropTable(db)
@@ -66,8 +66,14 @@ func main() {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check insert and delete table region...")
-	err = checkInsertAndDelete(db)
+	log.Infof("check insert and delete all rows of table ...")
+	err = checkInsertAndDeleteAll(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
+
+	log.Infof("check insert and delete partial rows of table ...")
+	err = checkInsertAndDeletePartial(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
@@ -232,7 +238,7 @@ func checkDropTable(db *util.DB) error {
 	return cleanTableData(db, callback)
 }
 
-func checkInsertAndDelete(db *util.DB) error {
+func checkInsertAndDeleteAll(db *util.DB) error {
 	callback := func(regions []*util.RegionInfo) error {
 		for _, region := range regions {
 			nowRegion, err := util.GetRegionInfo(region.ID)
@@ -243,6 +249,36 @@ func checkInsertAndDelete(db *util.DB) error {
 		}
 
 		err := db.DeleteAll()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		time.Sleep(time.Second * 60)
+
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d after delete", nowRegion.ID, nowRegion.ApproximateSize)
+		}
+		return nil
+	}
+
+	return cleanTableData(db, callback)
+}
+
+func checkInsertAndDeletePartial(db *util.DB) error {
+	callback := func(regions []*util.RegionInfo) error {
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d before delete", nowRegion.ID, nowRegion.ApproximateSize)
+		}
+
+		err := db.DeletePartial()
 		if err != nil {
 			return errors.Trace(err)
 		}
