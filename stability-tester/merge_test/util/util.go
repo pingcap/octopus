@@ -50,13 +50,7 @@ func CreateNewRegion(db *DB) (*RegionInfo, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	region, err := GetNewRegionInfo(initRegions, nowRegions)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	log.Infof("new region is %d", region.ID)
-
-	tableRegionInfo, err := FindNewTableRegion(region)
+	tableRegionInfo, err := GetNewTableRegion(initRegions, nowRegions)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -87,36 +81,17 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 	return find, nil
 }
 
-func FindNewTableRegion(region *RegionInfo) (*RegionInfo, error) {
-	regions, err := GetRegions()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	for _, item := range regions {
-		if item.StartKey == region.EndKey {
-			region, err := GetRegionInfo(item.ID)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return region, nil
-		}
-	}
-
-	return nil, fmt.Errorf("can not find new table reigon")
-}
-
-func GetNewRegionInfo(old, new []*RegionInfo) (*RegionInfo, error) {
-	set := make(map[uint64]*RegionInfo)
+func GetNewTableRegion(old, new []*RegionInfo) (*RegionInfo, error) {
+	set := make(map[int64]*RegionInfo)
 	for _, n := range new {
-		set[n.ID] = n
+		set[GetTableID(n)] = n
 	}
 	for _, o := range old {
-		delete(set, o.ID)
+		delete(set, GetTableID(o))
 	}
 
 	if len(set) != 1 {
-		return nil, fmt.Errorf("get %v new region, expect only one", len(set))
+		return nil, fmt.Errorf("get %v new table ids, expect only one", len(set))
 	}
 
 	for _, s := range set {
@@ -138,10 +113,10 @@ func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
 	return false
 }
 
-func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) error {
+func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionInfo, error) {
 	regions, err := GetRegions()
 	if err != nil {
-		return errors.Trace(err)
+		return tableRegions, errors.Trace(err)
 	}
 
 	set := make(map[uint64]struct{})
@@ -154,11 +129,12 @@ func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) error {
 			continue
 		}
 		if GetTableID(region) == tableID {
-			return fmt.Errorf("unexpected table id of region %d", region.ID)
+			tableRegions = append(tableRegions, region)
+			log.Infof("insert new region %d for table", region.ID)
 		}
 	}
 
-	return nil
+	return tableRegions, nil
 }
 
 func GetTableID(region *RegionInfo) int64 {

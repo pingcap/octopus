@@ -198,7 +198,7 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 				default:
 				}
 
-				err := db.InsertBatch(id-2, 20)
+				err := db.InsertBatch(id-2, 1000)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -235,11 +235,13 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 			tableRegions[i] = nowRegion
 		}
 
-		if isMerge && len(tableRegions) == 1 {
+		if isMerge && len(tableRegions) <= 1 {
 			return nil
 		}
 
-		if err := checkRegionsTableID(tableID, tableRegions); err != nil {
+		var err error
+		tableRegions, err = checkRegionsTableID(tableID, tableRegions)
+		if err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -253,7 +255,7 @@ func (db *DB) InsertBatch(tableId int, batchSize int) error {
 	for i := 0; i < batchSize; i++ {
 		values[i] = fmt.Sprintf(`(%d,%d,%d`, rand.Int31n(100000), flag, now)
 		for j := 1; j <= 30; j++ {
-			values[i] += fmt.Sprintf(",\"%s\"", randSeq(255))
+			values[i] += fmt.Sprintf(",\"%s\"", randSeq(1024))
 		}
 		values[i] += ")"
 	}
