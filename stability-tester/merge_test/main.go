@@ -31,12 +31,28 @@ var (
 	user     = flag.String("user", "root", "DB user")
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
+	print    = flag.Bool("print", false, "print regions detail info")
 )
 
 const deleteBatch = 100
 
 func main() {
 	flag.Parse()
+
+	util.PdAddr = *pd
+
+	if *print {
+		regions, _ := util.GetRegions()
+
+		for _, region := range regions {
+			detail, _ := util.GetRegionInfo(region.ID)
+			if detail.Leader.StoreId == 1 {
+				fmt.Printf("%v", detail)
+			}
+		}
+
+		return
+	}
 
 	rand.Seed(time.Now().UnixNano())
 
@@ -45,8 +61,6 @@ func main() {
 		log.Fatal(errors.ErrorStack(err))
 	}
 	defer db.Close()
-
-	util.PdAddr = *pd
 
 	// log.Infof("check create table...")
 	// err = checkCreateTable(db)
@@ -60,11 +74,11 @@ func main() {
 	// 	log.Fatal(errors.ErrorStack(err))
 	// }
 
-	log.Infof("check drop table...")
-	err = checkDropTable(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Infof("check drop table...")
+	// err = checkDropTable(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
 	log.Infof("check insert and delete all rows of table ...")
 	err = checkInsertAndDeleteAll(db)
