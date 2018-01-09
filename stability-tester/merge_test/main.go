@@ -74,11 +74,11 @@ func main() {
 	// 	log.Fatal(errors.ErrorStack(err))
 	// }
 
-	// log.Infof("check drop table...")
-	// err = checkDropTable(db)
-	// if err != nil {
-	// 	log.Fatal(errors.ErrorStack(err))
-	// }
+	log.Infof("check drop table...")
+	err = checkDropTable(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
 
 	log.Infof("check insert and delete all rows of table ...")
 	err = checkInsertAndDeleteAll(db)
@@ -212,13 +212,6 @@ func cleanTableData(db *util.DB, fn func([]*util.RegionInfo) error) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	// wait to merge
-	err = db.InsertUntilMerge(tableRegions)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	return nil
 }
 
@@ -245,6 +238,13 @@ func checkDropTable(db *util.DB) error {
 				return errors.Trace(err)
 			}
 			log.Infof("[region %d] approximate size is %d after drop", nowRegion.ID, nowRegion.ApproximateSize)
+		}
+		log.Info("------------------------------------------------")
+
+		// wait to merge
+		err = db.InsertUntilMerge(regions)
+		if err != nil {
+			return errors.Trace(err)
 		}
 		return nil
 	}
@@ -276,6 +276,13 @@ func checkInsertAndDeleteAll(db *util.DB) error {
 			}
 			log.Infof("[region %d] approximate size is %d after delete", nowRegion.ID, nowRegion.ApproximateSize)
 		}
+		log.Info("------------------------------------------------")
+
+		// wait to merge
+		err = db.InsertUntilMerge(regions)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		return nil
 	}
 
@@ -306,6 +313,13 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 			}
 			log.Infof("[region %d] approximate size is %d after delete", nowRegion.ID, nowRegion.ApproximateSize)
 		}
+
+		// wait to merge
+		err = db.InsertUntilTimeout(regions, 30*time.Minute)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
 		return nil
 	}
 
@@ -391,10 +405,9 @@ func checkSpeed(db *util.DB) error {
 			cancel()
 		}()
 
-		err = db.Insert(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		wg := db.InsertIntoNewTable(ctx, 1000)
+		wg.Wait()
+
 		err = db.DropTable()
 		if err != nil {
 			return errors.Trace(err)

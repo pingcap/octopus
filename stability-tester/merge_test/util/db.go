@@ -101,33 +101,6 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 	return &DB{DB: db}, nil
 }
 
-func (db *DB) Insert(ctx context.Context) error {
-	var wg sync.WaitGroup
-	flag = 1
-	for i := 0; i < concurrency; i++ {
-		go func(ctx context.Context) {
-			wg.Add(1)
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				err := db.InsertBatch(id-1, 100)
-				if err != nil {
-					log.Fatal(err)
-				}
-				flag++
-			}
-		}(ctx)
-	}
-
-	wg.Wait()
-	return nil
-}
-
 func (db *DB) InsertUntilSplit(regionID uint64) error {
 	time.Sleep(time.Second * 10)
 	originRegion, err := GetRegionInfo(regionID)
@@ -135,26 +108,10 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 		return errors.Trace(err)
 	}
 
-	flag = 1
 	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	go func(ctx context.Context) {
-		wg.Add(1)
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			err := db.InsertBatch(id-1, 100)
-			if err != nil {
-				log.Fatal(err)
-			}
-			flag++
-		}
-	}(ctx)
+	wg := db.Insert(ctx, id-1, 100)
+	defer wg.Wait()
+	defer cancel()
 
 	for {
 		nowRegion, err := GetRegionInfo(regionID)
@@ -166,13 +123,13 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 
 		if nowRegion.StartKey != originRegion.StartKey || nowRegion.EndKey != originRegion.EndKey {
 			log.Infof("[region %d] region split", regionID)
-			cancel()
 			break
 		}
 
 		time.Sleep(time.Second * 60)
 	}
-	wg.Wait()
+	log.Info("------------------------------------------------")
+
 	return nil
 }
 
@@ -186,26 +143,7 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 		}
 	}
 
-	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		go func(ctx context.Context) {
-			wg.Add(1)
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				err := db.InsertBatch(id-2, 1000)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-			}
-		}(ctx)
-	}
+	wg := db.Insert(ctx, id-2, 200)
 	defer wg.Wait()
 	defer cancel()
 
@@ -234,7 +172,7 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 			log.Infof("[region %d] approximate size is %d", nowRegion.ID, nowRegion.ApproximateSize)
 			tableRegions[i] = nowRegion
 		}
-
+		log.Info("------------------------------------------------")
 		if isMerge && len(tableRegions) <= 1 {
 			return nil
 		}
@@ -247,7 +185,79 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 	}
 }
 
-func (db *DB) InsertBatch(tableId int, batchSize int) error {
+func (db *DB) InsertUntilTimeout(tableRegions []*RegionInfo, timeout time.Duration) error {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	tableID := GetTableID(tableRegions[0])
+	for _, region := range tableRegions {
+		if GetTableID(region) != tableID {
+			return fmt.Errorf("unexpected table regions")
+		}
+	}
+
+	wg := db.Insert(ctx, id-2, 200)
+	defer wg.Wait()
+	defer cancel()
+
+	for _, region := range tableRegions {
+		nowRegion, err := GetRegionInfo(region.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Infof("[region %d] approximate size is %d", nowRegion.ID, nowRegion.ApproximateSize)
+	}
+	log.Info("------------------------------------------------")
+
+	time.Sleep(timeout)
+
+	for _, region := range tableRegions {
+		nowRegion, err := GetRegionInfo(region.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if nowRegion.ID == 0 {
+			log.Infof("[region %d] was merged", region.ID)
+			continue
+		}
+		log.Infof("[region %d] approximate size is %d", nowRegion.ID, nowRegion.ApproximateSize)
+	}
+	log.Info("------------------------------------------------")
+
+	return nil
+}
+
+func (db *DB) InsertIntoNewTable(ctx context.Context, batchSize int) *sync.WaitGroup {
+	return db.Insert(ctx, id-1, batchSize)
+}
+
+func (db *DB) Insert(ctx context.Context, tableId int, batchSize int) *sync.WaitGroup {
+	var wg sync.WaitGroup
+	flag = 1
+	for i := 0; i < concurrency; i++ {
+		go func(ctx context.Context) {
+			wg.Add(1)
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				err := db.insertBatch(tableId, batchSize)
+				if err != nil {
+					log.Fatal(err)
+				}
+				flag++
+			}
+		}(ctx)
+	}
+
+	return &wg
+}
+
+func (db *DB) insertBatch(tableId int, batchSize int) error {
 	now := time.Now().Unix()
 	table := fmt.Sprintf("table%d", tableId)
 
@@ -255,7 +265,7 @@ func (db *DB) InsertBatch(tableId int, batchSize int) error {
 	for i := 0; i < batchSize; i++ {
 		values[i] = fmt.Sprintf(`(%d,%d,%d`, rand.Int31n(100000), flag, now)
 		for j := 1; j <= 30; j++ {
-			values[i] += fmt.Sprintf(",\"%s\"", randSeq(1024))
+			values[i] += fmt.Sprintf(",\"%s\"", randSeq(255))
 		}
 		values[i] += ")"
 	}
