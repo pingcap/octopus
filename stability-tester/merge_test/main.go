@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -31,7 +32,6 @@ var (
 	user     = flag.String("user", "root", "DB user")
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
-	print    = flag.Bool("print", false, "print regions detail info")
 )
 
 const deleteBatch = 100
@@ -41,19 +41,6 @@ func main() {
 
 	util.PdAddr = *pd
 
-	if *print {
-		regions, _ := util.GetRegions()
-
-		for _, region := range regions {
-			detail, _ := util.GetRegionInfo(region.ID)
-			if detail.Leader.StoreId == 1 {
-				fmt.Printf("%v", detail)
-			}
-		}
-
-		return
-	}
-
 	rand.Seed(time.Now().UnixNano())
 
 	db, err := util.InitDB(*user, *password, *host, *port)
@@ -62,17 +49,17 @@ func main() {
 	}
 	defer db.Close()
 
-	// log.Infof("check create table...")
-	// err = checkCreateTable(db)
-	// if err != nil {
-	// 	log.Fatal(errors.ErrorStack(err))
-	// }
+	log.Infof("check create table...")
+	err = checkCreateTable(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
 
-	// log.Infof("check split table region mannualy...")
-	// err = checkSplitTableRegion(db)
-	// if err != nil {
-	// 	log.Fatal(errors.ErrorStack(err))
-	// }
+	log.Infof("check split table region mannualy...")
+	err = checkSplitTableRegion(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
 
 	log.Infof("check drop table...")
 	err = checkDropTable(db)
@@ -313,6 +300,7 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 			}
 			log.Infof("[region %d] approximate size is %d after delete", nowRegion.ID, nowRegion.ApproximateSize)
 		}
+		log.Info("------------------------------------------------")
 
 		// wait to merge
 		err = db.InsertUntilTimeout(regions, 30*time.Minute)
@@ -391,10 +379,12 @@ func checkShuffle(db *util.DB) error {
 }
 
 func checkSpeed(db *util.DB) error {
+	var wg sync.WaitGroup
+
 	for i := 1; i <= 10; i++ {
 		tableRegion, err := util.CreateNewRegion(db)
 		if err != nil {
-			return errors.Trace(err)
+			continue
 		}
 
 		tableID := util.GetTableID(tableRegion)
@@ -405,8 +395,14 @@ func checkSpeed(db *util.DB) error {
 			cancel()
 		}()
 
-		wg := db.InsertIntoNewTable(ctx, 1000)
-		wg.Wait()
+		db.InsertIntoNewTable(ctx, 200)
+
+		time.Sleep(time.Second * 60)
+
+		tableRegions, err := util.FindNewSplitRegions(tableRegion)
+		if err != nil {
+			return errors.Trace(err)
+		}
 
 		err = db.DropTable()
 		if err != nil {
@@ -414,22 +410,59 @@ func checkSpeed(db *util.DB) error {
 		}
 
 		begin := time.Now()
-		prevRegions, err := util.GetRegions()
-		if err != nil {
-			return errors.Trace(err)
-		}
 
 		go func() {
-			time.Sleep(time.Second * 60)
-			nowRegions, err := util.GetRegions()
-			if err != nil {
-				log.Fatal(err)
+			wg.Add(1)
+			defer wg.Done()
+
+			for {
+				time.Sleep(time.Second * 60)
+
+				prevCount := len(tableRegions)
+				for i := len(tableRegions) - 1; i >= 0; i-- {
+					region := tableRegions[i]
+					nowRegion, err := util.GetRegionInfo(region.ID)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					if nowRegion.ID == 0 {
+						tableRegions = append(tableRegions[:i], tableRegions[i+1:]...)
+						continue
+					}
+
+					tableRegions[i] = nowRegion
+				}
+				if len(tableRegions) <= 1 {
+					log.Infof("table %d has merged all regions into one, %v seconds after drop table", tableID, time.Since(begin).Seconds())
+					return
+				}
+
+				var err error
+				tableRegions, err = util.CheckRegionsTableID(tableID, tableRegions)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if len(tableRegions) != prevCount {
+					log.Infof("table %d has %d regions, %v seconds after drop table", tableID, len(tableRegions), time.Since(begin).Seconds())
+				}
 			}
-			add, delete := util.DiffTableRegions(prevRegions, nowRegions, tableID)
-			log.Infof("table %d add %d regions and delete %d regions %d seconds after drop table", i, add, delete, time.Since(begin).Seconds())
-			prevRegions = nowRegions
 		}()
 	}
+
+	err := db.CreateTable(1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		wg.Wait()
+		cancel()
+	}()
+
+	db.InsertIntoNewTable(ctx, 200)
 
 	return nil
 }

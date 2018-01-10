@@ -62,8 +62,6 @@ var (
 		reserved29 text,
 		reserved30 text
 	);`
-	id   = 1
-	flag = 1
 )
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -80,6 +78,8 @@ const concurrency = 500
 
 type DB struct {
 	*sql.DB
+	id   int
+	flag int
 }
 
 func InitDB(user, password, host string, port int) (*DB, error) {
@@ -98,7 +98,7 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &DB{DB: db}, nil
+	return &DB{DB: db, id: 1, flag: 1}, nil
 }
 
 func (db *DB) InsertUntilSplit(regionID uint64) error {
@@ -109,7 +109,7 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	wg := db.Insert(ctx, id-1, 100)
+	wg := db.Insert(ctx, db.id-1, 100)
 	defer wg.Wait()
 	defer cancel()
 
@@ -143,7 +143,7 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 		}
 	}
 
-	wg := db.Insert(ctx, id-2, 200)
+	wg := db.Insert(ctx, db.id-2, 200)
 	defer wg.Wait()
 	defer cancel()
 
@@ -178,7 +178,7 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 		}
 
 		var err error
-		tableRegions, err = checkRegionsTableID(tableID, tableRegions)
+		tableRegions, err = CheckRegionsTableID(tableID, tableRegions)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -195,7 +195,7 @@ func (db *DB) InsertUntilTimeout(tableRegions []*RegionInfo, timeout time.Durati
 		}
 	}
 
-	wg := db.Insert(ctx, id-2, 200)
+	wg := db.Insert(ctx, db.id-2, 200)
 	defer wg.Wait()
 	defer cancel()
 
@@ -227,13 +227,14 @@ func (db *DB) InsertUntilTimeout(tableRegions []*RegionInfo, timeout time.Durati
 	return nil
 }
 
-func (db *DB) InsertIntoNewTable(ctx context.Context, batchSize int) *sync.WaitGroup {
-	return db.Insert(ctx, id-1, batchSize)
+func (db *DB) InsertIntoNewTable(ctx context.Context, batchSize int) {
+	wg := db.Insert(ctx, db.id-1, batchSize)
+	wg.Wait()
 }
 
 func (db *DB) Insert(ctx context.Context, tableId int, batchSize int) *sync.WaitGroup {
 	var wg sync.WaitGroup
-	flag = 1
+	db.flag = 1
 	for i := 0; i < concurrency; i++ {
 		go func(ctx context.Context) {
 			wg.Add(1)
@@ -249,7 +250,7 @@ func (db *DB) Insert(ctx context.Context, tableId int, batchSize int) *sync.Wait
 				if err != nil {
 					log.Fatal(err)
 				}
-				flag++
+				db.flag++
 			}
 		}(ctx)
 	}
@@ -263,7 +264,7 @@ func (db *DB) insertBatch(tableId int, batchSize int) error {
 
 	values := make([]string, batchSize)
 	for i := 0; i < batchSize; i++ {
-		values[i] = fmt.Sprintf(`(%d,%d,%d`, rand.Int31n(100000), flag, now)
+		values[i] = fmt.Sprintf(`(%d,%d,%d`, rand.Int31n(100000), db.flag, now)
 		for j := 1; j <= 30; j++ {
 			values[i] += fmt.Sprintf(",\"%s\"", randSeq(255))
 		}
@@ -276,14 +277,14 @@ func (db *DB) insertBatch(tableId int, batchSize int) error {
 }
 
 func (db *DB) deleteBatch() error {
-	sql := fmt.Sprintf(`use merge_test; DELETE FROM table%d WHERE flag=%d;`, id-1, flag)
+	sql := fmt.Sprintf(`use merge_test; DELETE FROM table%d WHERE flag=%d;`, db.id-1, db.flag)
 	_, err := db.Exec(sql)
 	return errors.Trace(err)
 }
 
 func (db *DB) DeleteAll() error {
-	for flag > 1 {
-		flag--
+	for db.flag > 1 {
+		db.flag--
 		if err := db.deleteBatch(); err != nil {
 			return errors.Trace(err)
 		}
@@ -292,8 +293,8 @@ func (db *DB) DeleteAll() error {
 }
 
 func (db *DB) DeletePartial() error {
-	for flag > 1 {
-		flag -= 2
+	for db.flag > 1 {
+		db.flag -= 2
 		if err := db.deleteBatch(); err != nil {
 			return errors.Trace(err)
 		}
@@ -302,7 +303,7 @@ func (db *DB) DeletePartial() error {
 }
 
 func (db *DB) DropTable() error {
-	sql := fmt.Sprintf(`use merge_test; DROP TABLE table%d;`, id-1)
+	sql := fmt.Sprintf(`use merge_test; DROP TABLE table%d;`, db.id-1)
 	_, err := db.Exec(sql)
 
 	return errors.Trace(err)
@@ -310,8 +311,8 @@ func (db *DB) DropTable() error {
 
 func (db *DB) CreateTable(count int) error {
 	for i := 0; i < count; i++ {
-		query := fmt.Sprintf(createSQL, id)
-		id++
+		query := fmt.Sprintf(createSQL, db.id)
+		db.id++
 		_, err := db.Exec(query)
 		if err != nil {
 			return errors.Trace(err)

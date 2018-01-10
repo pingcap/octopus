@@ -15,6 +15,7 @@ package util
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -45,6 +46,8 @@ func CreateNewRegion(db *DB) (*RegionInfo, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	time.Sleep(time.Second * 60)
 
 	nowRegions, err := GetRegions()
 	if err != nil {
@@ -113,7 +116,7 @@ func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
 	return false
 }
 
-func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionInfo, error) {
+func CheckRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionInfo, error) {
 	regions, err := GetRegions()
 	if err != nil {
 		return tableRegions, errors.Trace(err)
@@ -130,7 +133,7 @@ func checkRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionIn
 		}
 		if GetTableID(region) == tableID {
 			tableRegions = append(tableRegions, region)
-			log.Infof("insert new region %d for table", region.ID)
+			log.Infof("insert new region %d for table %v", region.ID, tableID)
 		}
 	}
 
@@ -141,31 +144,4 @@ func GetTableID(region *RegionInfo) int64 {
 	key := Key{}
 	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
 	return key.TableID()
-}
-
-func DiffTableRegions(prevRegions, nowRegions []*RegionInfo, tableID int64) (int, int) {
-	add := 0
-
-	set := make(map[uint64]struct{})
-
-	for _, region := range prevRegions {
-		id := GetTableID(region)
-		if id == tableID {
-			set[region.ID] = struct{}{}
-		}
-	}
-
-	for _, region := range nowRegions {
-		id := GetTableID(region)
-		if id != tableID {
-			continue
-		}
-		if _, ok := set[region.ID]; ok {
-			delete(set, region.ID)
-		} else {
-			add++
-		}
-	}
-
-	return add, len(set)
 }
