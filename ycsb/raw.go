@@ -16,6 +16,8 @@ package main
 import (
 	"strings"
 
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -43,7 +45,7 @@ func (c *rawKV) InsertRow(key uint64, fields []string) error {
 		cols[i].SetString(v)
 	}
 
-	rowData, err := tablecodec.EncodeRow(cols, colIDs, nil)
+	rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -58,7 +60,7 @@ func (c *rawKV) Clone() Database {
 func setupRawKV(pdAddr string) (Database, error) {
 	// Open connection to server and create a database.
 	tikv.MaxConnectionCount = 128
-	db, err := tikv.NewRawKVClient(strings.Split(pdAddr, ","))
+	db, err := tikv.NewRawKVClient(strings.Split(pdAddr, ","), config.Security{})
 	if err != nil {
 		return nil, err
 	}

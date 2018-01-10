@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -58,7 +59,7 @@ func (c *txnKV) InsertRow(key uint64, fields []string) error {
 		cols[i].SetString(v)
 	}
 
-	rowData, err := tablecodec.EncodeRow(cols, colIDs, nil)
+	rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
 	if err != nil {
 		return err
 	}
