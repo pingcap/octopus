@@ -256,24 +256,13 @@ func (yw *ycsbWorker) runWorker(errCh chan<- error, wg *sync.WaitGroup) {
 	}
 }
 
-var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-// Gnerate a random string of alphabetic characters.
-func (yw *ycsbWorker) randString(length int) string {
-	str := make([]byte, length)
-	for i := range str {
-		str[i] = letters[yw.r.Intn(len(letters))]
-	}
-	return string(str)
-}
-
 func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 	start := time.Now()
 	defer func() { cmdDuration.WithLabelValues("insert").Observe(time.Since(start).Seconds()) }()
 
 	fields := make([]string, numTableFields)
 	for i := 0; i < len(fields); i++ {
-		fields[i] = yw.randString(fieldLength)
+		fields[i] = randString(fieldLength)
 	}
 	if err := yw.db.InsertRow(key, fields); err != nil {
 		return err
