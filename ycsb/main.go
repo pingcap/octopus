@@ -39,7 +39,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
-	"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
@@ -100,9 +99,7 @@ var readOnly int32
 type ycsbWorker struct {
 	db Database
 	// An RNG used to generate random keys
-	zipfR *ZipfGenerator
-	// An RNG used to generate random strings for the values
-	r             *rand.Rand
+	zipfR         *ZipfGenerator
 	readFreq      float32
 	writeFreq     float32
 	scanFreq      float32
@@ -135,7 +132,6 @@ const (
 )
 
 func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsbWorker {
-	source := rand.NewSource(int64(time.Now().UnixNano()))
 	var readFreq, writeFreq, scanFreq float32
 
 	// TODO(arjun): This could be implemented as a token bucket.
@@ -165,10 +161,8 @@ func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsb
 	case "F", "f":
 		writeFreq = 1.0
 	}
-	r := rand.New(source)
 	return &ycsbWorker{
 		db:            db,
-		r:             r,
 		zipfR:         zipfR,
 		readFreq:      readFreq,
 		writeFreq:     writeFreq,
@@ -195,7 +189,7 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() uint64 {
 	var hashedKey uint64
-	key := yw.zipfR.Uint64(yw.r.Float64())
+	key := yw.zipfR.Uint64(Rand.Float64())
 	hashedKey = yw.hashKey(key)
 	return hashedKey
 }
@@ -303,7 +297,7 @@ func (yw *ycsbWorker) scanRows() error {
 
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
-	p := yw.r.Float32()
+	p := Rand.Float32()
 	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.writeFreq {
 		return writeOp
 	}
