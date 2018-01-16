@@ -39,6 +39,7 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
+	"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
@@ -100,6 +101,7 @@ type ycsbWorker struct {
 	db Database
 	// An RNG used to generate random keys
 	zipfR         *ZipfGenerator
+	r             *rand.Rand
 	readFreq      float32
 	writeFreq     float32
 	scanFreq      float32
@@ -163,6 +165,7 @@ func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsb
 	}
 	return &ycsbWorker{
 		db:            db,
+		r:             rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
 		zipfR:         zipfR,
 		readFreq:      readFreq,
 		writeFreq:     writeFreq,
@@ -189,7 +192,7 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() uint64 {
 	var hashedKey uint64
-	key := yw.zipfR.Uint64(Rand.Float64())
+	key := yw.zipfR.Uint64(yw.r.Float64())
 	hashedKey = yw.hashKey(key)
 	return hashedKey
 }
@@ -256,7 +259,7 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 
 	fields := make([]string, numTableFields)
 	for i := 0; i < len(fields); i++ {
-		fields[i] = randString(fieldLength)
+		fields[i] = randString(yw.r, fieldLength)
 	}
 	if err := yw.db.InsertRow(key, fields); err != nil {
 		return err
@@ -297,7 +300,7 @@ func (yw *ycsbWorker) scanRows() error {
 
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
-	p := Rand.Float32()
+	p := yw.r.Float32()
 	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.writeFreq {
 		return writeOp
 	}

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"time"
 
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/mysql"
@@ -31,6 +32,7 @@ import (
 type coprocessor struct {
 	db    kv.Storage
 	table *simpleTable
+	r     *rand.Rand
 }
 
 type simpleTable struct {
@@ -75,13 +77,13 @@ func (t *simpleTable) colIDs() []int64 {
 	return []int64{t.id.ColumnId, t.name.ColumnId, t.score.ColumnId}
 }
 
-func (t *simpleTable) genRowData(handle int64) (data *recordData, err error) {
+func (t *simpleTable) genRowData(handle int64, r *rand.Rand) (data *recordData, err error) {
 	data = &recordData{}
 	colIDs := t.colIDs()
 	data.key = tablecodec.EncodeRowKeyWithHandle(t.tableID, handle)
 	fields := make([]types.Datum, len(colIDs))
 	fields[0].SetInt64(handle)
-	fields[1].SetString(randString(30))
+	fields[1].SetString(randString(r, 30))
 	fields[2].SetInt64(rand.Int63n(1000))
 	data.value, err = tablecodec.EncodeRow(&stmtctx.StatementContext{}, fields, colIDs, nil, nil)
 	return
@@ -122,7 +124,7 @@ type recordData struct {
 
 func (c *coprocessor) InsertRow(key uint64, _fields []string) error {
 	// Simulate TiDB data
-	row, err := c.table.genRowData(int64(key))
+	row, err := c.table.genRowData(int64(key), c.r)
 	if err != nil {
 		return err
 	}
@@ -158,7 +160,11 @@ func (c *coprocessor) ReadRow(key uint64) (has bool, err error) {
 }
 
 func (c *coprocessor) Clone() Database {
-	return c
+	return &coprocessor{
+		db:    c.db,
+		table: c.table,
+		r:     rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
+	}
 }
 
 func setupCoprocessor(pdAddr string) (Database, error) {
@@ -168,6 +174,6 @@ func setupCoprocessor(pdAddr string) (Database, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return &coprocessor{db: db, table: newSimpleTable()}, nil
+	r := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
+	return &coprocessor{db: db, table: newSimpleTable(), r: r}, nil
 }
