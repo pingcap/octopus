@@ -24,7 +24,6 @@ import (
 )
 
 func NewTikvClient(addr string) (tikvpb.TikvClient, *grpc.ClientConn, error) {
-	var err error
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
 		return nil, nil, err

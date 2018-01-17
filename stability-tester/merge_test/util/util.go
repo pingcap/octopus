@@ -33,7 +33,7 @@ func IsSameLocation(one, other []*metapb.Peer) bool {
 		delete(set, item.StoreId)
 	}
 
-	return len(set) == 0
+	return len(set) == 0 && len(one) == len(other)
 }
 
 func CreateNewRegion(db *DB) (*RegionInfo, error) {
@@ -69,7 +69,7 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 	}
 
 	tableID := GetTableID(origin)
-	find := []*RegionInfo{}
+	var find []*RegionInfo
 
 	for _, region := range regions {
 		if GetTableID(region) == tableID {
@@ -84,9 +84,9 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 	return find, nil
 }
 
-func GetNewTableRegion(old, new []*RegionInfo) (*RegionInfo, error) {
+func GetNewTableRegion(old, now []*RegionInfo) (*RegionInfo, error) {
 	set := make(map[int64]*RegionInfo)
-	for _, n := range new {
+	for _, n := range now {
 		set[GetTableID(n)] = n
 	}
 	for _, o := range old {

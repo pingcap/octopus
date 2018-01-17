@@ -22,7 +22,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/merge_test/util"
 )
 
@@ -49,37 +49,37 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Infof("check create table...")
+	log.Info("check create table...")
 	err = checkCreateTable(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check split table region mannualy...")
+	log.Info("check split table region mannualy...")
 	err = checkSplitTableRegion(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check drop table...")
+	log.Info("check drop table...")
 	err = checkDropTable(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check insert and delete all rows of table ...")
+	log.Info("check insert and delete all rows of table ...")
 	err = checkInsertAndDeleteAll(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check insert and delete partial rows of table ...")
+	log.Info("check insert and delete partial rows of table ...")
 	err = checkInsertAndDeletePartial(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("check shuffle...")
+	log.Info("check shuffle...")
 	err = checkShuffle(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
@@ -91,7 +91,7 @@ func main() {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	log.Infof("pass merge test...")
+	log.Info("pass merge test...")
 }
 
 func checkCreateTable(db *util.DB) error {
