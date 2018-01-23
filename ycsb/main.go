@@ -100,8 +100,7 @@ var readOnly int32
 type ycsbWorker struct {
 	db Database
 	// An RNG used to generate random keys
-	zipfR *ZipfGenerator
-	// An RNG used to generate random strings for the values
+	zipfR         *ZipfGenerator
 	r             *rand.Rand
 	readFreq      float32
 	writeFreq     float32
@@ -135,7 +134,6 @@ const (
 )
 
 func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsbWorker {
-	source := rand.NewSource(int64(time.Now().UnixNano()))
 	var readFreq, writeFreq, scanFreq float32
 
 	// TODO(arjun): This could be implemented as a token bucket.
@@ -165,10 +163,9 @@ func newYcsbWorker(db Database, zipfR *ZipfGenerator, workloadFlag string) *ycsb
 	case "F", "f":
 		writeFreq = 1.0
 	}
-	r := rand.New(source)
 	return &ycsbWorker{
 		db:            db,
-		r:             r,
+		r:             rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
 		zipfR:         zipfR,
 		readFreq:      readFreq,
 		writeFreq:     writeFreq,
@@ -256,24 +253,13 @@ func (yw *ycsbWorker) runWorker(errCh chan<- error, wg *sync.WaitGroup) {
 	}
 }
 
-var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-// Gnerate a random string of alphabetic characters.
-func (yw *ycsbWorker) randString(length int) string {
-	str := make([]byte, length)
-	for i := range str {
-		str[i] = letters[yw.r.Intn(len(letters))]
-	}
-	return string(str)
-}
-
 func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 	start := time.Now()
 	defer func() { cmdDuration.WithLabelValues("insert").Observe(time.Since(start).Seconds()) }()
 
 	fields := make([]string, numTableFields)
 	for i := 0; i < len(fields); i++ {
-		fields[i] = yw.randString(fieldLength)
+		fields[i] = randString(yw.r, fieldLength)
 	}
 	if err := yw.db.InsertRow(key, fields); err != nil {
 		return err
