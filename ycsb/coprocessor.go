@@ -155,6 +155,7 @@ func (c *coprocessor) ReadRow(key uint64) (has bool, err error) {
 		return
 	}
 	res := client.Send(goctx.Background(), &req)
+	defer res.Close()
 	data, err := res.Next()
 	return len(data) != 0, err
 }
