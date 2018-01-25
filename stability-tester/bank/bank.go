@@ -120,7 +120,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				if err != nil {
 					log.Fatalf("[%s]exec %s  err %s", c, query, err)
 				}
-				log.Infof("[%s] insert %d accounts%s, takes %s", c, batchSize, index, time.Now().Sub(start))
+				log.Infof("[%s] insert %d accounts into accounts%s, takes %s", c, batchSize, index, time.Now().Sub(start))
 			}
 		}()
 	}
@@ -134,7 +134,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 
 	select {
 	case <-ctx.Done():
-		log.Warn("bank initialize is cancel")
+		log.Warn("bank initialize is canceled")
 		return nil
 	default:
 	}
@@ -210,13 +210,13 @@ func (c *BankCase) String() string {
 	return "bank"
 }
 
-//tryDrop will drop table if data incorrect and panic error likes Bad connect.
+// tryDrop will drop table if data incorrect and panic error likes Bad connection.
 func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	var (
 		count int
 		table string
 	)
-	//if table is not exist ,return true directly
+	// if table is not exist, return true directly
 	query := fmt.Sprintf("show tables like 'accounts%s'", index)
 	err := db.QueryRow(query).Scan(&table)
 	switch {
@@ -265,10 +265,10 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	tx.Commit()
 	check := c.cfg.NumAccounts * 1000
 	if total != check {
-		log.Errorf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
+		log.Errorf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
 		atomic.StoreInt32(&c.stopped, 1)
 		c.wg.Wait()
-		log.Fatalf("[%s]accouts%s total must %d, but got %d", c, index, check, total)
+		log.Fatalf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
 	}
 
 	return nil
