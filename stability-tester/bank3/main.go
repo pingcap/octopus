@@ -22,7 +22,7 @@ var (
 	password    = flag.String("password", "", "user password")
 	dbName      = flag.String("db", "test", "database name")
 	accounts    = flag.Int("accounts", 100000, "the number of accounts")
-	interval    = flag.Duration("interval", 2*time.Second, "the interval")
+	interval    = flag.Duration("interval", 5*time.Second, "the interval")
 	tables      = flag.Int("tables", 10, "the number of the tables")
 	concurrency = flag.Int("concurrency", 200, "concurrency")
 	pds         = flag.String("pds", "", "separated by \",\"")
