@@ -25,14 +25,21 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-tipb"
 	goctx "golang.org/x/net/context"
 )
 
+const (
+	TABLESCAN_POINT_GET  = 0
+	TABLESCAN_COUNT_STAR = 1
+)
+
 type coprocessor struct {
-	db    kv.Storage
-	table *simpleTable
-	r     *rand.Rand
+	db       kv.Storage
+	table    *simpleTable
+	r        *rand.Rand
+	readType int
 }
 
 type simpleTable struct {
@@ -98,6 +105,15 @@ func (t *simpleTable) dagTableScan() *tipb.DAGRequest {
 	return dag
 }
 
+func (t *simpleTable) dagCountStar() *tipb.DAGRequest {
+	dag := &tipb.DAGRequest{}
+	dag.StartTs = math.MaxUint64
+	//dag.TimeZoneOffset =
+	dag.Executors = []*tipb.Executor{t.getTableScan(), t.aggreCount()}
+	dag.OutputOffsets = []uint32{0}
+	return dag
+}
+
 func (t *simpleTable) getTableScan() *tipb.Executor {
 	return &tipb.Executor{
 		Tp: tipb.ExecType_TypeTableScan,
@@ -109,11 +125,35 @@ func (t *simpleTable) getTableScan() *tipb.Executor {
 	}
 }
 
+func (t *simpleTable) aggreCount() *tipb.Executor {
+	expr := &tipb.Expr{
+		Tp: tipb.ExprType_Count,
+		Children: []*tipb.Expr{{
+			Tp:  tipb.ExprType_Int64,
+			Val: codec.EncodeInt(nil, 1),
+		}},
+	}
+	return &tipb.Executor{
+		Tp: tipb.ExecType_TypeAggregation,
+		Aggregation: &tipb.Aggregation{
+			AggFunc: []*tipb.Expr{expr},
+		},
+	}
+}
+
 func (t *simpleTable) getPointRange(key int64) kv.KeyRange {
 	startKey := tablecodec.EncodeRowKeyWithHandle(t.tableID, key)
 	return kv.KeyRange{
 		StartKey: startKey,
 		EndKey:   startKey.PrefixNext(),
+	}
+}
+
+func (t *simpleTable) getTableHandleRange() kv.KeyRange {
+	startKey, endKey := tablecodec.GetTableHandleKeyRange(t.tableID)
+	return kv.KeyRange{
+		StartKey: startKey,
+		EndKey:   endKey,
 	}
 }
 
@@ -146,9 +186,14 @@ func (c *coprocessor) ReadRow(key uint64) (has bool, err error) {
 	client := c.db.GetClient()
 	req := kv.Request{}
 	req.Concurrency = 1
-	req.KeyRanges = []kv.KeyRange{c.table.getPointRange(int64(key))}
+
 	req.Tp = kv.ReqTypeDAG
+	req.KeyRanges = []kv.KeyRange{c.table.getPointRange(int64(key))}
 	dag := c.table.dagTableScan()
+	if c.readType == TABLESCAN_COUNT_STAR { //TODO
+		dag = c.table.dagCountStar()
+		req.KeyRanges = []kv.KeyRange{c.getRangeByKey(key)}
+	}
 	req.StartTs = dag.StartTs
 	req.Data, err = dag.Marshal()
 	if err != nil {
@@ -160,6 +205,37 @@ func (c *coprocessor) ReadRow(key uint64) (has bool, err error) {
 	return len(data) != 0, err
 }
 
+/// Get table's maximum range(be covered by one region) which include the handle.
+func (c *coprocessor) getRangeByKey(handle uint64) kv.KeyRange {
+	backOffer := tikv.NewBackoffer(500, goctx.Background())
+	pointRange := c.table.getPointRange(int64(handle))
+	kvLocation, err := c.getRegionCache().LocateKey(backOffer, pointRange.StartKey)
+	if err != nil {
+		panic("get key location from pd")
+	}
+	handleRange := c.table.getTableHandleRange()
+	// range.start_key= max(region.start_key,table_handle_start_key)
+	if !kvLocation.Contains(handleRange.StartKey) {
+		handleRange.StartKey = kvLocation.StartKey
+	}
+	// range.end_key = min(region.end_key,table_handle_end_key)
+	if !kvLocation.Contains(handleRange.EndKey) {
+		handleRange.EndKey = kvLocation.EndKey
+	}
+	return handleRange
+}
+
+func (c *coprocessor) getRegionCache() *tikv.RegionCache {
+	type kvStore interface {
+		GetRegionCache() *tikv.RegionCache
+	}
+	tikvStore, ok := c.db.(kvStore)
+	if !ok {
+		panic("Invalid KvStore with illegal store")
+	}
+	return tikvStore.GetRegionCache()
+}
+
 func (c *coprocessor) Clone() Database {
 	return &coprocessor{
 		db:    c.db,
@@ -168,13 +244,17 @@ func (c *coprocessor) Clone() Database {
 	}
 }
 
-func setupCoprocessor(pdAddr string) (Database, error) {
+func setupCoprocessor(pdAddr, readType string) (Database, error) {
 	tikv.MaxConnectionCount = 128
 	driver := tikv.Driver{}
 	db, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", pdAddr))
 	if err != nil {
 		return nil, err
 	}
+	tp := TABLESCAN_POINT_GET
+	if readType == "count" {
+		tp = TABLESCAN_COUNT_STAR
+	}
 	r := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
-	return &coprocessor{db: db, table: newSimpleTable(), r: r}, nil
+	return &coprocessor{db: db, table: newSimpleTable(), r: r, readType: tp}, nil
 }
