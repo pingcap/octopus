@@ -3,15 +3,13 @@ package main
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	largeScaleBuckets = []float64{0.5, 1, 5, 10, 20, 30, 40, 50, 60}
-
 	bankVerifyDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "tidb_test",
 			Subsystem: "stability",
 			Name:      "bank_verify_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of bank verification.",
-			Buckets:   largeScaleBuckets,
+			Buckets:   []float64{0.5, 1, 5, 10, 20, 30, 40, 50, 60},
 		})
 
 	bankVerifyFailedCounter = prometheus.NewCounter(

@@ -265,9 +265,6 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	tx.Commit()
 	check := c.cfg.NumAccounts * 1000
 	if total != check {
-		log.Errorf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
-		atomic.StoreInt32(&c.stopped, 1)
-		c.wg.Wait()
 		log.Fatalf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
 	}
 
@@ -365,7 +362,6 @@ INSERT INTO record (from_id, to_id, from_balance, to_balance, amount, tso)
     VALUES (%d, %d, %d, %d, %d, %d)`, from, to, fromBalance, toBalance, amount, tso)); err != nil {
 			return err
 		}
-		log.Infof("[bank] exec pre: %s\n", update)
 	}
 
 	err = tx.Commit()
