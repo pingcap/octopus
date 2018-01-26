@@ -28,9 +28,9 @@ type Database interface {
 // with a single table. If the desired table already exists on the cluster, the
 // existing table will be dropped if the -drop flag was specified.
 func SetupDatabase(dbURL string) (Database, error) {
-	seps := strings.SplitN(dbURL, "://", 2)
-	if len(seps) != 2 {
-		return nil, fmt.Errorf("invalid url %s, must be scheme://path", dbURL)
+	seps := strings.SplitN(dbURL, "://", -1)
+	if len(seps) < 2 {
+		return nil, fmt.Errorf("invalid url %s, must be scheme://path(://read_type)", dbURL)
 	}
 
 	switch seps[0] {
@@ -44,8 +44,12 @@ func SetupDatabase(dbURL string) (Database, error) {
 		// url is raw://pd_addr
 		return setupRawKV(seps[1])
 	case "cop":
-		// url is cop://pd_addr
-		return setupCoprocessor(seps[1])
+		// url is cop://pd_addr:://${read_type}
+		readType := ""
+		if len(seps) >= 3 {
+			readType = seps[2]
+		}
+		return setupCoprocessor(seps[1],readType)
 	default:
 		return nil, fmt.Errorf("unsupported database: %s", seps[0])
 	}
