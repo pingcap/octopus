@@ -210,13 +210,13 @@ func (c *BankCase) String() string {
 	return "bank"
 }
 
-// tryDrop will drop table if data incorrect and panic error likes Bad connection.
+// tryDrop will drop table if data is incorrect or there is a panic error like bad connection.
 func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	var (
 		count int
 		table string
 	)
-	// if table is not exist, return true directly
+	// if table does not exist, return true directly
 	query := fmt.Sprintf("show tables like 'accounts%s'", index)
 	err := db.QueryRow(query).Scan(&table)
 	switch {
