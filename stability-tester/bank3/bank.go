@@ -268,6 +268,7 @@ func (c *BankCase) verify(db *sql.DB) error {
 	tx.Commit()
 	check := uint64(c.cfg.NumAccounts) * 1000 * uint64(c.cfg.TableNum)
 	if total != check {
+		atomic.StoreInt32(&c.stopped, 1)
 		log.Fatalf("[%s]accouts total must be %d, but got %d", c, check, total)
 	}
 
