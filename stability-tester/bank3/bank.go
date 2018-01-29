@@ -17,9 +17,7 @@ import (
 
 // BankCase is for concurrent balance transfer.
 type BankCase struct {
-	mu      sync.RWMutex
 	cfg     *Config
-	wg      sync.WaitGroup
 	stopped int32
 }
 
@@ -159,8 +157,6 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB) {
 					log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
 					if time.Now().Sub(start) > defaultVerifyTimeout {
 						atomic.StoreInt32(&c.stopped, 1)
-						log.Info("stop bank execute")
-						c.wg.Wait()
 						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
 					}
 				} else {
