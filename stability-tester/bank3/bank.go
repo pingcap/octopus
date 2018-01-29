@@ -190,13 +190,9 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 				}
 				if atomic.LoadInt32(&c.stopped) != 0 {
-					// too many log print in here if return error
-					log.Error("bank stopped")
 					return
 				}
-				c.wg.Add(1)
 				c.moveMoney(db)
-				c.wg.Done()
 			}
 		}(i)
 	}
