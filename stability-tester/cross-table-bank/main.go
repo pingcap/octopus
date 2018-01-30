@@ -61,7 +61,7 @@ func main() {
 	}()
 	if len(*metricAddr) > 0 {
 		log.Info("enable metrics")
-		go util.PushPrometheus("bank3", *metricAddr, defaultPushMetricsInterval)
+		go util.PushPrometheus("cross-table-bank", *metricAddr, defaultPushMetricsInterval)
 	}
 	cfg := Config {
 		NumAccounts: *accounts,

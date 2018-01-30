@@ -198,7 +198,7 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 
 // String implements fmt.Stringer interface.
 func (c *BankCase) String() string {
-	return "bank3"
+	return "cross-table-bank"
 }
 
 // tryDrop will drop table if data is incorrect or there is a panic error like bad connection.
