@@ -188,7 +188,7 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 				if atomic.LoadInt32(&c.stopped) != 0 {
 					return
 				}
-				c.moveMoney(db)
+				c.transferMoney(db)
 			}
 		}(i)
 	}
@@ -267,7 +267,7 @@ func (c *BankCase) verify(db *sql.DB) error {
 	return nil
 }
 
-func (c *BankCase) moveMoney(db *sql.DB) {
+func (c *BankCase) transferMoney(db *sql.DB) {
 	var (
 		from_table, from_id, to_table, to_id int
 	)
