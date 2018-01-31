@@ -106,7 +106,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				start := time.Now()
 				for i := 0; i < batchSize; i++ {
-					args[i] = fmt.Sprintf("(%d, %d, \"%s\")", startIndex+i, 1000, remark[:rand.Intn(maxLen)])
+					args[i] = fmt.Sprintf("(%d, %d, \"%s\")", startIndex+i, 10000, remark[:rand.Intn(maxLen)])
 				}
 
 				query := fmt.Sprintf("INSERT IGNORE INTO accounts%s (id, balance, remark) VALUES %s", index, strings.Join(args, ","))
@@ -258,7 +258,7 @@ func (c *BankCase) verify(db *sql.DB) error {
 	}
 	log.Infof("select sum(balance) to verify use tso %d", tso)
 	tx.Commit()
-	check := uint64(c.cfg.NumAccounts) * 1000 * uint64(c.cfg.TableNum)
+	check := uint64(c.cfg.NumAccounts) * 10000 * uint64(c.cfg.TableNum)
 	if total != check {
 		atomic.StoreInt32(&c.stopped, 1)
 		log.Fatalf("[%s]accouts total must be %d, but got %d", c, check, total)
