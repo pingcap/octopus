@@ -53,6 +53,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/config"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -68,6 +69,9 @@ const (
 	zipfIMin = 1
 )
 
+var sslCa = flag.String("ssl-ca", "", "Acceptable Cluster CA path.")
+var sslCert = flag.String("ssl-cert", "", "Client certificate path.")
+var sslKey = flag.String("ssl-key", "", "Client certificate key path.")
 var concurrency = flag.Int("concurrency", 2*runtime.NumCPU(),
 	"Number of concurrent workers sending read/write requests.")
 var workload = flag.String("workload", "B", "workload type. Choose from A-F.")
@@ -341,6 +345,11 @@ func main() {
 		http.Handle("/metrics", prometheus.Handler())
 		http.ListenAndServe(*statusAddr, nil)
 	}()
+
+	cfg := config.GetGlobalConfig()
+	cfg.Security.ClusterSSLCA = *sslCa
+	cfg.Security.ClusterSSLCert = *sslCert
+	cfg.Security.ClusterSSLKey = *sslKey
 
 	PushMetrics(*pushAddr)
 
