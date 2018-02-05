@@ -190,7 +190,7 @@ func (c *testCase) executeInsert(cfg interface{}) error {
 				return ddlTestErrorConflict{}
 			}
 		}
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	// append row
@@ -361,7 +361,7 @@ func (c *testCase) executeUpdate(cfg interface{}) error {
 				return ddlTestErrorConflict{}
 			}
 		}
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	// update values
@@ -445,7 +445,7 @@ func (c *testCase) executeDelete(cfg interface{}) error {
 				return ddlTestErrorConflict{}
 			}
 		}
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	// update values
