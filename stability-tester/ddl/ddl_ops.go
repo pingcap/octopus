@@ -320,7 +320,7 @@ func (c *testCase) executeAddColumn(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Annotatef(err, "Error when executing SQL: %s", sql)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	// update table definitions
