@@ -264,7 +264,7 @@ func (c *testCase) executeVerifyIntegrity() error {
 			}
 		}
 		if err != nil {
-			return errors.Trace(err)
+			return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 		}
 
 		// Read all rows.
@@ -335,16 +335,16 @@ func (c *testCase) executeVerifyIntegrity() error {
 			}
 			_, ok := actualRowsMap[rowString]
 			if !ok {
-				return errors.Trace(fmt.Errorf("Expecting row %s in table `%s` but not found", rowString, table.name))
+				return errors.Trace(fmt.Errorf("Expecting row %s in table `%s` but not found, sql: ", rowString, table.name, sql))
 			}
 			actualRowsMap[rowString]--
 			if actualRowsMap[rowString] < 0 {
-				return errors.Trace(fmt.Errorf("Expecting row %s in table `%s` but not found", rowString, table.name))
+				return errors.Trace(fmt.Errorf("Expecting row %s in table `%s` but not found, sql: ", rowString, table.name, sql))
 			}
 		}
 		for rowString, occurs := range actualRowsMap {
 			if occurs > 0 {
-				return errors.Trace(fmt.Errorf("Unexpected row %s in table `%s`", rowString, table.name))
+				return errors.Trace(fmt.Errorf("Unexpected row %s in table `%s`, sql: ", rowString, table.name, sql))
 			}
 		}
 	}
@@ -367,7 +367,7 @@ func (c *testCase) executeAdminCheck() error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s", sql)
 	}
 	return nil
 }

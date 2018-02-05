@@ -100,7 +100,7 @@ func (c *testCase) executeAddTable(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, tableInfo.debugPrintToString())
 	}
 
 	c.tablesLock.Lock()
@@ -130,7 +130,7 @@ func (c *testCase) executeDropTable(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s", sql)
 	}
 
 	return nil
@@ -216,7 +216,7 @@ func (c *testCase) executeAddIndex(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	table.indexes = append(table.indexes, &index)
@@ -252,7 +252,7 @@ func (c *testCase) executeDropIndex(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	for _, column := range indexToDrop.columns {
@@ -320,7 +320,7 @@ func (c *testCase) executeAddColumn(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s", sql)
 	}
 
 	// update table definitions
@@ -393,7 +393,7 @@ func (c *testCase) executeDropColumn(cfg interface{}) error {
 	log.Infof("[ddl] [instance %d] %s", c.caseIndex, sql)
 	_, err := c.db.Exec(sql)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "Error when executing SQL: %s\n%s", sql, table.debugPrintToString())
 	}
 
 	// update table definitions

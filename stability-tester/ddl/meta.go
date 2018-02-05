@@ -88,15 +88,32 @@ func (table *ddlTestTable) predicateNonPrimaryKey(col *ddlTestColumn) bool {
 	return !col.isPrimaryKey
 }
 
-func (table *ddlTestTable) debugPrint(title string) {
+func (table *ddlTestTable) debugPrintToString() string {
 	var buffer bytes.Buffer
 	table.lock.RLock()
-	buffer.WriteString(fmt.Sprintf("======== DEBUG BEGIN for %s ========\n", title))
-	buffer.WriteString(fmt.Sprintf("Table Structures of `%s`:\n", table.name))
-	for i, column := range table.columns {
-		buffer.WriteString(fmt.Sprintf("Column #%d: %s\n", i, column.name))
+	buffer.WriteString(fmt.Sprintf("======== DEBUG BEGIN  ========\n"))
+	buffer.WriteString(fmt.Sprintf("Dumping expected contents for table `%s`:\n", table.name))
+	if table.deleted {
+		buffer.WriteString("[WARN] This table is marked as DELETED.\n")
 	}
-	buffer.WriteString(fmt.Sprintf("Table Values of `%s`:\n", table.name))
+	buffer.WriteString("## Non-Primary Indexes: \n")
+	for i, index := range table.indexes {
+		buffer.WriteString(fmt.Sprintf("Index #%d: Name = `%s`, Columnns = [", i, index.name))
+		for _, column := range index.columns {
+			buffer.WriteString(fmt.Sprintf("`%s`, ", column.name))
+		}
+		buffer.WriteString("]\n")
+	}
+	buffer.WriteString("## Columns: \n")
+	for i, column := range table.columns {
+		buffer.WriteString(fmt.Sprintf("Column #%d", i))
+		if column.deleted {
+			buffer.WriteString(" [DELETED]")
+		}
+		buffer.WriteString(fmt.Sprintf(": Name = `%s`, Definition = %s, isPrimaryKey = %v, used in %d indexes\n",
+			column.name, column.getDefinition(), column.isPrimaryKey, column.indexReferences))
+	}
+	buffer.WriteString(fmt.Sprintf("## Values (number of rows = %d): \n", table.numberOfRows))
 	for i := 0; i < table.numberOfRows; i++ {
 		buffer.WriteString("#")
 		buffer.WriteString(padRight(fmt.Sprintf("%d", i), " ", 4))
@@ -109,7 +126,7 @@ func (table *ddlTestTable) debugPrint(title string) {
 	}
 	buffer.WriteString("======== DEBUG END ========\n")
 	table.lock.RUnlock()
-	fmt.Print(buffer.String())
+	return buffer.String()
 }
 
 type ddlTestColumnDescriptor struct {
