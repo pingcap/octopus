@@ -22,8 +22,9 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/metrics"
+	"github.com/pingcap/tidb/owner"
+	log "github.com/sirupsen/logrus"
 	goctx "golang.org/x/net/context"
 )
 
@@ -41,7 +42,7 @@ const (
 	keyOpDefaultRetryCnt = 3
 	putKeyRetryUnlimited = math.MaxInt64
 	keyOpDefaultTimeout  = 2 * time.Second
-	putKeyRetryInterval  = 30 * time.Millisecond
+	keyOpRetryInterval   = 30 * time.Millisecond
 	checkVersInterval    = 20 * time.Millisecond
 )
 
@@ -67,7 +68,9 @@ type SchemaSyncer interface {
 	OwnerUpdateGlobalVersion(ctx goctx.Context, version int64) error
 	// GlobalVersionCh gets the chan for watching global version.
 	GlobalVersionCh() clientv3.WatchChan
-	// Done() returns a channel that closes when the syncer is no longer being refreshed.
+	// MustGetGlobalVersion gets the global version. The only reason it fails is that ctx is done.
+	MustGetGlobalVersion(ctx goctx.Context) (int64, error)
+	// Done returns a channel that closes when the syncer is no longer being refreshed.
 	Done() <-chan struct{}
 	// Restart restarts the syncer when it's on longer being refreshed.
 	Restart(ctx goctx.Context) error
@@ -96,10 +99,8 @@ func (s *schemaVersionSyncer) putKV(ctx goctx.Context, retryCnt int, key, val st
 	opts ...clientv3.OpOption) error {
 	var err error
 	for i := 0; i < retryCnt; i++ {
-		select {
-		case <-ctx.Done():
+		if isContextDone(ctx) {
 			return errors.Trace(ctx.Err())
-		default:
 		}
 
 		childCtx, cancel := goctx.WithTimeout(ctx, keyOpDefaultTimeout)
@@ -109,28 +110,35 @@ func (s *schemaVersionSyncer) putKV(ctx goctx.Context, retryCnt int, key, val st
 			return nil
 		}
 		log.Warnf("[syncer] put schema version %s failed %v no.%d", val, err, i)
-		time.Sleep(putKeyRetryInterval)
+		time.Sleep(keyOpRetryInterval)
 	}
 	return errors.Trace(err)
 }
 
 // Init implements SchemaSyncer.Init interface.
 func (s *schemaVersionSyncer) Init(ctx goctx.Context) error {
-	_, err := s.etcdCli.Txn(ctx).
+	startTime := time.Now()
+	var err error
+	defer func() {
+		metrics.DeploySyncerHistogram.WithLabelValues(metrics.SyncerInit, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	}()
+
+	_, err = s.etcdCli.Txn(ctx).
 		If(clientv3.Compare(clientv3.CreateRevision(DDLGlobalSchemaVersion), "=", 0)).
 		Then(clientv3.OpPut(DDLGlobalSchemaVersion, InitialVersion)).
 		Commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.session, err = newSession(ctx, s.selfSchemaVerPath, s.etcdCli,
-		newSessionDefaultRetryCnt, SyncerSessionTTL)
+	logPrefix := fmt.Sprintf("[%s] %s", ddlPrompt, s.selfSchemaVerPath)
+	s.session, err = owner.NewSession(ctx, logPrefix, s.etcdCli, owner.NewSessionDefaultRetryCnt, SyncerSessionTTL)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	s.globalVerCh = s.etcdCli.Watch(ctx, DDLGlobalSchemaVersion)
-	return s.putKV(ctx, keyOpDefaultRetryCnt, s.selfSchemaVerPath, InitialVersion,
+	err = s.putKV(ctx, keyOpDefaultRetryCnt, s.selfSchemaVerPath, InitialVersion,
 		clientv3.WithLease(s.session.Lease()))
+	return errors.Trace(err)
 }
 
 // Done implements SchemaSyncer.Done interface.
@@ -140,14 +148,26 @@ func (s *schemaVersionSyncer) Done() <-chan struct{} {
 
 // Restart implements SchemaSyncer.Restart interface.
 func (s *schemaVersionSyncer) Restart(ctx goctx.Context) error {
-	session, err := newSession(ctx, s.selfSchemaVerPath, s.etcdCli,
-		newSessionRetryUnlimited, SyncerSessionTTL)
+	startTime := time.Now()
+	var err error
+	defer func() {
+		metrics.DeploySyncerHistogram.WithLabelValues(metrics.SyncerRestart, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	}()
+
+	logPrefix := fmt.Sprintf("[%s] %s", ddlPrompt, s.selfSchemaVerPath)
+	// NewSession's context will affect the exit of the session.
+	session, err := owner.NewSession(ctx, logPrefix, s.etcdCli, owner.NewSessionRetryUnlimited, SyncerSessionTTL)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	s.session = session
-	return s.putKV(ctx, putKeyRetryUnlimited, s.selfSchemaVerPath, InitialVersion,
+
+	childCtx, cancel := goctx.WithTimeout(ctx, keyOpDefaultTimeout)
+	defer cancel()
+	err = s.putKV(childCtx, putKeyRetryUnlimited, s.selfSchemaVerPath, InitialVersion,
 		clientv3.WithLease(s.session.Lease()))
+
+	return errors.Trace(err)
 }
 
 // GlobalVersionCh implements SchemaSyncer.GlobalVersionCh interface.
@@ -157,21 +177,34 @@ func (s *schemaVersionSyncer) GlobalVersionCh() clientv3.WatchChan {
 
 // UpdateSelfVersion implements SchemaSyncer.UpdateSelfVersion interface.
 func (s *schemaVersionSyncer) UpdateSelfVersion(ctx goctx.Context, version int64) error {
+	startTime := time.Now()
 	ver := strconv.FormatInt(version, 10)
-	return s.putKV(ctx, putKeyNoRetry, s.selfSchemaVerPath, ver,
+	err := s.putKV(ctx, putKeyNoRetry, s.selfSchemaVerPath, ver,
 		clientv3.WithLease(s.session.Lease()))
+
+	metrics.UpdateSelfVersionHistogram.WithLabelValues(metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	return errors.Trace(err)
 }
 
 // OwnerUpdateGlobalVersion implements SchemaSyncer.OwnerUpdateGlobalVersion interface.
 func (s *schemaVersionSyncer) OwnerUpdateGlobalVersion(ctx goctx.Context, version int64) error {
+	startTime := time.Now()
 	ver := strconv.FormatInt(version, 10)
-	return s.putKV(ctx, putKeyRetryUnlimited, DDLGlobalSchemaVersion, ver)
+	err := s.putKV(ctx, putKeyRetryUnlimited, DDLGlobalSchemaVersion, ver)
+
+	metrics.OwnerHandleSyncerHistogram.WithLabelValues(metrics.OwnerUpdateGlobalVersion, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	return errors.Trace(err)
 }
 
 // RemoveSelfVersionPath implements SchemaSyncer.RemoveSelfVersionPath interface.
 func (s *schemaVersionSyncer) RemoveSelfVersionPath() error {
-	ctx := goctx.Background()
+	startTime := time.Now()
 	var err error
+	defer func() {
+		metrics.DeploySyncerHistogram.WithLabelValues(metrics.SyncerClear, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	}()
+
+	ctx := goctx.Background()
 	for i := 0; i < keyOpDefaultRetryCnt; i++ {
 		childCtx, cancel := goctx.WithTimeout(ctx, keyOpDefaultTimeout)
 		_, err = s.etcdCli.Delete(childCtx, s.selfSchemaVerPath)
@@ -184,31 +217,73 @@ func (s *schemaVersionSyncer) RemoveSelfVersionPath() error {
 	return errors.Trace(err)
 }
 
-func isContextFinished(err error) bool {
-	if terror.ErrorEqual(err, goctx.Canceled) ||
-		terror.ErrorEqual(err, goctx.DeadlineExceeded) {
+// MustGetGlobalVersion implements SchemaSyncer.MustGetGlobalVersion interface.
+func (s *schemaVersionSyncer) MustGetGlobalVersion(ctx goctx.Context) (int64, error) {
+	startTime := time.Now()
+	var err error
+	var resp *clientv3.GetResponse
+	failedCnt := 0
+	intervalCnt := int(time.Second / keyOpRetryInterval)
+
+	defer func() {
+		metrics.OwnerHandleSyncerHistogram.WithLabelValues(metrics.OwnerGetGlobalVersion, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	}()
+	for {
+		if err != nil {
+			if failedCnt%intervalCnt == 0 {
+				log.Infof("[syncer] get global version failed %v", err)
+			}
+			time.Sleep(keyOpRetryInterval)
+			failedCnt++
+		}
+
+		if isContextDone(ctx) {
+			err = errors.Trace(ctx.Err())
+			return 0, err
+		}
+
+		resp, err = s.etcdCli.Get(ctx, DDLGlobalSchemaVersion)
+		if err != nil {
+			continue
+		}
+		if err == nil && len(resp.Kvs) > 0 {
+			var ver int
+			ver, err = strconv.Atoi(string(resp.Kvs[0].Value))
+			if err == nil {
+				return int64(ver), nil
+			}
+		}
+	}
+}
+
+func isContextDone(ctx goctx.Context) bool {
+	select {
+	case <-ctx.Done():
 		return true
+	default:
 	}
 	return false
 }
 
 // OwnerCheckAllVersions implements SchemaSyncer.OwnerCheckAllVersions interface.
 func (s *schemaVersionSyncer) OwnerCheckAllVersions(ctx goctx.Context, latestVer int64) error {
+	startTime := time.Now()
 	time.Sleep(CheckVersFirstWaitTime)
 	notMatchVerCnt := 0
 	intervalCnt := int(time.Second / checkVersInterval)
 	updatedMap := make(map[string]struct{})
+
+	var err error
+	defer func() {
+		metrics.OwnerHandleSyncerHistogram.WithLabelValues(metrics.OwnerGetGlobalVersion, metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
+	}()
 	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		default:
+		if isContextDone(ctx) {
+			err = errors.Trace(ctx.Err())
+			return err
 		}
 
 		resp, err := s.etcdCli.Get(ctx, DDLAllSchemaVersions, clientv3.WithPrefix())
-		if isContextFinished(err) {
-			return errors.Trace(err)
-		}
 		if err != nil {
 			log.Infof("[syncer] check all versions failed %v", err)
 			continue

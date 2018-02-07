@@ -1,8 +1,0 @@
-package: github.com/pingcap/octopus
-import: 
-- package: golang.org/x/net
-  version: ab5485076ff3407ad2d02db054635913f017b0ed
-  repo: https://github.com/golang/net.git
-  vcs: git
-  subpackages:
-  - context

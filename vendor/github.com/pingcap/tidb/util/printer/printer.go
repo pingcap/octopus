@@ -15,34 +15,49 @@ package printer
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/mysql"
+	log "github.com/sirupsen/logrus"
 )
 
 // Version information.
 var (
-	TiDBBuildTS = "None"
-	TiDBGitHash = "None"
+	TiDBBuildTS   = "None"
+	TiDBGitHash   = "None"
+	TiDBGitBranch = "None"
+	GoVersion     = "None"
 )
 
 // PrintTiDBInfo prints the TiDB version information.
 func PrintTiDBInfo() {
 	log.Infof("Welcome to TiDB.")
-	log.Infof("Version:")
+	log.Infof("Release Version: %s", mysql.TiDBReleaseVersion)
 	log.Infof("Git Commit Hash: %s", TiDBGitHash)
+	log.Infof("Git Branch: %s", TiDBGitBranch)
 	log.Infof("UTC Build Time:  %s", TiDBBuildTS)
+	log.Infof("GoVersion:  %s", GoVersion)
+	configJSON, err := json.Marshal(config.GetGlobalConfig())
+	if err != nil {
+		panic(err)
+	}
+	log.Infof("Config: %s", configJSON)
 }
 
 // PrintRawTiDBInfo prints the TiDB version information without log info.
 func PrintRawTiDBInfo() {
+	fmt.Println("Release Version:", mysql.TiDBReleaseVersion)
 	fmt.Println("Git Commit Hash:", TiDBGitHash)
+	fmt.Println("Git Commit Branch:", TiDBGitBranch)
 	fmt.Println("UTC Build Time: ", TiDBBuildTS)
+	fmt.Println("GoVersion: ", GoVersion)
 }
 
 // GetTiDBInfo returns the git hash and build time of this tidb-server binary.
 func GetTiDBInfo() string {
-	return fmt.Sprintf("Git Commit Hash: %s\nUTC Build Time: %s", TiDBGitHash, TiDBBuildTS)
+	return fmt.Sprintf("Release Version: %s\nGit Commit Hash: %s\nGit Branch: %s\nUTC Build Time: %s", mysql.TiDBReleaseVersion, TiDBGitHash, TiDBGitBranch, TiDBBuildTS)
 }
 
 // checkValidity checks whether cols and every data have the same length.
@@ -79,7 +94,7 @@ func getMaxColLen(cols []string, datas [][]string) []int {
 }
 
 func getPrintDivLine(maxColLen []int) []byte {
-	var value []byte
+	var value = make([]byte, 0)
 	for _, v := range maxColLen {
 		value = append(value, '+')
 		value = append(value, bytes.Repeat([]byte{'-'}, v+2)...)
@@ -90,7 +105,7 @@ func getPrintDivLine(maxColLen []int) []byte {
 }
 
 func getPrintCol(cols []string, maxColLen []int) []byte {
-	var value []byte
+	var value = make([]byte, 0)
 	for i, v := range cols {
 		value = append(value, '|')
 		value = append(value, ' ')
@@ -103,7 +118,7 @@ func getPrintCol(cols []string, maxColLen []int) []byte {
 }
 
 func getPrintRow(data []string, maxColLen []int) []byte {
-	var value []byte
+	var value = make([]byte, 0)
 	for i, v := range data {
 		value = append(value, '|')
 		value = append(value, ' ')
@@ -116,7 +131,7 @@ func getPrintRow(data []string, maxColLen []int) []byte {
 }
 
 func getPrintRows(datas [][]string, maxColLen []int) []byte {
-	var value []byte
+	var value = make([]byte, 0)
 	for _, data := range datas {
 		value = append(value, getPrintRow(data, maxColLen)...)
 	}
@@ -129,7 +144,7 @@ func GetPrintResult(cols []string, datas [][]string) (string, bool) {
 		return "", false
 	}
 
-	var value []byte
+	var value = make([]byte, 0)
 	maxColLen := getMaxColLen(cols, datas)
 
 	value = append(value, getPrintDivLine(maxColLen)...)

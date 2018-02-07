@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/octopus/benchbot/common"
 	"golang.org/x/net/context"
 
-	log "github.com/Sirupsen/logrus"
 	. "github.com/pingcap/octopus/benchbot/cluster"
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {

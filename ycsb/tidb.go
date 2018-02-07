@@ -18,7 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 )
 
 type tidb struct {

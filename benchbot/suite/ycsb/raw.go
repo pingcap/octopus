@@ -3,9 +3,11 @@ package ycsb
 import (
 	"strings"
 
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tidb/types"
 )
 
 type rawKV struct {
@@ -34,7 +36,7 @@ func (c *rawKV) InsertRow(id uint64, fields []string) error {
 		cols[i].SetString(v)
 	}
 
-	rowData, err := tablecodec.EncodeRow(cols, colIDs, nil)
+	rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -44,7 +46,7 @@ func (c *rawKV) InsertRow(id uint64, fields []string) error {
 
 func setupRawKV(pdAddr string) (Database, error) {
 	// Open connection to server and create a database.
-	db, err := tikv.NewRawKVClient(strings.Split(pdAddr, ","))
+	db, err := tikv.NewRawKVClient(strings.Split(pdAddr, ","), config.Security{})
 	if err != nil {
 		return nil, err
 	}

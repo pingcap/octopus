@@ -20,8 +20,8 @@ import (
 	"strconv"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/mysql"
+	log "github.com/sirupsen/logrus"
 )
 
 // Global error instances.
@@ -40,7 +40,7 @@ const (
 	// CodeUnknown is for errors of unknown reason.
 	CodeUnknown ErrCode = -1
 	// CodeExecResultIsEmpty indicates execution result is empty.
-	CodeExecResultIsEmpty = 3
+	CodeExecResultIsEmpty ErrCode = 3
 
 	// Expression error codes.
 
@@ -64,7 +64,7 @@ const (
 	ClassEvaluator
 	ClassExecutor
 	ClassExpression
-	ClassInspectkv
+	ClassAdmin
 	ClassKV
 	ClassMeta
 	ClassOptimizer
@@ -82,6 +82,7 @@ const (
 	ClassGlobal
 	ClassMockTikv
 	ClassJSON
+	ClassTiKV
 	// Add more as needed.
 )
 
@@ -91,7 +92,7 @@ var errClz2Str = map[ErrClass]string{
 	ClassDomain:        "domain",
 	ClassExecutor:      "executor",
 	ClassExpression:    "expression",
-	ClassInspectkv:     "inspectkv",
+	ClassAdmin:         "admin",
 	ClassMeta:          "meta",
 	ClassKV:            "kv",
 	ClassOptimizer:     "optimizer",
@@ -107,6 +108,8 @@ var errClz2Str = map[ErrClass]string{
 	ClassTypes:         "types",
 	ClassGlobal:        "global",
 	ClassMockTikv:      "mocktikv",
+	ClassJSON:          "json",
+	ClassTiKV:          "tikv",
 }
 
 // String implements fmt.Stringer interface.
@@ -246,6 +249,10 @@ func (e *Error) Equal(err error) bool {
 	if originErr == nil {
 		return false
 	}
+
+	if error(e) == originErr {
+		return true
+	}
 	inErr, ok := originErr.(*Error)
 	return ok && e.class == inErr.class && e.code == inErr.code
 }
@@ -279,11 +286,11 @@ func (e *Error) getMySQLErrorCode() uint16 {
 
 var (
 	// ErrClassToMySQLCodes is the map of ErrClass to code-map.
-	ErrClassToMySQLCodes map[ErrClass](map[ErrCode]uint16)
+	ErrClassToMySQLCodes map[ErrClass]map[ErrCode]uint16
 )
 
 func init() {
-	ErrClassToMySQLCodes = make(map[ErrClass](map[ErrCode]uint16))
+	ErrClassToMySQLCodes = make(map[ErrClass]map[ErrCode]uint16)
 	defaultMySQLErrorCode = mysql.ErrUnknown
 }
 
@@ -312,4 +319,26 @@ func ErrorEqual(err1, err2 error) bool {
 // ErrorNotEqual returns a boolean indicating whether err1 isn't equal to err2.
 func ErrorNotEqual(err1, err2 error) bool {
 	return !ErrorEqual(err1, err2)
+}
+
+// MustNil fatals if err is not nil.
+func MustNil(err error) {
+	if err != nil {
+		log.Fatalf(errors.ErrorStack(err))
+	}
+}
+
+// Call executes a function and checks the returned err.
+func Call(fn func() error) {
+	err := fn()
+	if err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
+}
+
+// Log logs the error if it is not nil.
+func Log(err error) {
+	if err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
 }

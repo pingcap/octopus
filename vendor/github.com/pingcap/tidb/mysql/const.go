@@ -1,4 +1,4 @@
-// Copyright 2015 PingCAP, Inc.
+// Copyright 2017 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,16 +14,21 @@
 package mysql
 
 import (
+	"fmt"
 	"strings"
 )
 
+func newInvalidModeErr(s string) error {
+	return NewErr(ErrWrongValueForVar, "sql_mode", s)
+}
+
 // Version information.
-const (
-	MinProtocolVersion byte = 10
-	MaxPayloadLen      int  = 1<<24 - 1
-	// The version number should be three digits.
-	// See https://dev.mysql.com/doc/refman/5.7/en/which-version.html
-	ServerVersion string = "5.7.1-TiDB-1.0"
+var (
+	// TiDBReleaseVersion is initialized by (git describe --tags) in Makefile.
+	TiDBReleaseVersion = "None"
+
+	// ServerVersion is the version information of this tidb-server in MySQL's format.
+	ServerVersion = fmt.Sprintf("5.7.1-TiDB-%s", TiDBReleaseVersion)
 )
 
 // Header information.
@@ -51,11 +56,32 @@ const (
 )
 
 // Identifier length limitations.
+// See https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
 const (
-	MaxTableNameLength    int = 64
-	MaxDatabaseNameLength int = 64
-	MaxColumnNameLength   int = 64
+	// MaxPayloadLen is the max packet payload length.
+	MaxPayloadLen = 1<<24 - 1
+	// MaxTableNameLength is max length of table name identifier.
+	MaxTableNameLength = 64
+	// MaxDatabaseNameLength is max length of database name identifier.
+	MaxDatabaseNameLength = 64
+	// MaxColumnNameLength is max length of column name identifier.
+	MaxColumnNameLength = 64
+	// MaxKeyParts is max length of key parts.
+	MaxKeyParts = 16
+	// MaxIndexIdentifierLen is max length of index identifier.
+	MaxIndexIdentifierLen = 64
+	// MaxConstraintIdentifierLen is max length of constrain identifier.
+	MaxConstraintIdentifierLen = 64
+	// MaxViewIdentifierLen is max length of view identifier.
+	MaxViewIdentifierLen = 64
+	// MaxAliasIdentifierLen is max length of alias identifier.
+	MaxAliasIdentifierLen = 256
+	// MaxUserDefinedVariableLen is max length of user-defined variable.
+	MaxUserDefinedVariableLen = 64
 )
+
+// ErrTextLength error text length limit.
+const ErrTextLength = 80
 
 // Command information.
 const (
@@ -201,11 +227,13 @@ const (
 
 	MaxIntWidth             = 20
 	MaxRealWidth            = 23
+	MaxDecimalScale         = 30
 	MaxDecimalWidth         = 65
 	MaxDateWidth            = 10 // YYYY-MM-DD.
 	MaxDatetimeWidthNoFsp   = 19 // YYYY-MM-DD HH:MM:SS
 	MaxDatetimeWidthWithFsp = 26 // YYYY-MM-DD HH:MM:SS[.fraction]
-	MaxDurationWidthNoFsp   = 9  // HH:MM:SS
+	MaxDatetimeFullWidth    = 29 // YYYY-MM-DD HH:MM:SS.###### AM
+	MaxDurationWidthNoFsp   = 10 // HH:MM:SS
 	MaxDurationWidthWithFsp = 15 // HH:MM:SS[.fraction]
 	MaxBlobWidth            = 16777216
 )
@@ -331,6 +359,9 @@ var AllColumnPrivs = []PrivilegeType{SelectPriv, InsertPriv, UpdatePriv}
 // AllPrivilegeLiteral is the string literal for All Privilege.
 const AllPrivilegeLiteral = "ALL PRIVILEGES"
 
+// DefaultSQLMode for GLOBAL_VARIABLES
+const DefaultSQLMode = "STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+
 // DefaultLengthOfMysqlTypes is the map for default physical length of MySQL data types.
 // See http://dev.mysql.com/doc/refman/5.7/en/storage-requirements.html
 var DefaultLengthOfMysqlTypes = map[byte]int{
@@ -371,6 +402,71 @@ var DefaultLengthOfTimeFraction = map[int]int{
 // See https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html
 type SQLMode int
 
+// HasNoZeroDateMode detects if 'NO_ZERO_DATE' mode is set in SQLMode
+func (m SQLMode) HasNoZeroDateMode() bool {
+	return m&ModeNoZeroDate == ModeNoZeroDate
+}
+
+// HasNoZeroInDateMode detects if 'NO_ZERO_IN_DATE' mode is set in SQLMode
+func (m SQLMode) HasNoZeroInDateMode() bool {
+	return m&ModeNoZeroInDate == ModeNoZeroInDate
+}
+
+// HasErrorForDivisionByZeroMode detects if 'ERROR_FOR_DIVISION_BY_ZERO' mode is set in SQLMode
+func (m SQLMode) HasErrorForDivisionByZeroMode() bool {
+	return m&ModeErrorForDivisionByZero == ModeErrorForDivisionByZero
+}
+
+// HasOnlyFullGroupBy detects if 'ONLY_FULL_GROUP_BY' mode is set in SQLMode
+func (m SQLMode) HasOnlyFullGroupBy() bool {
+	return m&ModeOnlyFullGroupBy == ModeOnlyFullGroupBy
+}
+
+// HasStrictMode detects if 'STRICT_TRANS_TABLES' or 'STRICT_ALL_TABLES' mode is set in SQLMode
+func (m SQLMode) HasStrictMode() bool {
+	return m&ModeStrictTransTables == ModeStrictTransTables || m&ModeStrictAllTables == ModeStrictAllTables
+}
+
+// HasPipesAsConcatMode detects if 'PIPES_AS_CONCAT' mode is set in SQLMode
+func (m SQLMode) HasPipesAsConcatMode() bool {
+	return m&ModePipesAsConcat == ModePipesAsConcat
+}
+
+// HasNoUnsignedSubtractionMode detects if 'NO_UNSIGNED_SUBTRACTION' mode is set in SQLMode
+func (m SQLMode) HasNoUnsignedSubtractionMode() bool {
+	return m&ModeNoUnsignedSubtraction == ModeNoUnsignedSubtraction
+}
+
+// HasHighNotPrecedenceMode detects if 'HIGH_NOT_PRECEDENCE' mode is set in SQLMode
+func (m SQLMode) HasHighNotPrecedenceMode() bool {
+	return m&ModeHighNotPrecedence == ModeHighNotPrecedence
+}
+
+// HasANSIQuotesMode detects if 'ANSI_QUOTES' mode is set in SQLMode
+func (m SQLMode) HasANSIQuotesMode() bool {
+	return m&ModeANSIQuotes == ModeANSIQuotes
+}
+
+// HasRealAsFloatMode detects if 'REAL_AS_FLOAT' mode is set in SQLMode
+func (m SQLMode) HasRealAsFloatMode() bool {
+	return m&ModeRealAsFloat == ModeRealAsFloat
+}
+
+// HasPadCharToFullLengthMode detects if 'PAD_CHAR_TO_FULL_LENGTH' mode is set in SQLMode
+func (m SQLMode) HasPadCharToFullLengthMode() bool {
+	return m&ModePadCharToFullLength == ModePadCharToFullLength
+}
+
+// HasNoBackslashEscapesMode detects if 'NO_BACKSLASH_ESCAPES' mode is set in SQLMode
+func (m SQLMode) HasNoBackslashEscapesMode() bool {
+	return m&ModeNoBackslashEscapes == ModeNoBackslashEscapes
+}
+
+// HasIgnoreSpaceMode detects if 'IGNORE_SPACE' mode is set in SQLMode
+func (m SQLMode) HasIgnoreSpaceMode() bool {
+	return m&ModeIgnoreSpace == ModeIgnoreSpace
+}
+
 // consts for sql modes.
 const (
 	ModeNone        SQLMode = 0
@@ -408,14 +504,45 @@ const (
 	ModePadCharToFullLength
 )
 
-// GetSQLMode gets the sql mode for string literal.
-func GetSQLMode(str string) SQLMode {
-	str = strings.ToUpper(str)
-	mode, ok := Str2SQLMode[str]
-	if !ok {
-		return ModeNone
+// FormatSQLModeStr re-format 'SQL_MODE' variable.
+func FormatSQLModeStr(s string) string {
+	s = strings.ToUpper(strings.TrimRight(s, " "))
+	parts := strings.Split(s, ",")
+	var nonEmptyParts []string
+	existParts := make(map[string]string)
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		if modeParts, ok := CombinationSQLMode[part]; ok {
+			for _, modePart := range modeParts {
+				if _, exist := existParts[modePart]; !exist {
+					nonEmptyParts = append(nonEmptyParts, modePart)
+					existParts[modePart] = modePart
+				}
+			}
+		}
+		if _, exist := existParts[part]; !exist {
+			nonEmptyParts = append(nonEmptyParts, part)
+			existParts[part] = part
+		}
 	}
-	return mode
+	return strings.Join(nonEmptyParts, ",")
+}
+
+// GetSQLMode gets the sql mode for string literal. SQL_mode is a list of different modes separated by commas.
+// The input string must be formatted by 'FormatSQLModeStr'
+func GetSQLMode(s string) (SQLMode, error) {
+	strs := strings.Split(s, ",")
+	var sqlMode SQLMode
+	for i, length := 0, len(strs); i < length; i++ {
+		mode, ok := Str2SQLMode[strs[i]]
+		if !ok && strs[i] != "" {
+			return sqlMode, newInvalidModeErr(strs[i])
+		}
+		sqlMode = sqlMode | mode
+	}
+	return sqlMode, nil
 }
 
 // Str2SQLMode is the string represent of sql_mode to sql_mode map.
@@ -452,6 +579,20 @@ var Str2SQLMode = map[string]SQLMode{
 	"HIGH_NOT_PRECEDENCE":        ModeHighNotPrecedence,
 	"NO_ENGINE_SUBSTITUTION":     ModeNoEngineSubstitution,
 	"PAD_CHAR_TO_FULL_LENGTH":    ModePadCharToFullLength,
+}
+
+// CombinationSQLMode is the special modes that provided as shorthand for combinations of mode values.
+// See https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html#sql-mode-combo.
+var CombinationSQLMode = map[string][]string{
+	"ANSI":        {"REAL_AS_FLOAT", "PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "ONLY_FULL_GROUP_BY"},
+	"DB2":         {"PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "NO_KEY_OPTIONS", "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS"},
+	"MAXDB":       {"PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "NO_KEY_OPTIONS", "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS", "NO_AUTO_CREATE_USER"},
+	"MSSQL":       {"PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "NO_KEY_OPTIONS", "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS"},
+	"MYSQL323":    {"MYSQL323", "HIGH_NOT_PRECEDENCE"},
+	"MYSQL40":     {"MYSQL40", "HIGH_NOT_PRECEDENCE"},
+	"ORACLE":      {"PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "NO_KEY_OPTIONS", "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS", "NO_AUTO_CREATE_USER"},
+	"POSTGRESQL":  {"PIPES_AS_CONCAT", "ANSI_QUOTES", "IGNORE_SPACE", "NO_KEY_OPTIONS", "NO_TABLE_OPTIONS", "NO_FIELD_OPTIONS"},
+	"TRADITIONAL": {"STRICT_TRANS_TABLES", "STRICT_ALL_TABLES", "NO_ZERO_IN_DATE", "NO_ZERO_DATE", "ERROR_FOR_DIVISION_BY_ZERO", "NO_AUTO_CREATE_USER", "NO_ENGINE_SUBSTITUTION"},
 }
 
 // FormatFunc is the locale format function signature.

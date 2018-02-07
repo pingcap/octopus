@@ -20,27 +20,25 @@ import (
 	"math"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/ngaut/pools"
 	"github.com/pingcap/tidb/context"
+	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util/sqlexec"
+	log "github.com/sirupsen/logrus"
+	goctx "golang.org/x/net/context"
 )
 
 const (
-	insertDeleteRangeSQL   = `INSERT IGNORE INTO mysql.gc_delete_range VALUES ("%d", "%d", "%s", "%s", "%d")`
-	loadDeleteRangeSQL     = `SELECT job_id, element_id, start_key, end_key FROM mysql.gc_delete_range WHERE ts < %v ORDER BY ts`
-	completeDeleteRangeSQL = `DELETE FROM mysql.gc_delete_range WHERE job_id = %d AND element_id = %d`
-	updateDeleteRangeSQL   = `UPDATE mysql.gc_delete_range SET start_key = "%s" WHERE job_id = %d AND element_id = %d AND start_key = "%s"`
+	insertDeleteRangeSQL = `INSERT IGNORE INTO mysql.gc_delete_range VALUES ("%d", "%d", "%s", "%s", "%d")`
 
-	delBatchSize int = 65536
-	delBackLog       = 128
+	delBatchSize = 65536
+	delBackLog   = 128
 )
 
 type delRangeManager interface {
@@ -83,7 +81,7 @@ func (dr *delRange) addDelRangeJob(job *model.Job) error {
 	ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusAutocommit, true)
 	ctx.GetSessionVars().InRestrictedSQL = true
 
-	err = insertBgJobIntoDeleteRangeTable(ctx, job)
+	err = insertJobIntoDeleteRangeTable(ctx, job)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -120,7 +118,8 @@ func (dr *delRange) startEmulator() {
 		case <-dr.d.quitCh:
 			return
 		}
-		dr.doDelRangeWork()
+		err := dr.doDelRangeWork()
+		terror.Log(errors.Trace(err))
 	}
 }
 
@@ -135,7 +134,7 @@ func (dr *delRange) doDelRangeWork() error {
 	ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusAutocommit, true)
 	ctx.GetSessionVars().InRestrictedSQL = true
 
-	ranges, err := LoadDeleteRanges(ctx, math.MaxInt64)
+	ranges, err := util.LoadDeleteRanges(ctx, math.MaxInt64)
 	if err != nil {
 		log.Errorf("[dd] delRange emulator load tasks fail: %s", err)
 		return errors.Trace(err)
@@ -150,9 +149,9 @@ func (dr *delRange) doDelRangeWork() error {
 	return nil
 }
 
-func (dr *delRange) doTask(ctx context.Context, r DelRangeTask) error {
+func (dr *delRange) doTask(ctx context.Context, r util.DelRangeTask) error {
 	var oldStartKey, newStartKey kv.Key
-	oldStartKey = r.startKey
+	oldStartKey = r.StartKey
 	for {
 		finish := true
 		dr.keys = dr.keys[:0]
@@ -167,7 +166,7 @@ func (dr *delRange) doTask(ctx context.Context, r DelRangeTask) error {
 				if !iter.Valid() {
 					break
 				}
-				finish = bytes.Compare(iter.Key(), r.endKey) >= 0
+				finish = bytes.Compare(iter.Key(), r.EndKey) >= 0
 				if finish {
 					break
 				}
@@ -181,7 +180,7 @@ func (dr *delRange) doTask(ctx context.Context, r DelRangeTask) error {
 
 			for _, key := range dr.keys {
 				err := txn.Delete(key)
-				if err != nil && !terror.ErrorEqual(err, kv.ErrNotExist) {
+				if err != nil && !kv.ErrNotExist.Equal(err) {
 					return errors.Trace(err)
 				}
 			}
@@ -191,14 +190,14 @@ func (dr *delRange) doTask(ctx context.Context, r DelRangeTask) error {
 			return errors.Trace(err)
 		}
 		if finish {
-			if err := CompleteDeleteRange(ctx, r); err != nil {
+			if err := util.CompleteDeleteRange(ctx, r); err != nil {
 				log.Errorf("[ddl] delRange emulator complete task fail: %s", err)
 				return errors.Trace(err)
 			}
-			log.Infof("[ddl] delRange emulator complete task: (%d, %d)", r.jobID, r.elementID)
+			log.Infof("[ddl] delRange emulator complete task: (%d, %d)", r.JobID, r.ElementID)
 			break
 		} else {
-			if err := updateDeleteRange(ctx, r, newStartKey, oldStartKey); err != nil {
+			if err := util.UpdateDeleteRange(ctx, r, newStartKey, oldStartKey); err != nil {
 				log.Errorf("[ddl] delRange emulator update task fail: %s", err)
 			}
 			oldStartKey = newStartKey
@@ -207,10 +206,10 @@ func (dr *delRange) doTask(ctx context.Context, r DelRangeTask) error {
 	return nil
 }
 
-// insertBgJobIntoDeleteRangeTable parses the job into delete-range arguments,
+// insertJobIntoDeleteRangeTable parses the job into delete-range arguments,
 // and inserts a new record into gc_delete_range table. The primary key is
 // job ID, so we ignore key conflict error.
-func insertBgJobIntoDeleteRangeTable(ctx context.Context, job *model.Job) error {
+func insertJobIntoDeleteRangeTable(ctx context.Context, job *model.Job) error {
 	now, err := getNowTS(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -254,90 +253,7 @@ func doInsert(s sqlexec.SQLExecutor, jobID int64, elementID int64, startKey, end
 	startKeyEncoded := hex.EncodeToString(startKey)
 	endKeyEncoded := hex.EncodeToString(endKey)
 	sql := fmt.Sprintf(insertDeleteRangeSQL, jobID, elementID, startKeyEncoded, endKeyEncoded, ts)
-	_, err := s.Execute(sql)
-	return errors.Trace(err)
-}
-
-// DelRangeTask is for run delete-range command in gc_worker.
-type DelRangeTask struct {
-	jobID, elementID int64
-	startKey, endKey []byte
-}
-
-// Range returns the range [start, end) to delete.
-func (t DelRangeTask) Range() ([]byte, []byte) {
-	return t.startKey, t.endKey
-}
-
-// LoadDeleteRanges loads delete range tasks from gc_delete_range table.
-func LoadDeleteRanges(ctx context.Context, safePoint uint64) (ranges []DelRangeTask, _ error) {
-	sql := fmt.Sprintf(loadDeleteRangeSQL, safePoint)
-	rss, err := ctx.(sqlexec.SQLExecutor).Execute(sql)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	rs := rss[0]
-	for {
-		row, err := rs.Next()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if row == nil {
-			break
-		}
-		startKey, err := hex.DecodeString(row.Data[2].GetString())
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		endKey, err := hex.DecodeString(row.Data[3].GetString())
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		ranges = append(ranges, DelRangeTask{
-			jobID:     row.Data[0].GetInt64(),
-			elementID: row.Data[1].GetInt64(),
-			startKey:  startKey,
-			endKey:    endKey,
-		})
-	}
-	return ranges, nil
-}
-
-// CompleteDeleteRange deletes a record from gc_delete_range table.
-// NOTE: This function WILL NOT start and run in a new transaction internally.
-func CompleteDeleteRange(ctx context.Context, dr DelRangeTask) error {
-	sql := fmt.Sprintf(completeDeleteRangeSQL, dr.jobID, dr.elementID)
-	_, err := ctx.(sqlexec.SQLExecutor).Execute(sql)
-	return errors.Trace(err)
-}
-
-// updateDeleteRange is only for emulator.
-func updateDeleteRange(ctx context.Context, dr DelRangeTask, newStartKey, oldStartKey kv.Key) error {
-	newStartKeyHex := hex.EncodeToString(newStartKey)
-	oldStartKeyHex := hex.EncodeToString(oldStartKey)
-	sql := fmt.Sprintf(updateDeleteRangeSQL, newStartKeyHex, dr.jobID, dr.elementID, oldStartKeyHex)
-	_, err := ctx.(sqlexec.SQLExecutor).Execute(sql)
-	return errors.Trace(err)
-}
-
-// LoadPendingBgJobsIntoDeleteTable loads all pending DDL backgroud jobs
-// into table `gc_delete_range` so that gc worker can process them.
-// NOTE: This function WILL NOT start and run in a new transaction internally.
-func LoadPendingBgJobsIntoDeleteTable(ctx context.Context) (err error) {
-	log.Infof("[ddl] loading pending backgroud DDL jobs")
-	var met = meta.NewMeta(ctx.Txn())
-	for {
-		var job *model.Job
-		job, err = met.DeQueueBgJob()
-		if err != nil || job == nil {
-			break
-		}
-		err = insertBgJobIntoDeleteRangeTable(ctx, job)
-		if err != nil {
-			break
-		}
-	}
+	_, err := s.Execute(goctx.Background(), sql)
 	return errors.Trace(err)
 }
 

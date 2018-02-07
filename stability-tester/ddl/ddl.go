@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 )
 
 // The DDL test case is intended to test the correctness of DDL operations. It

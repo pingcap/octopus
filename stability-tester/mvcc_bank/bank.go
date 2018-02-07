@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 

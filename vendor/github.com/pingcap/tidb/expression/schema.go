@@ -38,7 +38,6 @@ type Schema struct {
 	Keys    []KeyInfo
 	// TblID2Handle stores the tables' handle column information if we need handle in execution phase.
 	TblID2Handle map[int64][]*Column
-	MaxOneRow    bool
 }
 
 // String implements fmt.Stringer interface.
@@ -70,11 +69,20 @@ func (s *Schema) Clone() *Schema {
 	}
 	schema := NewSchema(cols...)
 	schema.SetUniqueKeys(keys)
-	schema.TblID2Handle = make(map[int64][]*Column)
 	for id, cols := range s.TblID2Handle {
 		schema.TblID2Handle[id] = make([]*Column, 0, len(cols))
 		for _, col := range cols {
-			schema.TblID2Handle[id] = append(schema.TblID2Handle[id], col.Clone().(*Column))
+			var inColumns = false
+			for i, colInColumns := range s.Columns {
+				if col == colInColumns {
+					schema.TblID2Handle[id] = append(schema.TblID2Handle[id], schema.Columns[i])
+					inColumns = true
+					break
+				}
+			}
+			if !inColumns {
+				schema.TblID2Handle[id] = append(schema.TblID2Handle[id], col.Clone().(*Column))
+			}
 		}
 	}
 	return schema
@@ -105,7 +113,15 @@ func (s *Schema) FindColumnAndIndex(astCol *ast.ColumnName) (*Column, int, error
 			if idx == -1 {
 				idx = i
 			} else {
-				return nil, -1, errors.Errorf("Column %s is ambiguous", col.String())
+				// For query like:
+				// create table t1(a int); create table t2(d int);
+				// select 1 from t1, t2 where 1 = (select d from t2 where a > 1) and d = 1;
+				// we will get an Apply operator whose schema is [test.t1.a, test.t2.d, test.t2.d],
+				// we check whether the column of the schema comes from a subquery to avoid
+				// causing the ambiguous error when resolve the column `d` in the Selection.
+				if !col.IsAggOrSubq {
+					return nil, -1, errors.Errorf("Column %s is ambiguous", col.String())
+				}
 			}
 		}
 	}
@@ -191,7 +207,8 @@ func (s *Schema) ColumnsByIndices(offsets []int) []*Column {
 	return cols
 }
 
-// MergeSchema will merge two schema into one schema.
+// MergeSchema will merge two schema into one schema. We shouldn't need to consider unique keys.
+// That will be processed in build_key_info.go.
 func MergeSchema(lSchema, rSchema *Schema) *Schema {
 	if lSchema == nil && rSchema == nil {
 		return nil
@@ -205,7 +222,6 @@ func MergeSchema(lSchema, rSchema *Schema) *Schema {
 	tmpL := lSchema.Clone()
 	tmpR := rSchema.Clone()
 	ret := NewSchema(append(tmpL.Columns, tmpR.Columns...)...)
-	ret.SetUniqueKeys(append(tmpL.Keys, tmpR.Keys...))
 	ret.TblID2Handle = tmpL.TblID2Handle
 	for id, cols := range tmpR.TblID2Handle {
 		if _, ok := ret.TblID2Handle[id]; ok {
