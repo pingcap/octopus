@@ -154,9 +154,10 @@ func (c *coprocessor) ReadRow(key uint64) (has bool, err error) {
 	if err != nil {
 		return
 	}
-	res := client.Send(goctx.Background(), &req)
+	goCtx := goctx.Background()
+	res := client.Send(goCtx, &req)
 	defer res.Close()
-	data, err := res.Next()
+	data, err := res.Next(goCtx)
 	return len(data) != 0, err
 }
 
