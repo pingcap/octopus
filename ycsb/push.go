@@ -16,9 +16,9 @@ package main
 import (
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
+	log "github.com/sirupsen/logrus"
 )
 
 const zeroDuration = time.Duration(0)

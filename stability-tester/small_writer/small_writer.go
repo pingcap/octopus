@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/util"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 

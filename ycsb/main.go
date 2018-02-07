@@ -52,9 +52,9 @@ import (
 	_ "net/http/pprof"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	log "github.com/sirupsen/logrus"
 )
 
 // SQL statements
@@ -330,12 +330,17 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	log.SetHighlighting(false)
 	if len(*logFile) > 0 {
-		log.SetOutputByName(*logFile)
-		log.SetRotateByHour()
+		f, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			panic(err)
+		}
+		log.SetOutput(f)
 	}
-	log.SetLevelByString(*logLevel)
+
+	if level, err := log.ParseLevel(*logLevel); err == nil {
+		log.SetLevel(level)
+	}
 
 	go func() {
 		http.Handle("/metrics", prometheus.Handler())

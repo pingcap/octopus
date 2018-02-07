@@ -6,9 +6,12 @@ import (
 	"github.com/juju/errors"
 
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tidb/types"
+
+	goctx "golang.org/x/net/context"
 )
 
 var colIDs = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -33,7 +36,7 @@ func (c *txnKV) ReadRow(id uint64) (bool, error) {
 		return false, err
 	}
 
-	return data != nil, tx.Commit()
+	return data != nil, tx.Commit(goctx.Background())
 }
 
 func (c *txnKV) InsertRow(id uint64, fields []string) error {
@@ -44,7 +47,7 @@ func (c *txnKV) InsertRow(id uint64, fields []string) error {
 		cols[i].SetString(v)
 	}
 
-	rowData, err := tablecodec.EncodeRow(cols, colIDs, nil)
+	rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -58,7 +61,7 @@ func (c *txnKV) InsertRow(id uint64, fields []string) error {
 		return err
 	}
 
-	return tx.Commit()
+	return tx.Commit(goctx.Background())
 }
 
 func setupTxnKV(pdAddr string) (Database, error) {

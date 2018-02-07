@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 )
 
 var (

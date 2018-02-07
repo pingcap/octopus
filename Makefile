@@ -15,13 +15,11 @@ default: build
 
 all: build check test
 
-build: tidb-benchbot stability-tester ycsb
+build: tidb-benchbot ycsb
 
 tidb-benchbot:
-	$(GOBUILD) -o bin/tidb-benchbot benchbot/*.go
-
-tidb-stability:
-	$(GOBUILD) -o bin/tidb-stability-tester stability-tester/*.go
+	# go-sqlite3 require CGO, see https://github.com/mattn/go-sqlite3/issues/327
+	CGO_ENABLED=1 go build -ldflags '$(LDFLAGS)' -o bin/tidb-benchbot benchbot/*.go
 
 tidb-ycsb:
 	$(GOBUILD) -o bin/tidb-ycsb ycsb/*.go
@@ -82,17 +80,6 @@ check:
 	@echo "gofmt"
 	@ gofmt -s -l . 2>&1 | $(GOCHECKER)
 
-
-update:
-	which glide >/dev/null || curl https://glide.sh/get | sh
-	which glide-vc || go get -v -u github.com/sgotti/glide-vc
-ifdef PKG
-	glide get --strip-vendor --skip-test ${PKG}
-else
-	glide update --strip-vendor --skip-test
-endif
-	@echo "removing test files"
-	glide vc --only-code --no-tests
 
 clean:
 	@rm -rf bin/tidb-benchbot
