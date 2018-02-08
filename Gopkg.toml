@@ -87,6 +87,6 @@
   source = "https://github.com/grpc/grpc-go.git"
   version = "=1.7.5"
 
-[[constraint]]
+[[override]]
   name = "github.com/grpc-ecosystem/go-grpc-middleware"
-  version = "82921fcf811d228d2fa202bc31238b356bf9f8d5"
+  revision = "82921fcf811d228d2fa202bc31238b356bf9f8d5"
