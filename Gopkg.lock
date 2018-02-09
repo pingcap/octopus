@@ -153,8 +153,8 @@
 [[projects]]
   branch = "master"
   name = "github.com/pingcap/tidb"
-  packages = [".","ast","config","context","ddl","ddl/util","distsql","domain","executor","expression","expression/aggregation","infoschema","kv","meta","meta/autoid","metrics","model","mysql","owner","parser","parser/opcode","perfschema","plan","privilege","privilege/privileges","sessionctx/binloginfo","sessionctx/stmtctx","sessionctx/variable","statistics","store/tikv","store/tikv/mocktikv","store/tikv/oracle","store/tikv/oracle/oracles","store/tikv/tikvrpc","structure","table","table/tables","tablecodec","terror","types","types/json","util","util/admin","util/auth","util/charset","util/chunk","util/codec","util/encrypt","util/format","util/goroutine_pool","util/hack","util/kvcache","util/logutil","util/mock","util/mvmap","util/printer","util/ranger","util/sqlexec","util/stringutil"]
-  revision = "1aaef047faa32ffb0c6541b92bae7a4d30da6ad8"
+  packages = [".","ast","config","context","ddl","ddl/util","distsql","domain","executor","expression","expression/aggregation","infoschema","kv","meta","meta/autoid","metrics","model","mysql","owner","parser","parser/opcode","perfschema","plan","privilege","privilege/privileges","sessionctx/binloginfo","sessionctx/stmtctx","sessionctx/variable","statistics","store/tikv","store/tikv/oracle","store/tikv/oracle/oracles","store/tikv/tikvrpc","structure","table","table/tables","tablecodec","terror","types","types/json","util","util/admin","util/auth","util/charset","util/chunk","util/codec","util/encrypt","util/format","util/goroutine_pool","util/hack","util/kvcache","util/logutil","util/mock","util/mvmap","util/printer","util/ranger","util/sqlexec","util/stringutil"]
+  revision = "de9c192cba5e461650dd99f654bf82d659373f15"
 
 [[projects]]
   branch = "master"
@@ -232,13 +232,13 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
-  revision = "d9133f5469342136e669e85192a26056b587f503"
+  revision = "5119cf507ed5294cc409c092980c7497ee5d6fd2"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "2fb46b16b8dda405028c50f7c7f0f9dd1fa6bfb1"
+  revision = "f5dfe339be1d06f81b22525fe34671ee7d2c8904"
 
 [[projects]]
   branch = "master"
@@ -250,7 +250,7 @@
   branch = "master"
   name = "golang.org/x/text"
   packages = ["collate","collate/build","encoding","encoding/charmap","encoding/internal","encoding/internal/identifier","encoding/japanese","encoding/korean","encoding/simplifiedchinese","encoding/traditionalchinese","encoding/unicode","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","internal/utf8internal","language","runes","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+  revision = "4e4a3210bb54bb31f6ab2cdca2edcc0b50c420c1"
 
 [[projects]]
   branch = "master"
@@ -274,6 +274,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b7d3a192095478a3b92b2731b1cd4ee84ec4fc069939e57db7162b8ce1942ae9"
+  inputs-digest = "ba50bb142774a9092938b84b7e94b728c6ce7c51cdf757095a97b7d86ecc7fdb"
   solver-name = "gps-cdcl"
   solver-version = 1

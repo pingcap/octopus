@@ -80,6 +80,16 @@ check:
 	@echo "gofmt"
 	@ gofmt -s -l . 2>&1 | $(GOCHECKER)
 
+update:
+	which dep 2>/dev/null || go get -u github.com/golang/dep/cmd/dep
+ifdef PKG
+	dep ensure -add ${PKG}
+else
+	dep ensure -update
+endif
+	@echo "removing test files"
+	dep prune
+	bash ./clean_vendor.sh
 
 clean:
 	@rm -rf bin/tidb-benchbot
