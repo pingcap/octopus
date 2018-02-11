@@ -154,7 +154,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB) {
 			case <-ticker.C:
 				err := c.verify(db)
 				if err != nil {
-					log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
+					log.Errorf("[%s] verify error: %s in: %s", c, err, time.Now())
 					if time.Now().Sub(start) > defaultVerifyTimeout {
 						atomic.StoreInt32(&c.stopped, 1)
 						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
