@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/util"
 	"golang.org/x/net/context"
 )
@@ -361,13 +361,5 @@ INSERT INTO record (from_table, from_id, to_table, to_id, from_balance, to_balan
 	}
 
 	err = tx.Commit()
-	if fromBalance >= amount {
-		if err != nil {
-			log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
-		}
-		if err == nil {
-			log.Infof("[bank] exec commit success: %s\n", update)
-		}
-	}
 	return err
 }

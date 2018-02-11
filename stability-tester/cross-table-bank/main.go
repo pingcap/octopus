@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/util"
 	"golang.org/x/net/context"
 )
