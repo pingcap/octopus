@@ -17,13 +17,14 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/pingcap/octopus/stability-tester/merge_test/util"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -87,6 +88,12 @@ func main() {
 
 	log.Info("check speed...")
 	err = checkSpeed(db)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
+
+	log.Info("check correctness...")
+	err = checkCorrectness(db)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
@@ -465,4 +472,191 @@ func checkSpeed(db *util.DB) error {
 	db.InsertIntoNewTable(ctx, 200)
 
 	return nil
+}
+
+const (
+	accountNum        = 10000
+	initialBalance    = 1000
+	insertBatchSize   = 100
+	insertConcurrency = 100
+	maxTransfer       = 100
+	systemAccountID   = 0
+)
+
+var remark = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
+
+func checkCorrectness(db *util.DB) error {
+	initRegions, err := util.GetRegions()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS bank2_accounts (
+			id INT,
+			balance INT NOT NULL,
+			name VARCHAR(32),
+			remark VARCHAR(128),
+			PRIMARY KEY (id),
+			UNIQUE INDEX byName (name)
+		  );
+		  
+		  CREATE TABLE IF NOT EXISTS bank2_transaction (
+			id INT,
+			booking_date TIMESTAMP DEFAULT NOW(),
+			txn_date TIMESTAMP DEFAULT NOW(),
+			txn_ref VARCHAR(32),
+			PRIMARY KEY (id),
+			UNIQUE INDEX byTxnRef (txn_ref)
+		  );
+		  
+		  CREATE TABLE IF NOT EXISTS bank2_transaction_leg (
+			id INT AUTO_INCREMENT,
+			account_id INT,
+			amount INT NOT NULL,
+			running_balance INT NOT NULL,
+			txn_id INT,
+			PRIMARY KEY (id)
+		  );
+		  
+		  TRUNCATE TABLE bank2_accounts;
+		  TRUNCATE TABLE bank2_transaction;
+		  TRUNCATE TABLE bank2_transaction_leg;`)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	time.Sleep(time.Second * 60)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	rand.Seed(time.Now().UnixNano())
+	defer cancel()
+	go func() {
+		time.Sleep(time.Second * time.Duration(rand.Intn(60)))
+		nowRegions, err := util.GetRegions()
+		if err != nil {
+			log.Fatal(err)
+		}
+		newRegions, err := util.GetNewTableRegions(initRegions, nowRegions)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		source := newRegions[rand.Intn(len(newRegions))]
+		target := util.FindAdjacentRegion(newRegions, source)
+
+		err = util.MergeRegion(source, target)
+		log.Infof("add operator merge region %v into region %v", source.ID, target.ID)
+		if err != nil {
+			log.Warning(err)
+		}
+	}()
+
+	var wg sync.WaitGroup
+	type Job struct {
+		begin, end int
+	}
+	ch := make(chan Job)
+	maxLen := len(remark)
+	for i := 0; i < insertConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range ch {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				start := time.Now()
+				args := make([]string, 0, insertBatchSize)
+				for i := job.begin; i < job.end; i++ {
+					args = append(args, fmt.Sprintf(`(%d, %d, "account %d", "%s")`, i, initialBalance, i, remark[:rand.Intn(maxLen)]))
+				}
+
+				query := fmt.Sprintf("INSERT IGNORE INTO bank2_accounts (id, balance, name, remark) VALUES %s", strings.Join(args, ","))
+				err := util.RunWithRetry(ctx, 200, 5*time.Second, func() error {
+					_, err := db.Exec(query)
+					return err
+				})
+				if err != nil {
+					log.Fatalf("exec %s err %s", query, err)
+				}
+				log.Infof("insert %d accounts, takes %s", job.end-job.begin, time.Since(start))
+			}
+		}()
+	}
+
+	var begin, end int
+	for begin = 1; begin <= accountNum; begin = end {
+		end = begin + insertBatchSize
+		if end > accountNum {
+			end = accountNum + 1
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case ch <- Job{begin: begin, end: end}:
+		}
+	}
+	close(ch)
+	wg.Wait()
+
+	select {
+	case <-ctx.Done():
+		log.Warn("bank2 initialize is cancel")
+		return nil
+	default:
+	}
+
+	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, int64(accountNum*initialBalance))
+	err = util.RunWithRetry(ctx, 100, 3*time.Second, func() error {
+		_, err := db.Exec(query)
+		return err
+	})
+	if err != nil {
+		log.Fatalf("insert system account err: %v", err)
+	}
+
+	startVerify(ctx, db)
+	return nil
+}
+
+func startVerify(ctx context.Context, db *util.DB) {
+	verify(db)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				verify(db)
+			}
+		}
+	}()
+}
+
+func verify(db *util.DB) {
+	tx, err := db.Begin()
+	if err != nil {
+		log.Warning(err)
+	}
+	defer tx.Rollback()
+
+	var tso uint64
+	if err = tx.QueryRow("SELECT @@tidb_current_ts").Scan(&tso); err == nil {
+		log.Infof("SELECT SUM(balance) to verify use tso %d", tso)
+	}
+
+	var total int64
+	err = tx.QueryRow("SELECT SUM(balance) AS total FROM bank2_accounts").Scan(&total)
+	if err != nil {
+		log.Warning(err)
+	}
+
+	expectTotal := (int64(accountNum) * initialBalance) * 2
+	if total != expectTotal {
+		log.Fatalf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
+	}
 }

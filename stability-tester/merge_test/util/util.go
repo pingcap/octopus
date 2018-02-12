@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -85,6 +86,17 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 }
 
 func GetNewTableRegion(old, now []*RegionInfo) (*RegionInfo, error) {
+	regions, err := GetNewTableRegions(old, now)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(regions) != 1 {
+		return nil, fmt.Errorf("get %v new table ids, expect only one", len(regions))
+	}
+	return regions[0], nil
+}
+
+func GetNewTableRegions(old, now []*RegionInfo) ([]*RegionInfo, error) {
 	set := make(map[int64]*RegionInfo)
 	for _, n := range now {
 		set[GetTableID(n)] = n
@@ -93,18 +105,15 @@ func GetNewTableRegion(old, now []*RegionInfo) (*RegionInfo, error) {
 		delete(set, GetTableID(o))
 	}
 
-	if len(set) != 1 {
-		return nil, fmt.Errorf("get %v new table ids, expect only one", len(set))
-	}
-
+	var regions []*RegionInfo
 	for _, s := range set {
 		region, err := GetRegionInfo(s.ID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return region, nil
+		regions = append(regions, region)
 	}
-	return nil, nil
+	return regions, nil
 }
 
 func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
@@ -144,4 +153,30 @@ func GetTableID(region *RegionInfo) int64 {
 	key := Key{}
 	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
 	return key.TableID()
+}
+
+func RunWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f func() error) error {
+	var err error
+	for i := 0; i < retryCnt; i++ {
+		err = f()
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(interval):
+		}
+	}
+	return errors.Trace(err)
+}
+
+func FindAdjacentRegion(regions []*RegionInfo, region *RegionInfo) *RegionInfo {
+	for _, r := range regions {
+		if r.EndKey == region.StartKey || region.EndKey == r.StartKey {
+			return r
+		}
+	}
+
+	return nil
 }

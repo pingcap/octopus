@@ -37,6 +37,7 @@ var (
 	regionIDPrefix   = "pd/api/v1/region/id"
 	storePrefix      = "pd/api/v1/store"
 	schedulersPrefix = "pd/api/v1/schedulers"
+	operatorsPrefix  = "pd/api/v1/operators"
 )
 
 type regionsInfo struct {
@@ -220,4 +221,12 @@ func GetStoreAddr(storeID uint64) (string, error) {
 		return "", fmt.Errorf("Failed to get store %v info: %s", storeID, err)
 	}
 	return store.Store.GetAddress(), nil
+}
+
+func MergeRegion(source, target *RegionInfo) error {
+	input := make(map[string]interface{})
+	input["name"] = "region-merge"
+	input["source_region_id"] = source.ID
+	input["merge_region_id"] = target.ID
+	return postJSON(operatorsPrefix, input)
 }
