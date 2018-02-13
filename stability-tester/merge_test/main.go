@@ -33,6 +33,7 @@ var (
 	user     = flag.String("user", "root", "DB user")
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
+	//test     = flag.String("test", "12345678", "test cases")
 )
 
 const deleteBatch = 100
@@ -50,47 +51,47 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Info("check create table...")
-	err = checkCreateTable(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check create table...")
+	// err = checkCreateTable(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check split table region mannualy...")
-	err = checkSplitTableRegion(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check split table region mannualy...")
+	// err = checkSplitTableRegion(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check drop table...")
-	err = checkDropTable(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check drop table...")
+	// err = checkDropTable(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check insert and delete all rows of table ...")
-	err = checkInsertAndDeleteAll(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check insert and delete all rows of table ...")
+	// err = checkInsertAndDeleteAll(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check insert and delete partial rows of table ...")
-	err = checkInsertAndDeletePartial(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check insert and delete partial rows of table ...")
+	// err = checkInsertAndDeletePartial(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check shuffle...")
-	err = checkShuffle(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check shuffle...")
+	// err = checkShuffle(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
-	log.Info("check speed...")
-	err = checkSpeed(db)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
+	// log.Info("check speed...")
+	// err = checkSpeed(db)
+	// if err != nil {
+	// 	log.Fatal(errors.ErrorStack(err))
+	// }
 
 	log.Info("check correctness...")
 	err = checkCorrectness(db)
@@ -532,23 +533,43 @@ func checkCorrectness(db *util.DB) error {
 	rand.Seed(time.Now().UnixNano())
 	defer cancel()
 	go func() {
-		time.Sleep(time.Second * time.Duration(rand.Intn(60)))
-		nowRegions, err := util.GetRegions()
-		if err != nil {
-			log.Fatal(err)
-		}
-		newRegions, err := util.GetNewTableRegions(initRegions, nowRegions)
-		if err != nil {
-			log.Fatal(err)
-		}
+		var monitorRegions []uint64
+		for {
+			time.Sleep(time.Second * time.Duration(rand.Intn(60)))
 
-		source := newRegions[rand.Intn(len(newRegions))]
-		target := util.FindAdjacentRegion(newRegions, source)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			nowRegions, err := util.GetRegions()
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		err = util.MergeRegion(source, target)
-		log.Infof("add operator merge region %v into region %v", source.ID, target.ID)
-		if err != nil {
-			log.Warning(err)
+			for i := len(monitorRegions) - 1; i >= 0; i-- {
+				if !util.IsRegionIDExist(nowRegions, monitorRegions[i]) {
+					log.Infof("region %v has been merged")
+					monitorRegions = append(monitorRegions[:i], monitorRegions[i+1:]...)
+					continue
+				}
+			}
+
+			newRegions, err := util.GetNewTableRegions(initRegions, nowRegions)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			source := newRegions[rand.Intn(len(newRegions))]
+			target := util.FindAdjacentRegion(newRegions, source)
+
+			err = util.MergeRegion(source, target)
+			log.Infof("try to add operator merge region %v into region %v", source.ID, target.ID)
+			if err != nil {
+				log.Warning(err)
+			} else {
+				monitorRegions = append(monitorRegions, source.ID)
+			}
 		}
 	}()
 
@@ -604,7 +625,7 @@ func checkCorrectness(db *util.DB) error {
 
 	select {
 	case <-ctx.Done():
-		log.Warn("bank2 initialize is cancel")
+		log.Warn("initialize is cancel")
 		return nil
 	default:
 	}

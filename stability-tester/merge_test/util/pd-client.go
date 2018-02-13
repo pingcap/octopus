@@ -225,8 +225,8 @@ func GetStoreAddr(storeID uint64) (string, error) {
 
 func MergeRegion(source, target *RegionInfo) error {
 	input := make(map[string]interface{})
-	input["name"] = "region-merge"
+	input["name"] = "merge-region"
 	input["source_region_id"] = source.ID
-	input["merge_region_id"] = target.ID
+	input["target_region_id"] = target.ID
 	return postJSON(operatorsPrefix, input)
 }

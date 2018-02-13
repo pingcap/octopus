@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	log "github.com/sirupsen/logrus"
 )
 
 func IsSameLocation(one, other []*metapb.Peer) bool {
