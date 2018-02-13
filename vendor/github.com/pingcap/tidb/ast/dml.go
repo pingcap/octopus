@@ -16,6 +16,7 @@ package ast
 import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/util/auth"
 )
 
 var (
@@ -228,16 +229,6 @@ func (n *TableSource) Accept(v Visitor) (Node, bool) {
 	}
 	n.Source = node.(ResultSetNode)
 	return v.Leave(n)
-}
-
-// SetResultFields implements ResultSetNode interface.
-func (n *TableSource) SetResultFields(rfs []*ResultField) {
-	n.Source.SetResultFields(rfs)
-}
-
-// GetResultFields implements ResultSetNode interface.
-func (n *TableSource) GetResultFields() []*ResultField {
-	return n.Source.GetResultFields()
 }
 
 // SelectLockType is the lock type for SelectStmt.
@@ -716,7 +707,7 @@ type InsertStmt struct {
 	dmlNode
 
 	IsReplace   bool
-	Ignore      bool
+	IgnoreErr   bool
 	Table       *TableRefsClause
 	Columns     []*ColumnName
 	Lists       [][]ExprNode
@@ -794,7 +785,7 @@ type DeleteStmt struct {
 	Order        *OrderByClause
 	Limit        *Limit
 	LowPriority  bool
-	Ignore       bool
+	IgnoreErr    bool
 	Quick        bool
 	IsMultiTable bool
 	BeforeFrom   bool
@@ -855,7 +846,7 @@ type UpdateStmt struct {
 	Order         *OrderByClause
 	Limit         *Limit
 	LowPriority   bool
-	Ignore        bool
+	IgnoreErr     bool
 	MultipleTable bool
 }
 
@@ -962,6 +953,9 @@ const (
 	ShowStatsMeta
 	ShowStatsHistograms
 	ShowStatsBuckets
+	ShowStatsHealthy
+	ShowPlugins
+	ShowProfiles
 )
 
 // ShowStmt is a statement to provide information about databases, tables, columns and so on.
@@ -976,7 +970,7 @@ type ShowStmt struct {
 	Column *ColumnName // Used for `desc table column`.
 	Flag   int         // Some flag parsed from sql, such as FULL.
 	Full   bool
-	User   string // Used for show grants.
+	User   *auth.UserIdentity // Used for show grants.
 
 	// GlobalScope is used by show variables
 	GlobalScope bool

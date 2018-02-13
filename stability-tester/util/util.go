@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"math/rand"
+	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -116,11 +117,12 @@ func OpenDB(dsn string, maxIdeleConns int) (*sql.DB, error) {
 
 // InitLog initials log
 func InitLog(file string, level string) {
-	log.SetLevelByString(level)
 	if len(file) > 0 {
-		log.SetOutputByName(file)
-		log.SetHighlighting(false)
-		log.SetRotateByDay()
+		f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			panic(err)
+		}
+		log.SetOutput(f)
 	}
 }
 

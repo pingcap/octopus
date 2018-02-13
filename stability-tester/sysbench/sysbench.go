@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 

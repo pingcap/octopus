@@ -19,70 +19,13 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	goctx "golang.org/x/net/context"
 )
 
-var _ OwnerManager = &mockOwnerManager{}
 var _ SchemaSyncer = &mockSchemaSyncer{}
-
-// mockOwnerManager represents the structure which is used for electing owner.
-// It's used for local store and testing.
-// So this worker will always be the ddl owner and background owner.
-type mockOwnerManager struct {
-	ddlOwner int32
-	ddlID    string // id is the ID of DDL.
-	cancel   goctx.CancelFunc
-}
-
-// NewMockOwnerManager creates a new mock OwnerManager.
-func NewMockOwnerManager(id string, cancel goctx.CancelFunc) OwnerManager {
-	return &mockOwnerManager{
-		ddlID:  id,
-		cancel: cancel,
-	}
-}
-
-// ID implements mockOwnerManager.ID interface.
-func (m *mockOwnerManager) ID() string {
-	return m.ddlID
-}
-
-// IsOwner implements mockOwnerManager.IsOwner interface.
-func (m *mockOwnerManager) IsOwner() bool {
-	return atomic.LoadInt32(&m.ddlOwner) == 1
-}
-
-// SetOwner implements mockOwnerManager.SetOwner interface.
-func (m *mockOwnerManager) SetOwner(isOwner bool) {
-	if isOwner {
-		atomic.StoreInt32(&m.ddlOwner, 1)
-	} else {
-		atomic.StoreInt32(&m.ddlOwner, 0)
-	}
-}
-
-// Cancel implements mockOwnerManager.Cancel interface.
-func (m *mockOwnerManager) Cancel() {
-	m.cancel()
-}
-
-// GetOwnerID implements OwnerManager.GetOwnerID interface.
-func (m *mockOwnerManager) GetOwnerID(ctx goctx.Context, key string) (string, error) {
-	if key != DDLOwnerKey {
-		return "", errors.New("invalid owner key")
-	}
-	if m.IsOwner() {
-		return m.ID(), nil
-	}
-	return "", errors.New("no owner")
-}
-
-// CampaignOwners implements mockOwnerManager.CampaignOwners interface.
-func (m *mockOwnerManager) CampaignOwners(_ goctx.Context) error {
-	m.SetOwner(true)
-	return nil
-}
 
 const mockCheckVersInterval = 2 * time.Millisecond
 
@@ -133,6 +76,11 @@ func (s *mockSchemaSyncer) OwnerUpdateGlobalVersion(ctx goctx.Context, version i
 	return nil
 }
 
+// MustGetGlobalVersion implements SchemaSyncer.MustGetGlobalVersion interface.
+func (s *mockSchemaSyncer) MustGetGlobalVersion(ctx goctx.Context) (int64, error) {
+	return 0, nil
+}
+
 // OwnerCheckAllVersions implements SchemaSyncer.OwnerCheckAllVersions interface.
 func (s *mockSchemaSyncer) OwnerCheckAllVersions(ctx goctx.Context, latestVer int64) error {
 	ticker := time.NewTicker(mockCheckVersInterval)
@@ -172,4 +120,18 @@ func (dr *mockDelRange) start() {
 // clear implements delRangeManager interface.
 func (dr *mockDelRange) clear() {
 	return
+}
+
+// MockTableInfo mocks a table info by create table stmt ast and a specified table id.
+func MockTableInfo(ctx context.Context, stmt *ast.CreateTableStmt, tableID int64) (*model.TableInfo, error) {
+	cols, newConstraints, err := buildColumnsAndConstraints(ctx, stmt.Cols, stmt.Constraints)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tbl, err := buildTableInfo(nil, stmt.Table.Name, cols, newConstraints, ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tbl.ID = tableID
+	return tbl, nil
 }

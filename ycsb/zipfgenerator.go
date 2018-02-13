@@ -25,8 +25,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/ngaut/log"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 // ZipfGenerator is a random number generator that generates draws from a Zipf

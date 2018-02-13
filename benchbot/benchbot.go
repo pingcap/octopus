@@ -9,8 +9,7 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/ngaut/log"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pingcap/octopus/benchbot/api"
 	"github.com/pingcap/octopus/benchbot/backend"
@@ -36,19 +35,20 @@ func initLogger(cfg *backend.ServerConfig) error {
 	}
 
 	clientPath := path.Join(cfg.LogDir, clientLogFileName)
-	log.SetRotateByDay()
-	log.SetHighlighting(false)
-	if err := log.SetOutputByName(clientPath); err != nil {
-		return err
-	}
-
-	serverPath := path.Join(cfg.LogDir, serverLogFileName)
-	serverFile, err := os.OpenFile(serverPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
+	clientFile, err := os.OpenFile(clientPath, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
-	logrus.SetOutput(serverFile)
-	logrus.SetLevel(logrus.InfoLevel)
+	log.SetOutput(clientFile)
+	log.SetLevel(log.InfoLevel)
+
+	serverPath := path.Join(cfg.LogDir, serverLogFileName)
+	serverFile, err := os.OpenFile(serverPath, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	log.SetOutput(serverFile)
+	log.SetLevel(log.InfoLevel)
 
 	return nil
 }
@@ -95,7 +95,7 @@ func main() {
 		syscall.SIGQUIT)
 
 	sig := <-sc
-	logrus.Infof("Got signal %d to exit.", sig)
+	log.Infof("Got signal %d to exit.", sig)
 
 	svr.Close()
 }

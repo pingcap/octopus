@@ -3,10 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/ngaut/log"
-
 	. "github.com/pingcap/octopus/benchbot/backend"
+	log "github.com/sirupsen/logrus"
 )
 
 func TestLogger(t *testing.T) {
@@ -19,6 +17,5 @@ func TestLogger(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	log.Info("log from ngaut/log")
-	logrus.Info("log from sirupsen/logrus")
+	log.Info("log from sirupsen/logrus")
 }

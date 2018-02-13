@@ -43,6 +43,9 @@ func SetupDatabase(dbURL string) (Database, error) {
 	case "raw":
 		// url is raw://pd_addr
 		return setupRawKV(seps[1])
+	case "cop":
+		// url is cop://pd_addr
+		return setupCoprocessor(seps[1])
 	default:
 		return nil, fmt.Errorf("unsupported database: %s", seps[0])
 	}

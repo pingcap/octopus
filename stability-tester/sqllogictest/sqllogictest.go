@@ -19,10 +19,10 @@ import (
 	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/stability-tester/util"
 	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
