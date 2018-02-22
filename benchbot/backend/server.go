@@ -193,7 +193,6 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 		}
 	}
 
-	log.Infof("go to compare tpch %d: %+v vs %d: %+v", jobID, tpchRes, otherJobID, otherTPCHRes)
 	return CompareTPCHCost(tpchRes, otherTPCHRes)
 }
 
