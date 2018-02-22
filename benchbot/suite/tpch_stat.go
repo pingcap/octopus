@@ -14,7 +14,6 @@
 package suite
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"sort"
@@ -52,14 +51,22 @@ type CompareResult struct {
 	query           string
 	cost, otherCost time.Duration
 	diff            float64
-	sign            string
 }
 
 type CRS []*CompareResult
 
+// FormatJSON formats json
+func (c *CRS) FormatJSON() string {
+	data, err := DumpJSON(c, true)
+	if err != nil {
+		return err.Error()
+	}
+	return data
+}
+
 func (c CRS) Len() int           { return len(c) }
 func (c CRS) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
-func (c CRS) Less(i, j int) bool { return c[i].diff < c[j].diff }
+func (c CRS) Less(i, j int) bool { return math.Abs(c[i].diff) > math.Abs(c[j].diff) }
 
 // CompareTPCHCost compares two tpch result
 func CompareTPCHCost(s, t *TPCHResultStat) string {
@@ -68,11 +75,8 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 			log.Errorf("recover from panic %v", r)
 		}
 	}()
-	var (
-		output bytes.Buffer
-		stats  = make(CRS, 0, len(s.Cost))
-	)
 
+	stats := make(CRS, 0, len(s.Cost))
 	for query, cost := range s.Cost {
 		if otherCost, ok := t.Cost[query]; ok {
 			r := &CompareResult{
@@ -82,22 +86,19 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 			}
 			if cost == 0 {
 				r.diff = math.MaxFloat64
-			} else if otherCost >= cost {
-				r.sign = "+"
-				r.diff = float64(otherCost-cost) / float64(cost)
 			} else {
-				r.sign = "-"
-				r.diff = float64(cost-otherCost) / float64(cost)
+				r.diff = float64(otherCost-cost) / float64(cost)
 			}
 			stats = append(stats, r)
 		}
 	}
 
 	sort.Sort(stats)
-	for _, stat := range stats {
+	/*for _, stat := range stats {
 		fmt.Fprintf(&output, "query %s\t%d ms\t|\t%d ms\t[ %s%.2f %%]\n", stat.query, stat.cost, stat.otherCost, stat.sign, stat.diff)
-	}
+	}*/
 
-	fmt.Printf("res \n %s", output.String())
-	return output.String()
+	output := stats.FormatJSON()
+	fmt.Printf("res \n %s", stats.FormatJSON())
+	return output
 }
