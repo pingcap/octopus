@@ -14,10 +14,15 @@
 package suite
 
 import (
+	"fmt"
+	"os"
+	"path"
 	"testing"
 
 	"github.com/juju/errors"
+	"github.com/pingcap/octopus/benchbot/common"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
 )
 
 func TestTPCH(t *testing.T) {
@@ -37,4 +42,32 @@ func TestTPCH(t *testing.T) {
 			log.Fatal("tpch failed!")
 		}
 	}
+}
+
+func TestCost(t *testing.T) {
+
+	cfg := &TPCHConfig{
+		ScriptsDir: "../../tpch_scripts",
+	}
+	tpchSuite := NewTPCHSuite(cfg)
+
+	dir := path.Join(cfg.ScriptsDir, costOutDir)
+	os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := fmt.Sprintf("bash %s/cost-test.sh", cfg.ScriptsDir)
+	output, err := common.ExecCmd(ctx, cmd)
+	if err != nil {
+		t.Fatalf("execute cmd %s error %v, output %v", cmd, err, output)
+	}
+
+	cost, err := tpchSuite.fetchCost(tpchSuite.costFile(costOutDir, 1))
+	if err != nil {
+		t.Fatalf("fetch cost error %v", err)
+	}
+
+	t.Logf("cost %v", cost)
 }
