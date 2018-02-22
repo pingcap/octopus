@@ -13,7 +13,6 @@
 
 use std::fmt::{self, Write};
 use std::str::{self, FromStr};
-use std::ascii::AsciiExt;
 
 use std::time::Duration;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
