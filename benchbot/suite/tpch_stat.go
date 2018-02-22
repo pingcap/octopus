@@ -98,7 +98,6 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 		fmt.Fprintf(&output, "query %s - %d ms	| %d ms	[ %s%.2f %%]\n", stat.query, stat.cost, stat.otherCost, stat.sign, stat.diff)
 	}
 
-	log.Infof("res \n %v", output.String())
-	fmt.Println("xxx \n yyy")
+	fmt.Printf("res \n %s\n", output.String())
 	return output.String()
 }
