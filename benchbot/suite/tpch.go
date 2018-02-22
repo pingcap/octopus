@@ -15,6 +15,7 @@ package suite
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -54,10 +55,15 @@ type TPCHConfig struct {
 
 type TPCHSuite struct {
 	cfg *TPCHConfig
+
+	stat *TPCHResultStat
 }
 
 func NewTPCHSuite(cfg *TPCHConfig) *TPCHSuite {
-	return &TPCHSuite{cfg: cfg}
+	return &TPCHSuite{
+		cfg:  cfg,
+		stat: newTPCHDetailStat(),
+	}
 }
 
 func (s *TPCHSuite) Name() string {
@@ -181,6 +187,10 @@ func (s *TPCHSuite) costFile(resultName string, index int) string {
 	return fmt.Sprintf("%s/%s/q%d.time", s.cfg.ScriptsDir, resultName, index)
 }
 
+func (s *TPCHSuite) recordCost(index int, cost time.Duration) {
+	s.stat.addCost(fmt.Sprintf("q%d.sql", index), cost)
+}
+
 func (s *TPCHSuite) fetchCost(fileName string) (time.Duration, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -221,6 +231,7 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 			return err
 		}
 		if tp == fileEqual {
+			s.recordCost(i, cost)
 			stat.Record(OPRead, nil, cost)
 			continue
 		}
@@ -231,6 +242,8 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 			log.Errorf("Query:%d Result Unmatch (Line, Column):(%v, %v)\n", i, diff.line, diff.column)
 		}
 	}
+
+	stat.RecordOther(s.Name(), json.RawMessage(s.stat.FormatJSON()))
 	return nil
 }
 
