@@ -156,18 +156,18 @@ func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 	return svr.jobs.GetJob(jobID)
 }
 
-func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
+func (svr *Server) CompareJobs(jobID, otherJobID int64) (CRS, error) {
 	svr.mux.RLock()
 	defer svr.mux.RUnlock()
 
 	job := svr.jobs.GetJob(jobID)
 	if job == nil {
-		return fmt.Sprintf("not found job %d", jobID)
+		return nil, fmt.Errorf("not found job %d", jobID)
 	}
 
 	otherJob := svr.jobs.GetJob(otherJobID)
 	if otherJob == nil {
-		return fmt.Sprintf("not found job %d", otherJob)
+		return nil, fmt.Errorf("not found job %d", otherJob)
 	}
 
 	// now we only compare tpch result
@@ -180,7 +180,7 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 		if res.Name == "tpch" {
 			err := json.Unmarshal(res.Stat.Others["cost"], tpchRes)
 			if err != nil {
-				return err.Error()
+				return nil, err
 			}
 		}
 	}
@@ -188,12 +188,12 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 		if res.Name == "tpch" {
 			err := json.Unmarshal(res.Stat.Others["cost"], otherTPCHRes)
 			if err != nil {
-				return err.Error()
+				return nil, err
 			}
 		}
 	}
 
-	return CompareTPCHCost(tpchRes, otherTPCHRes)
+	return CompareTPCHCost(tpchRes, otherTPCHRes), nil
 }
 
 func (svr *Server) ListJobs(lastN int) []*BenchmarkJob {
