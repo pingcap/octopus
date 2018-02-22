@@ -69,6 +69,9 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 		return nil
 	}
 
+	// remark column here is to make the row size larger or smaller than 64 bytes,
+	// if larger than 64, the row will be written into default cf in tikv rocksdb;
+	// if smaller than 64, the row will be written into write cf in tikv rocksdb.
 	util.MustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL, remark VARCHAR(128))", index))
 	util.MustExec(db, `create table if not exists record (id BIGINT AUTO_INCREMENT,
 				from_table BIGINT NOT NULL,
