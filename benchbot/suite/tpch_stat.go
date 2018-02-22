@@ -47,16 +47,16 @@ func (t *TPCHResultStat) FormatJSON() string {
 }
 
 type CompareResult struct {
-	query           string
-	cost, otherCost time.Duration
-	diff            float64
+	Query           string
+	Cost, otherCost time.Duration
+	Diff            float64
 }
 
 type CRS []*CompareResult
 
 func (c CRS) Len() int           { return len(c) }
 func (c CRS) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
-func (c CRS) Less(i, j int) bool { return math.Abs(c[i].diff) > math.Abs(c[j].diff) }
+func (c CRS) Less(i, j int) bool { return math.Abs(c[i].Diff) > math.Abs(c[j].Diff) }
 
 // CompareTPCHCost compares two tpch result
 func CompareTPCHCost(s, t *TPCHResultStat) CRS {
@@ -73,14 +73,14 @@ func CompareTPCHCost(s, t *TPCHResultStat) CRS {
 	for query, cost := range s.Cost {
 		if otherCost, ok := t.Cost[query]; ok {
 			r := &CompareResult{
-				query:     query,
-				cost:      cost,
+				Query:     query,
+				Cost:      cost,
 				otherCost: otherCost,
 			}
 			if cost == 0 {
-				r.diff = math.MaxFloat64
+				r.Diff = math.MaxFloat64
 			} else {
-				r.diff = float64(otherCost-cost) / float64(cost)
+				r.Diff = float64(otherCost-cost) / float64(cost)
 			}
 			stats = append(stats, r)
 		}
