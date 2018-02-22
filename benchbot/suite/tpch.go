@@ -208,7 +208,7 @@ func (s *TPCHSuite) fetchCost(fileName string) (time.Duration, error) {
 		return 0, err
 	}
 
-	return time.Duration(cost), nil
+	return time.Duration(cost) / time.Millisecond, nil
 }
 
 func (s *TPCHSuite) checkAnswers(stat *StatManager) error {

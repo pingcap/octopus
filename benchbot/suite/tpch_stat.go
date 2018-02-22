@@ -51,6 +51,7 @@ type CompareResult struct {
 	query           string
 	cost, otherCost time.Duration
 	diff            float64
+	sign            string
 }
 
 type CRS []*CompareResult
@@ -75,19 +76,19 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 			}
 			if cost == 0 {
 				r.diff = math.MaxFloat64
-			} else {
+			} else if otherCost >= cost {
+				r.sign = "+"
 				r.diff = float64(otherCost-cost) / float64(cost)
+			} else {
+				r.sign = "-"
+				r.diff = float64(cost-otherCost) / float64(cost)
 			}
 		}
 	}
 
 	sort.Sort(stats)
 	for _, stat := range stats {
-		sign := "+"
-		if stat.diff < 0 {
-			sign = "-"
-		}
-		fmt.Fprintf(&output, "query %s -	%d ms	|	%d ms	[%s%v%%]\n", stat.query, stat.cost, stat.otherCost, sign, stat.diff)
+		fmt.Fprintf(&output, "query %s -	%d ms	|	%d ms	[%s%v%%]\n", stat.query, stat.cost, stat.otherCost, stat.sign, stat.diff)
 	}
 	return output.String()
 }
