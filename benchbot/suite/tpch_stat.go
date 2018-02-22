@@ -99,5 +99,6 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 	}
 
 	log.Infof("res \n %v", output.String())
+	log.Infof("xxx \n yyy")
 	return output.String()
 }
