@@ -21,6 +21,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/octopus/benchbot/common"
+	log "github.com/sirupsen/logrus"
 )
 
 // TPCHDetailStat contians detail result of tpch
@@ -62,9 +63,14 @@ func (c CRS) Less(i, j int) bool { return c[i].diff < c[j].diff }
 
 // CompareTPCHCost compares two tpch result
 func CompareTPCHCost(s, t *TPCHResultStat) string {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("recover from panic %v", r)
+		}
+	}()
 	var (
 		output bytes.Buffer
-		stats  = make(CRS, len(s.Cost))
+		stats  = make(CRS, 0, len(s.Cost))
 	)
 
 	for query, cost := range s.Cost {
@@ -83,6 +89,7 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 				r.sign = "-"
 				r.diff = float64(cost-otherCost) / float64(cost)
 			}
+			stats = append(stats, r)
 		}
 	}
 

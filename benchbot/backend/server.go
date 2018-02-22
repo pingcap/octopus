@@ -178,7 +178,6 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 	)
 	for _, res := range job.Result.Details {
 		if res.Name == "tpch" {
-			log.Infof("job %d detail %v", jobID, res.Stat.Others)
 			err := json.Unmarshal(res.Stat.Others["cost"], tpchRes)
 			if err != nil {
 				return err.Error()
@@ -187,7 +186,6 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 	}
 	for _, res := range otherJob.Result.Details {
 		if res.Name == "tpch" {
-			log.Infof("other job %d detail %v", otherJobID, res.Stat.Others)
 			err := json.Unmarshal(res.Stat.Others["cost"], otherTPCHRes)
 			if err != nil {
 				return err.Error()
@@ -195,8 +193,7 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 		}
 	}
 
-	log.Infof("go to compare tpch %d vs %d", jobID, otherJobID)
-
+	log.Infof("go to compare tpch %d: %+v vs %d: %+v", jobID, tpchRes, otherJobID, otherTPCHRes)
 	return CompareTPCHCost(tpchRes, otherTPCHRes)
 }
 
