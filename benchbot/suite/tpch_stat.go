@@ -92,6 +92,5 @@ func CompareTPCHCost(s, t *TPCHResultStat) CRS {
 	}
 	*/
 
-	log.Printf("%+v", stats)
 	return stats
 }
