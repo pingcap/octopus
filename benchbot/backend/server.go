@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -194,7 +193,7 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 		}
 	}
 
-	return strings.Replace(CompareTPCHCost(tpchRes, otherTPCHRes), "\n", "<br>", -1)
+	return CompareTPCHCost(tpchRes, otherTPCHRes)
 }
 
 func (svr *Server) ListJobs(lastN int) []*BenchmarkJob {
