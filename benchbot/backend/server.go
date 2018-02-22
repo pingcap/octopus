@@ -173,8 +173,8 @@ func (svr *Server) CompareJobs(jobID, otherJobID int64) string {
 	// now we only compare tpch result
 	// TODO: refine it
 	var (
-		tpchRes      *TPCHResultStat
-		otherTPCHRes *TPCHResultStat
+		tpchRes      = new(TPCHResultStat)
+		otherTPCHRes = new(TPCHResultStat)
 	)
 	for _, res := range job.Result.Details {
 		if res.Name == "tpch" {
