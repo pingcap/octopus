@@ -90,7 +90,7 @@ func CompareTPCHCost(s, t *TPCHResultStat) string {
 
 	sort.Sort(stats)
 	for _, stat := range stats {
-		fmt.Fprintf(&output, "query %s\t%6d ms\t|\t%6d ms\t[ %4.2f %%]\n", stat.query, stat.cost, stat.otherCost, stat.diff)
+		fmt.Fprintf(&output, "query %s\t%6d ms|%6d ms\t[ %4.2f %%]\n", stat.query, stat.cost, stat.otherCost, stat.diff)
 	}
 
 	fmt.Printf("res \n %s", output.String())
