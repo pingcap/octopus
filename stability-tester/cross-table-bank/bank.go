@@ -144,7 +144,6 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 }
 
 func (c *BankCase) startVerify(ctx context.Context, db *sql.DB) {
-	c.verify(db)
 	start := time.Now()
 	go func() {
 		ticker := time.NewTicker(c.cfg.Interval)
