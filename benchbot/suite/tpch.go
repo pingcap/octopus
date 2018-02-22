@@ -243,7 +243,7 @@ func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
 		}
 	}
 
-	stat.RecordOther(s.Name(), json.RawMessage(s.stat.FormatJSON()))
+	stat.RecordOther("cost", json.RawMessage(s.stat.FormatJSON()))
 	return nil
 }
 
