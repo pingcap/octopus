@@ -48,7 +48,7 @@ func (t *TPCHResultStat) FormatJSON() string {
 
 type CompareResult struct {
 	Query           string
-	Cost, otherCost time.Duration
+	Cost, OtherCost time.Duration
 	Diff            float64
 }
 
@@ -75,7 +75,7 @@ func CompareTPCHCost(s, t *TPCHResultStat) CRS {
 			r := &CompareResult{
 				Query:     query,
 				Cost:      cost,
-				otherCost: otherCost,
+				OtherCost: otherCost,
 			}
 			if cost == 0 {
 				r.Diff = math.MaxFloat64
