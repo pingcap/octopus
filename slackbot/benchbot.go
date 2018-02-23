@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/cluster"
 	"github.com/pingcap/octopus/benchbot/suite"
-	"math"
-	"time"
 )
 
 //InitBenchTestJob is init
@@ -190,6 +191,7 @@ func (r *Run) BenchTestOutMsg(NowBTDetail, BeforeBTDetail *backend.BenchmarkJob)
 		fmt.Sprintf("Packages:\n\t* tidb / tikv / pd =  %s / %s / %s\n", tidb, tikv, pd) +
 		fmt.Sprintf("Result ( vs “Job-%d” ) :\n", BeforeBTDetail.ID) +
 		caseinfo +
+		fmt.Sprintf("tpch result comparison :\n\t* %s%s/%d/%d\n", BenchTestBaseURL, CompareJobURL, NowBTDetail.ID, BeforeBTDetail.ID) +
 		fmt.Sprintf("Details :\n\t* %s/dashboard/#/\n", BenchTestBaseURL) +
 		"```"
 	r.SlackSendMessager(info, ChannelSlackID)

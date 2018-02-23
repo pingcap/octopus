@@ -20,6 +20,9 @@ build: tidb-benchbot stability-tester ycsb
 tidb-benchbot:
 	$(GOBUILD) -o bin/tidb-benchbot benchbot/*.go
 
+slackbot:
+	$(GOBUILD) -o bin/slackbot slackbot/*.go
+
 tidb-stability:
 	$(GOBUILD) -o bin/tidb-stability-tester stability-tester/*.go
 
@@ -96,5 +99,6 @@ endif
 
 clean:
 	@rm -rf bin/tidb-benchbot
+	@rm -rf bin/slackbot
 
-.PHONY: update clean
+.PHONY: update clean slackbot

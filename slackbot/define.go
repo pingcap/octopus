@@ -1,12 +1,13 @@
 package main
 
 import (
+	"time"
+
 	"github.com/nlopes/slack"
 	"github.com/pingcap/octopus/benchbot/backend"
 	"github.com/pingcap/octopus/benchbot/cluster"
 	"github.com/unrolled/render"
 	"golang.org/x/net/context"
-	"time"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 	CreateJobURL         = "/bench/plan"
 	JobDetailURL         = "/bench/job/"
 	BenchCallbackBaseURL = "/bench/callback"
+	CompareJobURL        = "/bench/compare"
 
 	SlackBotBenchTestURL = "/v1/benchtest"
 
