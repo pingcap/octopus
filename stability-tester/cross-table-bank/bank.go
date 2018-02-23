@@ -10,16 +10,14 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/octopus/stability-tester/util"
 	log "github.com/sirupsen/logrus"
+	"github.com/pingcap/octopus/stability-tester/util"
 	"golang.org/x/net/context"
 )
 
 // BankCase is for concurrent balance transfer.
 type BankCase struct {
-	mu      sync.RWMutex
 	cfg     *Config
-	wg      sync.WaitGroup
 	stopped int32
 }
 
@@ -36,8 +34,8 @@ func NewBankCase(cfg *Config) *BankCase {
 	b := &BankCase{
 		cfg: cfg,
 	}
-	if b.cfg.TableNum <= 1 {
-		b.cfg.TableNum = 1
+	if b.cfg.TableNum < 10 {
+		b.cfg.TableNum = 10
 	}
 	return b
 }
@@ -59,23 +57,26 @@ func (c *BankCase) Initialize(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	c.startVerify(ctx, db)
 	return nil
 }
 
 func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	var index string
-	if id > 0 {
-		index = fmt.Sprintf("%d", id)
-	}
+	index = fmt.Sprintf("%d", id)
 	isDropped := c.tryDrop(db, index)
 	if !isDropped {
-		c.startVerify(ctx, db, index)
 		return nil
 	}
 
+	// remark column here is to make the row size larger or smaller than 64 bytes,
+	// if larger than 64, the row will be written into default cf in tikv rocksdb;
+	// if smaller than 64, the row will be written into write cf in tikv rocksdb.
 	util.MustExec(db, fmt.Sprintf("create table if not exists accounts%s (id BIGINT PRIMARY KEY, balance BIGINT NOT NULL, remark VARCHAR(128))", index))
 	util.MustExec(db, `create table if not exists record (id BIGINT AUTO_INCREMENT,
+				from_table BIGINT NOT NULL,
         from_id BIGINT NOT NULL,
+        to_table BIGINT NOT NULL,
         to_id BIGINT NOT NULL,
         from_balance BIGINT NOT NULL,
         to_balance BIGINT NOT NULL,
@@ -108,7 +109,7 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 				}
 				start := time.Now()
 				for i := 0; i < batchSize; i++ {
-					args[i] = fmt.Sprintf("(%d, %d, \"%s\")", startIndex+i, 1000, remark[:rand.Intn(maxLen)])
+					args[i] = fmt.Sprintf("(%d, %d, \"%s\")", startIndex+i, 10000, remark[:rand.Intn(maxLen)])
 				}
 
 				query := fmt.Sprintf("INSERT IGNORE INTO accounts%s (id, balance, remark) VALUES %s", index, strings.Join(args, ","))
@@ -139,14 +140,12 @@ func (c *BankCase) initDB(ctx context.Context, db *sql.DB, id int) error {
 	default:
 	}
 
-	c.startVerify(ctx, db, index)
 	return nil
 }
 
-func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
-	c.verify(db, index)
+func (c *BankCase) startVerify(ctx context.Context, db *sql.DB) {
 	start := time.Now()
-	go func(index string) {
+	go func() {
 		ticker := time.NewTicker(c.cfg.Interval)
 		defer ticker.Stop()
 
@@ -155,13 +154,11 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				err := c.verify(db, index)
+				err := c.verify(db)
 				if err != nil {
-					log.Infof("[%s] verify error: %s in: %s", c, err, time.Now())
+					log.Errorf("[%s] verify error: %s in: %s", c, err, time.Now())
 					if time.Now().Sub(start) > defaultVerifyTimeout {
 						atomic.StoreInt32(&c.stopped, 1)
-						log.Info("stop bank execute")
-						c.wg.Wait()
 						log.Fatalf("[%s] verify timeout since %s, error: %s", c, start, err)
 					}
 				} else {
@@ -170,7 +167,7 @@ func (c *BankCase) startVerify(ctx context.Context, db *sql.DB, index string) {
 				}
 			}
 		}
-	}(index)
+	}()
 }
 
 // Execute implements Case Execute interface.
@@ -191,13 +188,9 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 				default:
 				}
 				if atomic.LoadInt32(&c.stopped) != 0 {
-					// too many log print in here if return error
-					log.Error("bank stopped")
 					return
 				}
-				c.wg.Add(1)
-				c.moveMoney(db)
-				c.wg.Done()
+				c.transferMoney(db)
 			}
 		}(i)
 	}
@@ -207,7 +200,7 @@ func (c *BankCase) Execute(ctx context.Context, db *sql.DB) error {
 
 // String implements fmt.Stringer interface.
 func (c *BankCase) String() string {
-	return "bank"
+	return "cross-table-bank"
 }
 
 // tryDrop will drop table if data is incorrect or there is a panic error like bad connection.
@@ -241,8 +234,8 @@ func (c *BankCase) tryDrop(db *sql.DB, index string) bool {
 	return true
 }
 
-func (c *BankCase) verify(db *sql.DB, index string) error {
-	var total int
+func (c *BankCase) verify(db *sql.DB) error {
+	total := uint64(0)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -251,11 +244,15 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 
 	defer tx.Rollback()
 
-	query := fmt.Sprintf("select sum(balance) as total from accounts%s", index)
-	err = tx.QueryRow(query).Scan(&total)
-	if err != nil {
-		log.Errorf("[%s] select sum error %v", c, err)
-		return errors.Trace(err)
+	for i := 0; i < c.cfg.TableNum; i++ {
+		query := fmt.Sprintf("select sum(balance) as total from accounts%d", i)
+		var tmp int
+		err = tx.QueryRow(query).Scan(&tmp)
+		if err != nil {
+			log.Errorf("[%s] select sum error %v", c, err)
+			return errors.Trace(err)
+		}
+		total += uint64(tmp)
 	}
 	var tso uint64 = 0
 	if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
@@ -263,43 +260,65 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 	}
 	log.Infof("select sum(balance) to verify use tso %d", tso)
 	tx.Commit()
-	check := c.cfg.NumAccounts * 1000
+	check := uint64(c.cfg.NumAccounts) * 10000 * uint64(c.cfg.TableNum)
 	if total != check {
-		log.Errorf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
 		atomic.StoreInt32(&c.stopped, 1)
-		c.wg.Wait()
-		log.Fatalf("[%s]accouts%s total must be %d, but got %d", c, index, check, total)
+		log.Fatalf("[%s]accouts total must be %d, but got %d", c, check, total)
 	}
 
 	return nil
 }
 
-func (c *BankCase) moveMoney(db *sql.DB) {
+func (c *BankCase) transferMoney(db *sql.DB) {
 	var (
-		from, to, id int
-		index        string
+		from_table, from_id, to_table, to_id int
 	)
 	for {
-		from, to, id = rand.Intn(c.cfg.NumAccounts), rand.Intn(c.cfg.NumAccounts), rand.Intn(c.cfg.TableNum)
-		if from == to {
+		from_table, to_table = rand.Intn(c.cfg.TableNum), rand.Intn(c.cfg.TableNum)
+		if from_table == to_table {
 			continue
 		}
 		break
 	}
-	if id > 0 {
-		index = fmt.Sprintf("%d", id)
-	}
+	from_id, to_id = rand.Intn(c.cfg.NumAccounts), rand.Intn(c.cfg.NumAccounts)
 
 	amount := rand.Intn(999)
 
-	err := c.execTransaction(db, from, to, amount, index)
+	err := c.execTransaction(db, from_table, from_id, to_table, to_id, amount)
 
 	if err != nil {
 		return
 	}
 }
 
-func (c *BankCase) execTransaction(db *sql.DB, from, to int, amount int, index string) error {
+// get balance based on row id
+func (c *BankCase) getRowInfo(tx *sql.Tx, table, expected_id int) (int, error) {
+	row, err := tx.Query(fmt.Sprintf("SELECT id, balance FROM accounts%d WHERE id = %d FOR UPDATE", table, expected_id))
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer row.Close()
+
+	var balance int = 0
+	if row.Next() {
+		var id int
+		if err = row.Scan(&id, &balance); err != nil {
+			return balance, errors.Trace(err)
+		}
+		if id != expected_id {
+			log.Fatalf("[%s] got unexpected id %d", c, id)
+		}
+	} else {
+		log.Fatalf("[%s] got no id %d", c, expected_id)
+	}
+
+	if err = row.Err(); err != nil {
+		return balance, errors.Trace(err)
+	}
+	return balance, nil
+}
+
+func (c *BankCase) execTransaction(db *sql.DB, from_table, from_id, to_table, to_id int, amount int) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return errors.Trace(err)
@@ -307,50 +326,26 @@ func (c *BankCase) execTransaction(db *sql.DB, from, to int, amount int, index s
 
 	defer tx.Rollback()
 
-	rows, err := tx.Query(fmt.Sprintf("SELECT id, balance FROM accounts%s WHERE id IN (%d, %d) FOR UPDATE", index, from, to))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer rows.Close()
-
 	var (
 		fromBalance int
 		toBalance   int
-		count       int = 0
 	)
 
-	for rows.Next() {
-		var id, balance int
-		if err = rows.Scan(&id, &balance); err != nil {
-			return errors.Trace(err)
-		}
-		switch id {
-		case from:
-			fromBalance = balance
-		case to:
-			toBalance = balance
-		default:
-			log.Fatalf("[%s] got unexpected account %d", c, id)
-		}
-
-		count++
+	fromBalance, err = c.getRowInfo(tx, from_table, from_id)
+	if err != nil {
+		return err
 	}
-
-	if err = rows.Err(); err != nil {
-		return errors.Trace(err)
-	}
-
-	if count != 2 {
-		log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
+	toBalance, err = c.getRowInfo(tx, to_table, to_id)
+	if err != nil {
+		return err
 	}
 
 	var update string
 	if fromBalance >= amount {
 		update = fmt.Sprintf(`
-UPDATE accounts%s
-  SET balance = CASE id WHEN %d THEN %d WHEN %d THEN %d END
-  WHERE id IN (%d, %d)
-`, index, to, toBalance+amount, from, fromBalance-amount, from, to)
+UPDATE accounts%d SET balance = %d WHERE id = %d;
+UPDATE accounts%d SET balance = %d WHERE id = %d;
+`, from_table, fromBalance-amount, from_id, to_table, toBalance+amount, to_id)
 		_, err = tx.Exec(update)
 		if err != nil {
 			return errors.Trace(err)
@@ -361,21 +356,12 @@ UPDATE accounts%s
 			return err
 		}
 		if _, err = tx.Exec(fmt.Sprintf(`
-INSERT INTO record (from_id, to_id, from_balance, to_balance, amount, tso)
-    VALUES (%d, %d, %d, %d, %d, %d)`, from, to, fromBalance, toBalance, amount, tso)); err != nil {
+INSERT INTO record (from_table, from_id, to_table, to_id, from_balance, to_balance, amount, tso)
+    VALUES (%d, %d, %d, %d, %d, %d, %d, %d)`, from_table, from_id, to_table, to_id, fromBalance, toBalance, amount, tso)); err != nil {
 			return err
 		}
-		log.Infof("[bank] exec pre: %s\n", update)
 	}
 
 	err = tx.Commit()
-	if fromBalance >= amount {
-		if err != nil {
-			log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
-		}
-		if err == nil {
-			log.Infof("[bank] exec commit success: %s\n", update)
-		}
-	}
 	return err
 }
