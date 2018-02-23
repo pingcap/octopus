@@ -33,7 +33,7 @@ var (
 )
 
 var (
-	defaultVerifyTimeout = 6 * time.Hour
+	defaultVerifyTimeout = 1 * time.Hour
 	remark               = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
 )
 
