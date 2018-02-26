@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	. "github.com/pingcap/octopus/benchbot/common"
-	"github.com/pingcap/schrodinger/util"
+	"github.com/pingcap/octopus/benchbot/util"
 )
 
 const (
