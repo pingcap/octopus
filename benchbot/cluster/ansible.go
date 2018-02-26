@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io/ioutil"
@@ -10,13 +11,16 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 
 	. "github.com/pingcap/octopus/benchbot/common"
+	"github.com/pingcap/schrodinger/util"
 )
 
 const (
 	GitHashNote = "Git Commit Hash"
+
+	MaxRetryTimes = 3
+	RetryInterval = 5 * time.Second
 )
 
 var (
@@ -70,12 +74,18 @@ func (c *AnsibleCluster) Prepare() error {
 
 func (c *AnsibleCluster) Boostrap() error {
 	log.Info("[Ansible] bootstrap ...")
-	return c.operate("bootstrap")
+
+	return util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		return c.operate("bootstrap")
+	})
 }
 
 func (c *AnsibleCluster) Deploy() error {
 	log.Info("[Ansible] deploy ...")
-	return c.operate("deploy")
+
+	return util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		return c.operate("deploy")
+	})
 }
 
 func (c *AnsibleCluster) Start() error {
@@ -88,7 +98,12 @@ func (c *AnsibleCluster) Start() error {
 
 func (c *AnsibleCluster) Stop() error {
 	log.Info("[Ansible] stop ...")
-	if err := c.operate("stop"); err != nil {
+
+	err := util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		return c.operate("stop")
+	})
+
+	if err != nil {
 		return err
 	}
 	return c.Close()
@@ -118,7 +133,12 @@ func (c *AnsibleCluster) Close() error {
 
 func (c *AnsibleCluster) Reset() error {
 	log.Info("[Ansible] reset ...")
-	if err := c.operate("reset"); err != nil {
+
+	err := util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		return c.operate("reset")
+	})
+
+	if err != nil {
 		return err
 	}
 	return c.Close()
@@ -126,7 +146,12 @@ func (c *AnsibleCluster) Reset() error {
 
 func (c *AnsibleCluster) Destory() error {
 	log.Info("[Ansible] destory ...")
-	if err := c.operate("destory"); err != nil {
+
+	err := util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		return c.operate("destory")
+	})
+
+	if err != nil {
 		return err
 	}
 	return c.Close()
