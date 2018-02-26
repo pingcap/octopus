@@ -35,12 +35,14 @@ func RunBenchCases(cases []BenchCase, db *sql.DB) ([]*CaseResult, error) {
 	return results, nil
 }
 
-func RunBenchCasesWithReset(cases []BenchCase, cluster Cluster) ([]*CaseResult, error) {
+func RunBenchCasesWithReset(cases []BenchCase, cluster Cluster, warmUp time.Duration) ([]*CaseResult, error) {
 	results := make([]*CaseResult, 0, len(cases))
 	for _, c := range cases {
 		if err := cluster.Start(); err != nil {
 			return nil, err
 		}
+		time.Sleep(warmUp)
+
 		db := cluster.Accessor()
 		caseRes, caseErr := RunBenchCase(c, db)
 		if err := cluster.Reset(); err != nil {

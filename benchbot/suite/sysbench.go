@@ -24,7 +24,8 @@ func init() {
 }
 
 type SysbenchConfig struct {
-	ScriptsDir string `toml:"scripts_dir"`
+	ScriptsDir string   `toml:"scripts_dir"`
+	WarmUp     Duration `toml:"warm_up"`
 }
 
 type SysbenchSuite struct {
@@ -41,13 +42,13 @@ func (s *SysbenchSuite) Name() string {
 
 func (s *SysbenchSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	cases := []BenchCase{
-		NewSysbenchCase(s, "oltp"),
 		NewSysbenchCase(s, "select"),
+		NewSysbenchCase(s, "oltp"),
 		NewSysbenchCase(s, "insert"),
 		NewSysbenchCase(s, "delete"),
 	}
 
-	return RunBenchCasesWithReset(cases, cluster)
+	return RunBenchCasesWithReset(cases, cluster, s.cfg.WarmUp.Duration)
 }
 
 type SysbenchCase struct {
@@ -70,6 +71,9 @@ func (c *SysbenchCase) Run(*sql.DB) (*CaseResult, error) {
 	if _, err := c.execute("parallel-prepare"); err != nil {
 		return nil, err
 	}
+
+	time.Sleep(c.cfg.WarmUp.Duration)
+
 	output, err := c.execute(c.name)
 	if err != nil {
 		return nil, err

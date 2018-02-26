@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync/atomic"
+	"time"
 
 	"github.com/BurntSushi/toml"
 
@@ -31,6 +32,7 @@ const (
 
 type BlockWriteConfig struct {
 	Duration     Duration `toml:"duration"`
+	WarmUp       Duration `toml:"warm_up"`
 	NumThreads   int      `toml:"num_threads"`
 	MinBlockSize int      `toml:"min_block_size"`
 	MaxBlockSize int      `toml:"max_block_size"`
@@ -52,6 +54,9 @@ func (s *BlockWriteSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
+
+	time.Sleep(s.cfg.WarmUp.Duration)
+
 	defer cluster.Reset()
 	return s.run(cluster.Accessor())
 }

@@ -15,11 +15,13 @@ password = ""
 
 [suites.block-write]
 duration = "1m"
+warm_up = "5m"
 num_threads = 100
 min_block_size = 3000
 max_block_size = 4000
 
 [suites.sysbench]
+warm_up = "5m"
 scripts_dir = "sysbench"
 
 [suites.tpch]
@@ -29,6 +31,7 @@ scripts_dir = "tpch_scripts"
 
 [suites.ycsb]
 duration = "1m"
+warm_up = "5m"
 num_threads = 100
 workloads = ["a", "b"]
 databases = [

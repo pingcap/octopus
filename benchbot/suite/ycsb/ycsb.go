@@ -46,6 +46,7 @@ type YCSBConfig struct {
 	Databases  []string `toml:"databases"`
 	Workloads  []string `toml:"workloads"`
 	Duration   Duration `toml:"duration"`
+	WarmUp     Duration `toml:"warm_up"`
 	NumThreads int      `toml:"num_threads"`
 }
 
@@ -73,7 +74,7 @@ func (s *YCSBSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 		}
 	}
 
-	return RunBenchCasesWithReset(cases, cluster)
+	return RunBenchCasesWithReset(cases, cluster, s.cfg.WarmUp.Duration)
 }
 
 type YCSBCase struct {
