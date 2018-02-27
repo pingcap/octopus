@@ -461,7 +461,8 @@ func checkCorrectness(db *util.DB) error {
 
 	time.Sleep(time.Minute)
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
+	defer cancel()
 	rand.Seed(time.Now().UnixNano())
 
 	var monitorRegions []uint64
