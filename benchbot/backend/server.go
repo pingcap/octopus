@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -153,6 +154,46 @@ func (svr *Server) GetJob(jobID int64) *BenchmarkJob {
 	defer svr.mux.RUnlock()
 
 	return svr.jobs.GetJob(jobID)
+}
+
+func (svr *Server) CompareJobs(jobID, otherJobID int64) (CRS, error) {
+	svr.mux.RLock()
+	defer svr.mux.RUnlock()
+
+	job := svr.jobs.GetJob(jobID)
+	if job == nil {
+		return nil, fmt.Errorf("not found job %d", jobID)
+	}
+
+	otherJob := svr.jobs.GetJob(otherJobID)
+	if otherJob == nil {
+		return nil, fmt.Errorf("not found job %d", otherJob)
+	}
+
+	// now we only compare tpch result
+	// TODO: refine it
+	var (
+		tpchRes      = new(TPCHResultStat)
+		otherTPCHRes = new(TPCHResultStat)
+	)
+	for _, res := range job.Result.Details {
+		if res.Name == "tpch" {
+			err := json.Unmarshal(res.Stat.Others["cost"], tpchRes)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, res := range otherJob.Result.Details {
+		if res.Name == "tpch" {
+			err := json.Unmarshal(res.Stat.Others["cost"], otherTPCHRes)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return CompareTPCHCost(tpchRes, otherTPCHRes), nil
 }
 
 func (svr *Server) ListJobs(lastN int) []*BenchmarkJob {

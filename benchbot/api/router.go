@@ -33,6 +33,7 @@ func CreateRouter(svr *Server) http.Handler {
 	r.HandleFunc("/bench/jobs/{ids}", hdl.GetJobs).Methods("GET")
 	r.HandleFunc("/bench/status", hdl.GetStatus).Methods("GET")
 	r.HandleFunc("/bench/history", hdl.ListJobs).Methods("GET")
+	r.HandleFunc("/bench/compare/{id}/{other}", hdl.CompareJobs).Methods("GET")
 
 	return httpRequestMiddleware(r, svr)
 }

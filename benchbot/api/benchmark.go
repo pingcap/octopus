@@ -113,6 +113,28 @@ func (hdl *BenchmarkHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 	hdl.rdr.JSON(w, http.StatusOK, resp)
 }
 
+func (hdl *BenchmarkHandler) CompareJobs(w http.ResponseWriter, r *http.Request) {
+	jobID, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
+	if err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	otherJobID, err := strconv.ParseInt(mux.Vars(r)["other"], 10, 64)
+	if err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	stats, err := hdl.svr.CompareJobs(jobID, otherJobID)
+	if err != nil {
+		hdl.rdr.JSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	hdl.rdr.JSON(w, http.StatusOK, stats)
+}
+
 func (hdl *BenchmarkHandler) AbortJob(w http.ResponseWriter, r *http.Request) {
 	jobID, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
 	if err != nil {

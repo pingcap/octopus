@@ -1,6 +1,7 @@
 package suite
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
@@ -28,6 +29,8 @@ type StatResult struct {
 	Error     float64
 	Duration  float64
 	Histogram StatHistogram
+
+	Others map[string]json.RawMessage
 }
 
 func (s *StatResult) Record(op OPKind, err error) {
@@ -35,6 +38,14 @@ func (s *StatResult) Record(op OPKind, err error) {
 	if err != nil {
 		s.Error++
 	}
+}
+
+func (s *StatResult) RecordOther(name string, stat json.RawMessage) {
+	if s.Others == nil {
+		s.Others = make(map[string]json.RawMessage)
+	}
+
+	s.Others[name] = stat
 }
 
 func (s *StatResult) Update(d time.Duration, h StatHistogram) {
@@ -114,4 +125,8 @@ func (s *StatManager) Record(op OPKind, err error, duration time.Duration) {
 
 	s.stat.Record(op, err)
 	s.hist.RecordValue(int64(duration / time.Millisecond))
+}
+
+func (s *StatManager) RecordOther(name string, stat json.RawMessage) {
+	s.stat.RecordOther(name, stat)
 }

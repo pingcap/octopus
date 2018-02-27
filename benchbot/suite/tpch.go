@@ -15,8 +15,11 @@ package suite
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +30,12 @@ import (
 
 	. "github.com/pingcap/octopus/benchbot/cluster"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	mysqlOutDir = "mysql_r"
+	tidbOutDir  = "tidb_r"
+	costOutDir  = "cost_r"
 )
 
 func init() {
@@ -46,10 +55,15 @@ type TPCHConfig struct {
 
 type TPCHSuite struct {
 	cfg *TPCHConfig
+
+	stat *TPCHResultStat
 }
 
 func NewTPCHSuite(cfg *TPCHConfig) *TPCHSuite {
-	return &TPCHSuite{cfg: cfg}
+	return &TPCHSuite{
+		cfg:  cfg,
+		stat: newTPCHDetailStat(),
+	}
 }
 
 func (s *TPCHSuite) Name() string {
@@ -88,7 +102,6 @@ func diffTypeToString(tp DiffType) string {
 	default:
 		return "Unknown"
 	}
-	return ""
 }
 
 type lineDiff struct {
@@ -170,33 +183,71 @@ func (s *TPCHSuite) resultFile(resultName string, index int) string {
 	return fmt.Sprintf("%s/%s/q%d.out", s.cfg.ScriptsDir, resultName, index)
 }
 
+func (s *TPCHSuite) costFile(resultName string, index int) string {
+	return fmt.Sprintf("%s/%s/q%d.time", s.cfg.ScriptsDir, resultName, index)
+}
+
+func (s *TPCHSuite) recordCost(index int, cost time.Duration) {
+	s.stat.addCost(fmt.Sprintf("q%d.sql", index), cost)
+}
+
+func (s *TPCHSuite) fetchCost(fileName string) (time.Duration, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return 0, err
+	}
+
+	readder := bufio.NewReader(file)
+	line, _, err := readder.ReadLine()
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+
+	cost, err := strconv.ParseInt(strings.TrimSpace(string(line)), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	return time.Duration(cost) / time.Millisecond, nil
+}
+
 func (s *TPCHSuite) checkAnswers(stat *StatManager) error {
-	start := time.Now()
 	for i := 1; i < 23; i++ {
 		if i == 15 {
 			// skip view test
 			continue
 		}
-		mysqlOut := s.resultFile("mysql_r", i)
-		tidbOut := s.resultFile("tidb_r", i)
+		mysqlOut := s.resultFile(mysqlOutDir, i)
+		tidbOut := s.resultFile(tidbOutDir, i)
+		costOut := s.costFile(costOutDir, i)
+
+		cost, err := s.fetchCost(costOut)
+		if err != nil {
+			return err
+		}
+
 		tp, diffs, err := s.diffFiles(mysqlOut, tidbOut)
 		if err != nil {
 			return err
 		}
 		if tp == fileEqual {
-			stat.Record(OPRead, nil, time.Since(start))
+			s.recordCost(i, cost)
+			stat.Record(OPRead, nil, cost)
 			continue
 		}
 		err = fmt.Errorf("[tpch failed]: Query:%d %v", i, diffTypeToString(tp))
-		stat.Record(OPRead, err, time.Since(start))
+		stat.Record(OPRead, err, cost)
 		log.Errorf("%v\n", err)
 		for _, diff := range diffs {
 			log.Errorf("Query:%d Result Unmatch (Line, Column):(%v, %v)\n", i, diff.line, diff.column)
 		}
 	}
+
+	stat.RecordOther("cost", json.RawMessage(s.stat.FormatJSON()))
 	return nil
 }
 
+// Run runs tpch suit
 func (s *TPCHSuite) Run(cluster Cluster) ([]*CaseResult, error) {
 	err := cluster.Start()
 	if err != nil {
