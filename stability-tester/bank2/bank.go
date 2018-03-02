@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	initialBalance    = 1000
-	insertBatchSize   = 100
-	insertConcurrency = 100
-	maxTransfer       = 100
-	systemAccountID   = 0
+	initialBalance       = 1000
+	insertBatchSize      = 100
+	insertConcurrency    = 100
+	maxTransfer          = 100
+	systemAccountID      = 0
+	systemAccountBalance = 1000000000
 )
 
 var remark = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXVZlkjsanksqiszndqpijdslnnq"
@@ -150,7 +151,7 @@ TRUNCATE TABLE bank2_transaction_leg;
 		return nil
 	default:
 	}
-	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, int64(c.cfg.NumAccounts*initialBalance))
+	query := fmt.Sprintf(`INSERT IGNORE INTO bank2_accounts (id, balance, name) VALUES (%d, %d, "system account")`, systemAccountID, systemAccountBalance)
 	err = util.RunWithRetry(ctx, 100, 3*time.Second, func() error {
 		_, err := db.Exec(query)
 		return err
@@ -202,7 +203,7 @@ func (c *Bank2Case) verify(db *sql.DB) {
 
 	bank2VerifyDuration.Observe(time.Since(start).Seconds())
 
-	expectTotal := (int64(c.cfg.NumAccounts) * initialBalance) * 2
+	expectTotal := (int64(c.cfg.NumAccounts) * initialBalance) + systemAccountBalance
 	if total != expectTotal {
 		log.Errorf("[bank2] bank2_accounts total should be %d, but got %d", expectTotal, total)
 		atomic.StoreInt32(&c.stop, 1)
