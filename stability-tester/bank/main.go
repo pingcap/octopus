@@ -30,7 +30,7 @@ var (
 	tikvs       = flag.String("tikvs", "", "separated by \",\"")
 	lbService   = flag.String("lb-service", "", "lb")
 	metricAddr  = flag.String("metric-addr", "", "metric address")
-	skipInit    = flag.Bool("skil-init", false, "ski init")
+	skipInit    = flag.Bool("skip-init", false, "ski init")
 )
 
 var (
