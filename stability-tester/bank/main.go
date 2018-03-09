@@ -16,21 +16,22 @@ import (
 var defaultPushMetricsInterval = 15 * time.Second
 
 var (
-	logFile     = flag.String("log-file", "", "log file")
-	logLevel    = flag.String("L", "info", "log level: info, debug, warn, error, faltal")
-	user        = flag.String("user", "root", "db username")
-	password    = flag.String("password", "", "user password")
-	dbName      = flag.String("db", "test", "database name")
-	accounts    = flag.Int("accounts", 1000000, "the number of accounts")
-	interval    = flag.Duration("interval", 2*time.Second, "the interval")
-	tables      = flag.Int("tables", 1, "the number of the tables")
-	concurrency = flag.Int("concurrency", 200, "concurrency")
-	pds         = flag.String("pds", "", "separated by \",\"")
-	tidbs       = flag.String("tidbs", "", "separated by \",\"")
-	tikvs       = flag.String("tikvs", "", "separated by \",\"")
-	lbService   = flag.String("lb-service", "", "lb")
-	metricAddr  = flag.String("metric-addr", "", "metric address")
-	skipInit    = flag.Bool("skip-init", false, "ski init")
+	logFile        = flag.String("log-file", "", "log file")
+	logLevel       = flag.String("L", "info", "log level: info, debug, warn, error, faltal")
+	user           = flag.String("user", "root", "db username")
+	password       = flag.String("password", "", "user password")
+	dbName         = flag.String("db", "test", "database name")
+	accounts       = flag.Int("accounts", 1000000, "the number of accounts")
+	interval       = flag.Duration("interval", 2*time.Second, "the interval")
+	reportInterval = flag.Duration("report-interval", 1*time.Second, "the report interval")
+	tables         = flag.Int("tables", 1, "the number of the tables")
+	concurrency    = flag.Int("concurrency", 200, "concurrency")
+	pds            = flag.String("pds", "", "separated by \",\"")
+	tidbs          = flag.String("tidbs", "", "separated by \",\"")
+	tikvs          = flag.String("tikvs", "", "separated by \",\"")
+	lbService      = flag.String("lb-service", "", "lb")
+	metricAddr     = flag.String("metric-addr", "", "metric address")
+	skipInit       = flag.Bool("skip-init", false, "ski init")
 )
 
 var (
@@ -76,6 +77,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
+	go report(ctx, *reportInterval)
 
 	if err := bank.Execute(ctx, db); err != nil {
 		log.Fatal(err)

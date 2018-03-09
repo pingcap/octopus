@@ -23,6 +23,7 @@ type BankCase struct {
 	stopped int32
 }
 
+// Config defines for bank config
 type Config struct {
 	// NumAccounts is total accounts
 	NumAccounts int           `toml:"num_accounts"`
@@ -257,7 +258,7 @@ func (c *BankCase) verify(db *sql.DB, index string) error {
 		log.Errorf("[%s] select sum error %v", c, err)
 		return errors.Trace(err)
 	}
-	var tso uint64 = 0
+	var tso uint64
 	if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
 		return errors.Trace(err)
 	}
@@ -316,7 +317,7 @@ func (c *BankCase) execTransaction(db *sql.DB, from, to int, amount int, index s
 	var (
 		fromBalance int
 		toBalance   int
-		count       int = 0
+		count       int
 	)
 
 	for rows.Next() {
@@ -356,7 +357,7 @@ UPDATE accounts%s
 			return errors.Trace(err)
 		}
 
-		var tso uint64 = 0
+		var tso uint64
 		if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
 			return err
 		}
@@ -365,16 +366,18 @@ INSERT INTO record (from_id, to_id, from_balance, to_balance, amount, tso)
     VALUES (%d, %d, %d, %d, %d, %d)`, from, to, fromBalance, toBalance, amount, tso)); err != nil {
 			return err
 		}
-		log.Infof("[bank] exec pre: %s\n", update)
+		// log.Infof("[bank] exec pre: %s\n", update)
 	}
 
 	err = tx.Commit()
 	if fromBalance >= amount {
 		if err != nil {
-			log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
+			// log.Infof("[bank] exec commit error: %s\n err:%s\n", update, err)
+			atomic.AddUint64(&tranErr, 1)
 		}
 		if err == nil {
-			log.Infof("[bank] exec commit success: %s\n", update)
+			// log.Infof("[bank] exec commit success: %s\n", update)
+			atomic.AddUint64(&tranCount, 1)
 		}
 	}
 	return err
