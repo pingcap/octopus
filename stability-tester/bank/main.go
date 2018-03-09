@@ -30,6 +30,7 @@ var (
 	tikvs       = flag.String("tikvs", "", "separated by \",\"")
 	lbService   = flag.String("lb-service", "", "lb")
 	metricAddr  = flag.String("metric-addr", "", "metric address")
+	skipInit    = flag.Bool("skil-init", false, "ski init")
 )
 
 var (
@@ -70,9 +71,12 @@ func main() {
 		Concurrency: *concurrency,
 	}
 	bank := NewBankCase(&cfg)
-	if err := bank.Initialize(ctx, db); err != nil {
-		log.Fatal(err)
+	if !*skipInit {
+		if err := bank.Initialize(ctx, db); err != nil {
+			log.Fatal(err)
+		}
 	}
+
 	if err := bank.Execute(ctx, db); err != nil {
 		log.Fatal(err)
 	}
