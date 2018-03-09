@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,7 +17,8 @@ var (
 	lastTranErr uint64
 )
 
-func report(ctx context.Context, interval time.Duration) {
+func report(ctx context.Context, wg *sync.WaitGroup, interval time.Duration) {
+	wg.Add(1)
 	start := time.Now()
 	ticker := time.NewTicker(interval)
 	defer func() {
@@ -29,6 +31,7 @@ func report(ctx context.Context, interval time.Duration) {
 		fmt.Printf("Exec Time: %s\n", elapsed.String())
 		fmt.Printf("tps: %.2f\n", float64(currencyTranCount)/elapsed.Seconds())
 		fmt.Printf("eps: %.2f\n", float64(currencyTranErr)/elapsed.Seconds())
+		wg.Done()
 	}()
 
 	for {
@@ -45,7 +48,7 @@ func printMessage(seconds float64) {
 	currencyTranCount := atomic.LoadUint64(&tranCount)
 	currencyTranErr := atomic.LoadUint64(&tranErr)
 
-	fmt.Printf("Total Transaction: %d    tps: %.2f    eps: %.2f\n",
+	fmt.Printf("Total Transaction: %d;  tps: %.2f;  eps: %.2f\n",
 		currencyTranCount+currencyTranErr, float64(currencyTranCount-lastTranCount)/seconds, float64(currencyTranErr-lastTranErr)/seconds)
 	lastTranCount = currencyTranCount
 	lastTranErr = currencyTranErr

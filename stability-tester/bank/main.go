@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -48,6 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -59,6 +61,7 @@ func main() {
 		sig := <-sc
 		log.Infof("Got signal [%d] to exist.", sig)
 		cancel()
+		wg.Wait()
 		os.Exit(0)
 	}()
 	if len(*metricAddr) > 0 {
@@ -78,7 +81,7 @@ func main() {
 		}
 	}
 
-	go report(ctx, *reportInterval)
+	go report(ctx, &wg, *reportInterval)
 
 	if err := bank.Execute(ctx, db); err != nil {
 		log.Fatal(err)
