@@ -262,7 +262,7 @@ func (c *Bank2Case) moveMoney(db *sql.DB) {
 	start := time.Now()
 	if err := c.execTransaction(db, from, to, amount); err != nil {
 		bank2VerifyFailedCounter.Inc()
-		log.Errorf("[bank2] move money err %v", err)
+		log.Fatalf("[bank2] move money err %v", errors.ErrorStack(err))
 		return
 	}
 	bank2VerifyDuration.Observe(time.Since(start).Seconds())
@@ -281,13 +281,14 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 	defer rows.Close()
 
 	var (
-		fromBalance int
-		toBalance   int
+		fromBalance int64
+		toBalance   int64
 		count       int
 	)
 
 	for rows.Next() {
-		var id, balance int
+		var id int
+		var balance int64
 		if err = rows.Scan(&id, &balance); err != nil {
 			return errors.Trace(err)
 		}
@@ -310,7 +311,7 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 		log.Fatalf("[%s] select %d(%d) -> %d(%d) invalid count %d", c, from, fromBalance, to, toBalance, count)
 	}
 
-	if fromBalance < amount {
+	if fromBalance < int64(amount) {
 		return nil
 	}
 
@@ -322,19 +323,19 @@ func (c *Bank2Case) execTransaction(db *sql.DB, from, to int, amount int) error 
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	if _, err = tx.Exec(insertTxnLeg, from, -amount, fromBalance-amount, txnID); err != nil {
+	if _, err = tx.Exec(insertTxnLeg, from, -amount, fromBalance-int64(amount), txnID); err != nil {
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	if _, err = tx.Exec(insertTxnLeg, to, amount, toBalance+amount, txnID); err != nil {
+	if _, err = tx.Exec(insertTxnLeg, to, amount, toBalance+int64(amount), txnID); err != nil {
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	if _, err = tx.Exec(updateAcct, toBalance+amount, to); err != nil {
+	if _, err = tx.Exec(updateAcct, toBalance+int64(amount), to); err != nil {
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	if _, err = tx.Exec(updateAcct, fromBalance-amount, from); err != nil {
+	if _, err = tx.Exec(updateAcct, fromBalance-int64(amount), from); err != nil {
 		tx.Rollback()
 		return errors.Trace(err)
 	}
