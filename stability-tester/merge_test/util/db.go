@@ -27,7 +27,8 @@ import (
 )
 
 var (
-	createSQL = `CREATE TABLE IF NOT EXISTS table%d (
+	createSQL = `DROP TABLE IF EXISTS merge_test%d;
+	CREATE TABLE merge_test%d (
 		id bigint,
 		flag bigint,
 		timestamp bigint,
@@ -84,20 +85,12 @@ type DB struct {
 
 func InitDB(user, password, host string, port int) (*DB, error) {
 	var err error
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/", user, password, host, port)
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/test", user, password, host, port)
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	db.SetMaxIdleConns(concurrency + 1)
-	_, err = db.Exec("drop database if exists merge_test;")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	_, err = db.Exec("create database merge_test; use merge_test;")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	return &DB{DB: db, id: 1, flag: 1}, nil
 }
 
@@ -260,7 +253,7 @@ func (db *DB) Insert(ctx context.Context, tableId int, batchSize int) *sync.Wait
 
 func (db *DB) insertBatch(tableId int, batchSize int) error {
 	now := time.Now().Unix()
-	table := fmt.Sprintf("table%d", tableId)
+	table := fmt.Sprintf("merge_test%d", tableId)
 
 	values := make([]string, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -271,13 +264,13 @@ func (db *DB) insertBatch(tableId int, batchSize int) error {
 		values[i] += ")"
 	}
 
-	sql := fmt.Sprintf(`use merge_test; INSERT INTO %s VALUES %s;`, table, strings.Join(values, ","))
+	sql := fmt.Sprintf(`INSERT INTO %s VALUES %s;`, table, strings.Join(values, ","))
 	_, err := db.Exec(sql)
 	return errors.Trace(err)
 }
 
 func (db *DB) deleteBatch() error {
-	sql := fmt.Sprintf(`use merge_test; DELETE FROM table%d WHERE flag=%d;`, db.id-1, db.flag)
+	sql := fmt.Sprintf(`DELETE FROM merge_test%d WHERE flag=%d;`, db.id-1, db.flag)
 	_, err := db.Exec(sql)
 	return errors.Trace(err)
 }
@@ -303,7 +296,7 @@ func (db *DB) DeletePartial() error {
 }
 
 func (db *DB) DropTable() error {
-	sql := fmt.Sprintf(`use merge_test; DROP TABLE table%d;`, db.id-1)
+	sql := fmt.Sprintf(`DROP TABLE merge_test%d;`, db.id-1)
 	_, err := db.Exec(sql)
 
 	return errors.Trace(err)
@@ -311,7 +304,7 @@ func (db *DB) DropTable() error {
 
 func (db *DB) CreateTable(count int) error {
 	for i := 0; i < count; i++ {
-		query := fmt.Sprintf(createSQL, db.id)
+		query := fmt.Sprintf(createSQL, db.id, db.id)
 		db.id++
 		_, err := db.Exec(query)
 		if err != nil {

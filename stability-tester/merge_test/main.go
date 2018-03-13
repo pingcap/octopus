@@ -17,9 +17,12 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"os"
+	"os/signal"
 	"reflect"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -459,10 +462,21 @@ func checkCorrectness(db *util.DB) error {
 		return errors.Trace(err)
 	}
 
-	time.Sleep(time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		sig := <-sc
+		log.Infof("Got signal [%d] to exist.", sig)
+		cancel()
+		os.Exit(0)
+	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*8)
-	defer cancel()
+	time.Sleep(time.Minute)
 	rand.Seed(time.Now().UnixNano())
 
 	var monitorRegions []uint64
