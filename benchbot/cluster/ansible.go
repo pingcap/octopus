@@ -90,10 +90,12 @@ func (c *AnsibleCluster) Deploy() error {
 
 func (c *AnsibleCluster) Start() error {
 	log.Info("[Ansible] start ...")
-	if err := c.operate("start"); err != nil {
-		return err
-	}
-	return c.Open()
+	return util.RetryOnError(context.Background(), MaxRetryTimes, RetryInterval, func() error {
+		if err := c.operate("start"); err != nil {
+			return err
+		}
+		return c.Open()
+	})
 }
 
 func (c *AnsibleCluster) Stop() error {
