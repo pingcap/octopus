@@ -23,8 +23,10 @@ import (
 type Key []byte
 
 var (
-	tablePrefix = []byte{'t'}
-	metaPrefix  = []byte{'m'}
+	tablePrefix     = []byte{'t'}
+	metaPrefix      = []byte{'m'}
+	recordPrefixSep = []byte("_r")
+	indexPrefixSep  = []byte("_i")
 )
 
 const (
@@ -49,6 +51,19 @@ func (k Key) TableID() int64 {
 
 	_, tableID, _ := DecodeInt(key)
 	return tableID
+}
+
+func (k Key) IsIndex() bool {
+	_, key, err := decodeBytes(k)
+	if err != nil {
+		// should never happen
+		return false
+	}
+	key = key[len(tablePrefix):]
+	if bytes.HasPrefix(key, indexPrefixSep) {
+		return true
+	}
+	return false
 }
 
 // DecodeInt decodes value encoded by EncodeInt before.

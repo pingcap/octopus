@@ -38,6 +38,9 @@ var (
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
 	test     = flag.String("test", "12345678", "test cases")
+	cacert   = flag.String("cacert", "", "path of file that contains list of trusted SSL CAs.")
+	cert     = flag.String("cert", "", "path of file that contains X509 certificate in PEM format.")
+	key      = flag.String("key", "", "path of file that contains X509 key in PEM format.")
 )
 
 const deleteBatch = 100
@@ -46,8 +49,10 @@ var tests = []func(db *util.DB) error{
 	checkCreateTable,
 	checkSplitTableRegion,
 	checkDropTable,
+	checkTruncateTable,
 	checkInsertAndDeleteAll,
 	checkInsertAndDeletePartial,
+	checkDropIndex,
 	checkShuffle,
 	checkSpeed,
 	checkCorrectness,
@@ -57,7 +62,7 @@ func main() {
 	flag.Parse()
 
 	util.PdAddr = *pd
-
+	util.InitHTTPClient(*cacert, *cert, *key)
 	rand.Seed(time.Now().UnixNano())
 
 	db, err := util.InitDB(*user, *password, *host, *port)
@@ -80,7 +85,6 @@ func main() {
 			log.Info("test pass!")
 		}
 	}
-
 }
 
 func checkCreateTable(db *util.DB) error {
@@ -161,18 +165,12 @@ func checkSplitTableRegion(db *util.DB) error {
 }
 
 func cleanTableData(db *util.DB, fn func([]*util.RegionInfo) error) error {
-	// for merge use
-	err := db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	tableRegion, err := util.CreateNewRegion(db)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplit(tableRegion.ID)
+	err = db.InsertUntilSplitToRegions(tableRegion.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -218,7 +216,7 @@ func checkDropTable(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.InsertUntilMerge(regions)
+		err = db.WaitUntilMerge(regions)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -226,6 +224,107 @@ func checkDropTable(db *util.DB) error {
 	}
 
 	return cleanTableData(db, callback)
+}
+
+func checkTruncateTable(db *util.DB) error {
+	callback := func(regions []*util.RegionInfo) error {
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d before truncate", nowRegion.ID, nowRegion.ApproximateSize)
+		}
+
+		err := db.TruncateTable()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		time.Sleep(time.Second * 60)
+
+		for _, region := range regions {
+			nowRegion, err := util.GetRegionInfo(region.ID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			log.Infof("[region %d] approximate size is %d after truncate", nowRegion.ID, nowRegion.ApproximateSize)
+		}
+		log.Info("------------------------------------------------")
+
+		// wait to merge
+		err = db.WaitUntilMerge(regions)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}
+
+	return cleanTableData(db, callback)
+}
+
+func checkDropIndex(db *util.DB) error {
+	tableRegion, err := util.CreateNewRegion(db)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = db.InsertUntilSplitToRegions(tableRegion.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	time.Sleep(time.Second * 60)
+
+	log.Infof("add index...")
+	err = db.AddIndex()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Infof("add index finish...")
+
+	time.Sleep(time.Second * 60)
+
+	tableRegions, err := util.FindNewSplitRegions(tableRegion)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	indexRegions := util.GetIndexRegions(tableRegions)
+
+	for _, region := range indexRegions {
+		nowRegion, err := util.GetRegionInfo(region.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Infof("[region %d] approximate size is %d before drop index", nowRegion.ID, nowRegion.ApproximateSize)
+	}
+
+	log.Infof("drop index...")
+	err = db.DropIndex()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Infof("drop index finish...")
+
+	time.Sleep(time.Second * 60)
+
+	for _, region := range indexRegions {
+		nowRegion, err := util.GetRegionInfo(region.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Infof("[region %d] approximate size is %d after drop index", nowRegion.ID, nowRegion.ApproximateSize)
+	}
+	log.Info("------------------------------------------------")
+
+	// wait to merge
+	err = db.WaitUntilMerge(indexRegions)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+
 }
 
 func checkInsertAndDeleteAll(db *util.DB) error {
@@ -255,7 +354,7 @@ func checkInsertAndDeleteAll(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.InsertUntilMerge(regions)
+		err = db.WaitUntilMerge(regions)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -292,7 +391,7 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.InsertUntilTimeout(regions, 30*time.Minute)
+		err = db.WaitUntilTimeout(regions, 30*time.Minute)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -304,17 +403,12 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 }
 
 func checkShuffle(db *util.DB) error {
-	err := db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	tableRegion, err := util.CreateNewRegion(db)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplit(tableRegion.ID)
+	err = db.InsertUntilSplitToRegions(tableRegion.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -359,7 +453,7 @@ func checkShuffle(db *util.DB) error {
 	}
 
 	// wait to merge
-	err = db.InsertUntilMerge(tableRegions)
+	err = db.WaitUntilMerge(tableRegions)
 	if err != nil {
 		return errors.Trace(err)
 	}

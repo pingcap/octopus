@@ -15,16 +15,53 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/tikvpb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
-func NewTikvClient(addr string) (tikvpb.TikvClient, *grpc.ClientConn, error) {
-	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+func NewTikvClient(addr string, CAPath, CertPath, KeyPath string) (tikvpb.TikvClient, *grpc.ClientConn, error) {
+	opt := grpc.WithInsecure()
+	if len(CAPath) != 0 {
+
+		certificates := []tls.Certificate{}
+		if len(CertPath) != 0 && len(KeyPath) != 0 {
+			// Load the client certificates from disk
+			certificate, err := tls.LoadX509KeyPair(CertPath, KeyPath)
+			if err != nil {
+				return nil, nil, errors.Errorf("could not load client key pair: %s", err)
+			}
+			certificates = append(certificates, certificate)
+		}
+
+		// Create a certificate pool from the certificate authority
+		certPool := x509.NewCertPool()
+		ca, err := ioutil.ReadFile(CAPath)
+		if err != nil {
+			return nil, nil, errors.Errorf("could not read ca certificate: %s", err)
+		}
+
+		// Append the certificates from the CA
+		if !certPool.AppendCertsFromPEM(ca) {
+			return nil, nil, errors.New("failed to append ca certs")
+		}
+
+		creds := credentials.NewTLS(&tls.Config{
+			Certificates: certificates,
+			RootCAs:      certPool,
+		})
+
+		opt = grpc.WithTransportCredentials(creds)
+	}
+
+	conn, err := grpc.Dial(addr, opt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -45,7 +82,7 @@ func SplitRegion(region *RegionInfo) (uint64, uint64, error) {
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
-	client, conn, err := NewTikvClient(addr)
+	client, conn, err := NewTikvClient(addr, "", "", "")
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}

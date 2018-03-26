@@ -94,12 +94,15 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 	return &DB{DB: db, id: 1, flag: 1}, nil
 }
 
-func (db *DB) InsertUntilSplit(regionID uint64) error {
+const N = 1000
+
+func (db *DB) InsertUntilSplitToRegions(regionID uint64) error {
 	time.Sleep(time.Second * 10)
 	originRegion, err := GetRegionInfo(regionID)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	tableID := GetTableID(originRegion)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := db.Insert(ctx, db.id-1, 100)
@@ -107,15 +110,19 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 	defer cancel()
 
 	for {
-		nowRegion, err := GetRegionInfo(regionID)
+		regions, err := GetRegions()
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		log.Infof("[region %d] approximate size is : %d", regionID, nowRegion.ApproximateSize)
+		find := 0
+		for _, region := range regions {
+			if GetTableID(region) == tableID {
+				find++
+			}
+		}
 
-		if nowRegion.StartKey != originRegion.StartKey || nowRegion.EndKey != originRegion.EndKey {
-			log.Infof("[region %d] region split", regionID)
+		if find >= N {
 			break
 		}
 
@@ -126,19 +133,13 @@ func (db *DB) InsertUntilSplit(regionID uint64) error {
 	return nil
 }
 
-func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func (db *DB) WaitUntilMerge(tableRegions []*RegionInfo) error {
 	tableID := GetTableID(tableRegions[0])
 	for _, region := range tableRegions {
 		if GetTableID(region) != tableID {
 			return fmt.Errorf("unexpected table regions")
 		}
 	}
-
-	wg := db.Insert(ctx, db.id-2, 200)
-	defer wg.Wait()
-	defer cancel()
 
 	for {
 		time.Sleep(time.Second * 60)
@@ -178,19 +179,13 @@ func (db *DB) InsertUntilMerge(tableRegions []*RegionInfo) error {
 	}
 }
 
-func (db *DB) InsertUntilTimeout(tableRegions []*RegionInfo, timeout time.Duration) error {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func (db *DB) WaitUntilTimeout(tableRegions []*RegionInfo, timeout time.Duration) error {
 	tableID := GetTableID(tableRegions[0])
 	for _, region := range tableRegions {
 		if GetTableID(region) != tableID {
 			return fmt.Errorf("unexpected table regions")
 		}
 	}
-
-	wg := db.Insert(ctx, db.id-2, 200)
-	defer wg.Wait()
-	defer cancel()
 
 	for _, region := range tableRegions {
 		nowRegion, err := GetRegionInfo(region.ID)
@@ -302,6 +297,13 @@ func (db *DB) DropTable() error {
 	return errors.Trace(err)
 }
 
+func (db *DB) TruncateTable() error {
+	sql := fmt.Sprintf(`TRUNCATE TABLE merge_test%d`, db.id-1)
+	_, err := db.Exec(sql)
+
+	return errors.Trace(err)
+}
+
 func (db *DB) CreateTable(count int) error {
 	for i := 0; i < count; i++ {
 		query := fmt.Sprintf(createSQL, db.id, db.id)
@@ -312,4 +314,18 @@ func (db *DB) CreateTable(count int) error {
 		}
 	}
 	return nil
+}
+
+func (db *DB) AddIndex() error {
+	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX idx (reserved1);`, db.id-1)
+	_, err := db.Exec(sql)
+
+	return errors.Trace(err)
+}
+
+func (db *DB) DropIndex() error {
+	sql := fmt.Sprintf(`DROP INDEX idx on merge_test%d;`, db.id-1)
+	_, err := db.Exec(sql)
+
+	return errors.Trace(err)
 }

@@ -85,6 +85,16 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 	return find, nil
 }
 
+func GetIndexRegions(origin []*RegionInfo) []*RegionInfo {
+	indexRegions := make([]*RegionInfo, 0, len(origin))
+	for _, region := range origin {
+		if IsIndex(region) {
+			indexRegions = append(indexRegions, region)
+		}
+	}
+	return indexRegions
+}
+
 func GetNewTableRegion(old, now []*RegionInfo) (*RegionInfo, error) {
 	regions, err := GetNewTableRegions(old, now)
 	if err != nil {
@@ -153,6 +163,12 @@ func GetTableID(region *RegionInfo) int64 {
 	key := Key{}
 	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
 	return key.TableID()
+}
+
+func IsIndex(region *RegionInfo) bool {
+	key := Key{}
+	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
+	return key.IsIndex()
 }
 
 func RunWithRetry(ctx context.Context, retryCnt int, interval time.Duration, f func() error) error {

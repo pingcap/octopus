@@ -24,6 +24,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/coreos/etcd/pkg/transport"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
@@ -39,6 +41,25 @@ var (
 	schedulersPrefix = "pd/api/v1/schedulers"
 	operatorsPrefix  = "pd/api/v1/operators"
 )
+
+// InitHTTPClient creates https client with ca file
+func InitHTTPClient(CAPath, CertPath, KeyPath string) error {
+	tlsInfo := transport.TLSInfo{
+		CertFile:      CertPath,
+		KeyFile:       KeyPath,
+		TrustedCAFile: CAPath,
+	}
+	tlsConfig, err := tlsInfo.ClientConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	pdClient = &http.Client{Transport: &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}}
+
+	return nil
+}
 
 type regionsInfo struct {
 	Count   int           `json:"count"`
