@@ -37,41 +37,13 @@ func IsSameLocation(one, other []*metapb.Peer) bool {
 	return len(set) == 0 && len(one) == len(other)
 }
 
-func CreateNewRegion(db *DB) (*RegionInfo, error) {
-	initRegions, err := GetRegions()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	err = db.CreateTable(1)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	time.Sleep(time.Second * 60)
-
-	nowRegions, err := GetRegions()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	tableRegionInfo, err := GetNewTableRegion(initRegions, nowRegions)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	log.Infof("new table region is %d", tableRegionInfo.ID)
-
-	return tableRegionInfo, nil
-}
-
-func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
+func FindTableRegions(tableID int64) ([]*RegionInfo, error) {
 	regions, err := GetRegions()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	tableID := GetTableID(origin)
 	var find []*RegionInfo
-
 	for _, region := range regions {
 		if GetTableID(region) == tableID {
 			find = append(find, region)
@@ -79,7 +51,7 @@ func FindNewSplitRegions(origin *RegionInfo) ([]*RegionInfo, error) {
 	}
 
 	if len(find) == 0 {
-		return nil, fmt.Errorf("region %d doesn't split", origin.ID)
+		return nil, fmt.Errorf("no new region after creating table")
 	}
 	log.Infof("table %d has %d regions", tableID, len(find))
 	return find, nil

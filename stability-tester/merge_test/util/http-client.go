@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 
 	"github.com/coreos/etcd/pkg/transport"
@@ -32,8 +31,9 @@ import (
 )
 
 var (
-	pdClient = &http.Client{}
-	PdAddr   = ""
+	client   = &http.Client{}
+	pdAddr   = ""
+	tidbAddr = ""
 
 	regionsPrefix    = "pd/api/v1/regions"
 	regionIDPrefix   = "pd/api/v1/region/id"
@@ -43,7 +43,9 @@ var (
 )
 
 // InitHTTPClient creates https client with ca file
-func InitHTTPClient(CAPath, CertPath, KeyPath string) error {
+func InitHTTPClient(PdAddr, TidbAddr, CAPath, CertPath, KeyPath string) error {
+	pdAddr = PdAddr
+	tidbAddr = TidbAddr
 	tlsInfo := transport.TLSInfo{
 		CertFile:      CertPath,
 		KeyFile:       KeyPath,
@@ -54,7 +56,7 @@ func InitHTTPClient(CAPath, CertPath, KeyPath string) error {
 		return errors.Trace(err)
 	}
 
-	pdClient = &http.Client{Transport: &http.Transport{
+	client = &http.Client{Transport: &http.Transport{
 		TLSClientConfig: tlsConfig,
 	}}
 
@@ -89,9 +91,12 @@ type StoreInfo struct {
 	Store *metaStore `json:"store"`
 	//Status *storeStatus `json:"status"`
 }
+type TableInfo struct {
+	ID int64 `json:"id"`
+}
 
 func dail(req *http.Request) ([]byte, error) {
-	reps, err := pdClient.Do(req)
+	reps, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -122,17 +127,16 @@ func postJSON(prefix string, input map[string]interface{}) error {
 	defer r.Body.Close()
 
 	if r.StatusCode != http.StatusOK {
-		err := fmt.Errorf("statuscode is not okay: ")
-		printResponseError(r)
-		return err
+		return fmt.Errorf("statuscode is not okay: %s", getResponseError(r))
 	}
 
 	return nil
 }
 
-func printResponseError(r *http.Response) {
-	fmt.Printf("[%d]", r.StatusCode)
-	io.Copy(os.Stdout, r.Body)
+func getResponseError(r *http.Response) string {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(r.Body)
+	return fmt.Sprintf("[%d] %s", r.StatusCode, buf.String())
 }
 
 func doRequest(prefix string, method string) ([]byte, error) {
@@ -157,7 +161,7 @@ func getRequest(prefix string, method string, bodyType string, body io.Reader) (
 }
 
 func getAddress(prefix string) string {
-	u, err := url.Parse(PdAddr)
+	u, err := url.Parse(pdAddr)
 	if err != nil {
 		return err.Error()
 	}
@@ -166,6 +170,38 @@ func getAddress(prefix string) string {
 	}
 	s := fmt.Sprintf("%s/%s", u, prefix)
 	return s
+}
+
+func GetTableIDByName(tableName string) (int64, error) {
+	u, err := url.Parse(tidbAddr)
+	if err != nil {
+		return 0, err
+	}
+	if u.Scheme == "" {
+		u.Scheme = "http"
+	}
+	url := fmt.Sprintf("%s/%s", u, "schema/test/"+tableName)
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to get table id: %s", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("statuscode is not okay: %s", getResponseError(resp))
+	}
+
+	r, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	table := &TableInfo{}
+	err = json.Unmarshal(r, table)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to get table id: %s", err)
+	}
+	return table.ID, nil
 }
 
 func GetRegionCount() (int, error) {

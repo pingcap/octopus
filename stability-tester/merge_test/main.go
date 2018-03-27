@@ -15,7 +15,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -37,17 +36,17 @@ var (
 	user     = flag.String("user", "root", "DB user")
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
+	tidb     = flag.String("tidb", "http://127.0.0.1:4000", "tidb endpoint")
 	test     = flag.String("test", "12345678", "test cases")
 	cacert   = flag.String("cacert", "", "path of file that contains list of trusted SSL CAs.")
 	cert     = flag.String("cert", "", "path of file that contains X509 certificate in PEM format.")
 	key      = flag.String("key", "", "path of file that contains X509 key in PEM format.")
+	n        = flag.Int("n", 10, "the number of regions of one table")
 )
 
-const deleteBatch = 100
+const deleteBatch = 1000
 
 var tests = []func(db *util.DB) error{
-	checkCreateTable,
-	checkSplitTableRegion,
 	checkDropTable,
 	checkTruncateTable,
 	checkInsertAndDeleteAll,
@@ -61,8 +60,7 @@ var tests = []func(db *util.DB) error{
 func main() {
 	flag.Parse()
 
-	util.PdAddr = *pd
-	util.InitHTTPClient(*cacert, *cert, *key)
+	util.InitHTTPClient(*pd, *tidb, *cacert, *cert, *key)
 	rand.Seed(time.Now().UnixNano())
 
 	db, err := util.InitDB(*user, *password, *host, *port)
@@ -87,97 +85,20 @@ func main() {
 	}
 }
 
-func checkCreateTable(db *util.DB) error {
-	initCount, err := util.GetRegionCount()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	time.Sleep(60 * time.Second)
-
-	nowCount, err := util.GetRegionCount()
-	if nowCount != initCount+1 {
-		return fmt.Errorf("initCount is %v, after create a table region count is %v", initCount, nowCount)
-	}
-
-	err = db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	time.Sleep(60 * time.Second)
-
-	nowCount, err = util.GetRegionCount()
-	if nowCount != initCount+2 {
-		return fmt.Errorf("initCount is %v, after create two tables region count is %v", initCount, nowCount)
-	}
-
-	return nil
-}
-
-func checkSplitTableRegion(db *util.DB) error {
-	// for merge use
-	err := db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	initCount, err := util.GetRegionCount()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	tableRegionInfo, err := util.CreateNewRegion(db)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	leftID, rightID, err := util.SplitRegion(tableRegionInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !(tableRegionInfo.ID != leftID || tableRegionInfo.ID != rightID) {
-		return fmt.Errorf("unexpected region ids after split")
-	}
-
-	// wait regions to merge
-	time.Sleep(60 * time.Second)
-
-	nowRegions, err := util.GetRegions()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	nowCount := len(nowRegions)
-
-	if nowCount != initCount+1 {
-		return fmt.Errorf("initCount is %v, after split table and merge table, region count is %v", initCount, nowCount)
-	}
-	if util.IsRegionIDExist(nowRegions, leftID) && util.IsRegionIDExist(nowRegions, rightID) {
-		return fmt.Errorf("unexpected region ids after merge")
-	}
-
-	return nil
-}
-
 func cleanTableData(db *util.DB, fn func([]*util.RegionInfo) error) error {
-	tableRegion, err := util.CreateNewRegion(db)
+	tableID, err := db.CreateTable()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplitToRegions(tableRegion.ID)
+	err = db.InsertUntilSplitToRegions(tableID, *n)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	time.Sleep(time.Second * 60)
 
-	tableRegions, err := util.FindNewSplitRegions(tableRegion)
+	tableRegions, err := util.FindTableRegions(tableID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -264,12 +185,12 @@ func checkTruncateTable(db *util.DB) error {
 }
 
 func checkDropIndex(db *util.DB) error {
-	tableRegion, err := util.CreateNewRegion(db)
+	tableID, err := db.CreateTable()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplitToRegions(tableRegion.ID)
+	err = db.InsertUntilSplitToRegions(tableID, *n)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -285,7 +206,7 @@ func checkDropIndex(db *util.DB) error {
 
 	time.Sleep(time.Second * 60)
 
-	tableRegions, err := util.FindNewSplitRegions(tableRegion)
+	tableRegions, err := util.FindTableRegions(tableID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -403,17 +324,17 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 }
 
 func checkShuffle(db *util.DB) error {
-	tableRegion, err := util.CreateNewRegion(db)
+	tableID, err := db.CreateTable()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = db.InsertUntilSplitToRegions(tableRegion.ID)
+	err = db.InsertUntilSplitToRegions(tableID, *n)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	tableRegions, err := util.FindNewSplitRegions(tableRegion)
+	tableRegions, err := util.FindTableRegions(tableID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -465,12 +386,10 @@ func checkSpeed(db *util.DB) error {
 	var wg sync.WaitGroup
 
 	for i := 1; i <= 10; i++ {
-		tableRegion, err := util.CreateNewRegion(db)
+		tableID, err := db.CreateTable()
 		if err != nil {
 			continue
 		}
-
-		tableID := util.GetTableID(tableRegion)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
@@ -482,7 +401,7 @@ func checkSpeed(db *util.DB) error {
 
 		time.Sleep(time.Second * 60)
 
-		tableRegions, err := util.FindNewSplitRegions(tableRegion)
+		tableRegions, err := util.FindTableRegions(tableID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -534,18 +453,7 @@ func checkSpeed(db *util.DB) error {
 		}()
 	}
 
-	err := db.CreateTable(1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		wg.Wait()
-		cancel()
-	}()
-
-	db.InsertIntoNewTable(ctx, 200)
+	wg.Wait()
 
 	return nil
 }

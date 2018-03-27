@@ -94,16 +94,7 @@ func InitDB(user, password, host string, port int) (*DB, error) {
 	return &DB{DB: db, id: 1, flag: 1}, nil
 }
 
-const N = 1000
-
-func (db *DB) InsertUntilSplitToRegions(regionID uint64) error {
-	time.Sleep(time.Second * 10)
-	originRegion, err := GetRegionInfo(regionID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tableID := GetTableID(originRegion)
-
+func (db *DB) InsertUntilSplitToRegions(tableID int64, n int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := db.Insert(ctx, db.id-1, 100)
 	defer wg.Wait()
@@ -122,7 +113,8 @@ func (db *DB) InsertUntilSplitToRegions(regionID uint64) error {
 			}
 		}
 
-		if find >= N {
+		log.Infof("find %d regions for table %d", find, tableID)
+		if find >= n {
 			break
 		}
 
@@ -271,13 +263,18 @@ func (db *DB) deleteBatch() error {
 }
 
 func (db *DB) DeleteAll() error {
-	for db.flag > 1 {
-		db.flag--
-		if err := db.deleteBatch(); err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
+	sql := fmt.Sprintf(`DELETE FROM merge_test%d;`, db.id-1)
+	_, err := db.Exec(sql)
+
+	db.flag = 1
+	return errors.Trace(err)
+	// for db.flag > 1 {
+	// 	db.flag--
+	// 	if err := db.deleteBatch(); err != nil {
+	// 		return errors.Trace(err)
+	// 	}
+	// }
+	// return nil
 }
 
 func (db *DB) DeletePartial() error {
@@ -304,16 +301,14 @@ func (db *DB) TruncateTable() error {
 	return errors.Trace(err)
 }
 
-func (db *DB) CreateTable(count int) error {
-	for i := 0; i < count; i++ {
-		query := fmt.Sprintf(createSQL, db.id, db.id)
-		db.id++
-		_, err := db.Exec(query)
-		if err != nil {
-			return errors.Trace(err)
-		}
+func (db *DB) CreateTable() (int64, error) {
+	query := fmt.Sprintf(createSQL, db.id, db.id)
+	db.id++
+	_, err := db.Exec(query)
+	if err != nil {
+		return 0, errors.Trace(err)
 	}
-	return nil
+	return GetTableIDByName(fmt.Sprintf("merge_test%d", db.id-1))
 }
 
 func (db *DB) AddIndex() error {

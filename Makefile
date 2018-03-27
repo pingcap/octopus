@@ -66,6 +66,9 @@ ddl:
 on_dup:
 	$(GOBUILD) -o bin/on_dup stability-tester/on_dup/*.go
 
+merge:
+	$(GOBUILD) -o bin/merge stability-tester/merge_test/*.go
+
 test:
 	$(GOTEST) --race $(PACKAGES)
 
