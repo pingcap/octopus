@@ -287,3 +287,10 @@ func MergeRegion(source, target *RegionInfo) error {
 	input["target_region_id"] = target.ID
 	return postJSON(operatorsPrefix, input)
 }
+
+func SplitRegion(regionID uint64) error {
+	input := make(map[string]interface{})
+	input["name"] = "split-region"
+	input["region_id"] = strconv.FormatUint(regionID, 10)
+	return postJSON(operatorsPrefix, input)
+}

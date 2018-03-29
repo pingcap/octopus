@@ -15,11 +15,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
 	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -33,10 +35,10 @@ import (
 var (
 	host     = flag.String("host", "127.0.0.1", "DB host")
 	port     = flag.Int("P", 4000, "DB port")
+	status   = flag.Int("status", 10080, "tidb status endpoint")
 	user     = flag.String("user", "root", "DB user")
 	password = flag.String("pass", "", "DB password")
 	pd       = flag.String("pd", "http://127.0.0.1:2379", "pd endpoint")
-	tidb     = flag.String("tidb", "http://127.0.0.1:4000", "tidb endpoint")
 	test     = flag.String("test", "12345678", "test cases")
 	cacert   = flag.String("cacert", "", "path of file that contains list of trusted SSL CAs.")
 	cert     = flag.String("cert", "", "path of file that contains X509 certificate in PEM format.")
@@ -47,6 +49,7 @@ var (
 const deleteBatch = 1000
 
 var tests = []func(db *util.DB) error{
+	checkSplitTableRegion,
 	checkDropTable,
 	checkTruncateTable,
 	checkInsertAndDeleteAll,
@@ -60,7 +63,7 @@ var tests = []func(db *util.DB) error{
 func main() {
 	flag.Parse()
 
-	util.InitHTTPClient(*pd, *tidb, *cacert, *cert, *key)
+	util.InitHTTPClient(*pd, "https://"+*host+":"+strconv.Itoa(*status), *cacert, *cert, *key)
 	rand.Seed(time.Now().UnixNano())
 
 	db, err := util.InitDB(*user, *password, *host, *port)
@@ -83,6 +86,49 @@ func main() {
 			log.Info("test pass!")
 		}
 	}
+}
+
+func checkSplitTableRegion(db *util.DB) error {
+	tableID, err := db.CreateTable()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tableRegions, err := util.FindTableRegions(tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if len(tableRegions) != 1 {
+		return fmt.Errorf("unexpected the number(%d) of regions after create table", len(tableRegions))
+	}
+
+	origin := tableRegions[0]
+
+	err = util.SplitRegion(tableRegions[0].ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// wait regions to merge
+	time.Sleep(60 * time.Second)
+
+	tableRegions, err = util.FindTableRegions(tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if len(tableRegions) != 1 {
+		return fmt.Errorf("unexpected the number(%d) of regions after split and merge", len(tableRegions))
+	}
+
+	now := tableRegions[0]
+	if origin.RegionEpoch.GetVersion()+2 != now.RegionEpoch.GetVersion() {
+		return fmt.Errorf("unexpected region epoch version after split and merge, before: %d, after: %d",
+			origin.RegionEpoch.GetVersion(), now.RegionEpoch.GetVersion())
+	}
+
+	return nil
 }
 
 func cleanTableData(db *util.DB, fn func([]*util.RegionInfo) error) error {

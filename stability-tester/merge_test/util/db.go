@@ -263,21 +263,24 @@ func (db *DB) deleteBatch() error {
 }
 
 func (db *DB) DeleteAll() error {
-	sql := fmt.Sprintf(`DELETE FROM merge_test%d;`, db.id-1)
-	_, err := db.Exec(sql)
-
-	db.flag = 1
-	return errors.Trace(err)
-	// for db.flag > 1 {
-	// 	db.flag--
-	// 	if err := db.deleteBatch(); err != nil {
-	// 		return errors.Trace(err)
-	// 	}
-	// }
-	// return nil
+	err := db.AddDeleteIndex()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for db.flag > 1 {
+		db.flag--
+		if err := db.deleteBatch(); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
 func (db *DB) DeletePartial() error {
+	err := db.AddDeleteIndex()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for db.flag > 1 {
 		db.flag -= 2
 		if err := db.deleteBatch(); err != nil {
@@ -313,6 +316,13 @@ func (db *DB) CreateTable() (int64, error) {
 
 func (db *DB) AddIndex() error {
 	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX idx (reserved1);`, db.id-1)
+	_, err := db.Exec(sql)
+
+	return errors.Trace(err)
+}
+
+func (db *DB) AddDeleteIndex() error {
+	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX deleteIdx (flag);`, db.id-1)
 	_, err := db.Exec(sql)
 
 	return errors.Trace(err)
