@@ -26,7 +26,7 @@ mod util;
 use std::fs;
 use std::thread;
 use std::sync::{mpsc, Arc};
-use std::collections::BTreeMap;
+use std::collections::{HashSet, BTreeMap};
 use std::time;
 
 use tempdir::TempDir;
@@ -108,6 +108,7 @@ fn do_ingest(db: &DB, keys: &Vec<u64>) {
     let w_path = write_path.to_str().unwrap();
     default_writer.open(d_path).unwrap();
     write_writer.open(w_path).unwrap();
+
     let mut map = BTreeMap::new();
     for &e in keys {
         map.insert(make_key(e), make_val(e));
@@ -122,6 +123,7 @@ fn do_ingest(db: &DB, keys: &Vec<u64>) {
             write = true;
         }
     }
+
     if default {
         default_writer.finish().unwrap();
         db.ingest_external_file_cf(
@@ -178,17 +180,15 @@ fn run(db: Arc<DB>, mut insert: Vec<u64>, mut delete: Vec<u64>, delete_range: Ve
                 if to_batch.len() == BATCH_SIZE {
                     do_write_batch(&db, &to_batch);
                     to_batch.clear();
-                } else {
-                    to_batch.push((key, true));
                 }
+                to_batch.push((key, true));
             }
             8 | 9 => {
                 if to_ingest.len() == INGEST_SIZE {
                     do_ingest(&db, &to_ingest);
                     to_ingest.clear();
-                } else {
-                    to_ingest.push(key);
                 }
+                to_ingest.push(key);
             }
             _ => assert!(false),
         }
@@ -209,9 +209,8 @@ fn run(db: Arc<DB>, mut insert: Vec<u64>, mut delete: Vec<u64>, delete_range: Ve
                 if to_batch.len() == BATCH_SIZE {
                     do_write_batch(&db, &to_batch);
                     to_batch.clear();
-                } else {
-                    to_batch.push((key, false));
                 }
+                to_batch.push((key, false));
             }
             _ => assert!(false),
         }
@@ -247,6 +246,7 @@ impl DBs {
 
   pub fn verify(&self) {
       for cf in ALL_CFS {
+          info!("start verify cf {:?}", cf);
           let mut iters = Vec::new();
           for db in &self.dbs {
               let handle = db.cf_handle(cf).unwrap();
@@ -254,6 +254,7 @@ impl DBs {
               iter.seek(SeekKey::Start);
               iters.push(iter);
           }
+
           let mut flag = iters.pop().unwrap();
           loop {
               let mut all_valid = true;
@@ -275,16 +276,18 @@ impl DBs {
               }
               flag.next();
           }
+
           for iter in &iters {
               assert_eq!(flag.valid(), iter.valid());
           }
+
           // do a compaction after every column family verification
           for db in &self.dbs {
               let handle = db.cf_handle(cf).unwrap();
               db.compact_range_cf(handle, None, None);
           }
+          info!("verify cf {:?} success", cf);
       }
-      info!("verify success");
   }
 }
 
@@ -294,11 +297,11 @@ fn run_test() {
     let dbs = DBs::new(count);
     let mut rng = rand::thread_rng();
     loop {
-        let mut keys = Vec::new();
-        keys.reserve(UNIT);
+        let mut keys = HashSet::with_capacity(UNIT);
         for _ in 0..UNIT {
-            keys.push(rng.gen::<u64>());
+            keys.insert(rng.gen::<u64>());
         }
+        let keys: Vec<u64> = keys.iter().map(|&x| x).collect();
         let mut delete_range = Vec::new();
         for _ in 0..range {
             loop {
@@ -310,6 +313,7 @@ fn run_test() {
                 }
             }
         }
+
         let (sx, rx) = mpsc::channel();
         for i in 0..count {
             let db = dbs.get_db(i);
@@ -325,6 +329,7 @@ fn run_test() {
         for _ in 0..count {
             rx.recv().unwrap();
         }
+
         let time = time::Instant::now();
         dbs.verify();
         // if verification time is more than 3 hours, we should delete more data
