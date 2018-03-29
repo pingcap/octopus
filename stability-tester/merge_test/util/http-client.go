@@ -120,7 +120,7 @@ func postJSON(prefix string, input map[string]interface{}) error {
 	}
 
 	url := getAddress(prefix)
-	r, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	r, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return err
 	}
