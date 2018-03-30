@@ -291,6 +291,6 @@ func MergeRegion(source, target *RegionInfo) error {
 func SplitRegion(regionID uint64) error {
 	input := make(map[string]interface{})
 	input["name"] = "split-region"
-	input["region_id"] = strconv.FormatUint(regionID, 10)
+	input["region_id"] = regionID
 	return postJSON(operatorsPrefix, input)
 }

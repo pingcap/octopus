@@ -358,7 +358,7 @@ func checkInsertAndDeletePartial(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.WaitUntilTimeout(regions, 30*time.Minute)
+		err = db.WaitUntilTimeout(regions, 60*time.Minute)
 		if err != nil {
 			return errors.Trace(err)
 		}

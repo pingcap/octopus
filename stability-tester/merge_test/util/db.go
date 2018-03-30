@@ -315,7 +315,7 @@ func (db *DB) CreateTable() (int64, error) {
 }
 
 func (db *DB) AddIndex() error {
-	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX idx (reserved1);`, db.id-1)
+	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX idx (reserved1(255));`, db.id-1)
 	_, err := db.Exec(sql)
 
 	return errors.Trace(err)
