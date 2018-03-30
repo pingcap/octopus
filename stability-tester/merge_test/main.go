@@ -111,7 +111,27 @@ func checkSplitTableRegion(db *util.DB) error {
 	}
 
 	// wait regions to merge
-	time.Sleep(60 * time.Second)
+	for {
+		time.Sleep(60 * time.Second)
+
+		now, err := util.GetRegionInfo(origin.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if now.RegionEpoch.GetVersion() == origin.RegionEpoch.GetVersion()+1 {
+			tableRegions, err := util.FindTableRegions(tableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if len(tableRegions) != 2 {
+				return fmt.Errorf("unexpected the number(%d) of regions after split", len(tableRegions))
+			}
+		}
+
+		if now.RegionEpoch.GetVersion() >= origin.RegionEpoch.GetVersion()+2 {
+			break
+		}
+	}
 
 	tableRegions, err = util.FindTableRegions(tableID)
 	if err != nil {
