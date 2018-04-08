@@ -60,6 +60,7 @@ func (k Key) IsIndex() bool {
 		return false
 	}
 	key = key[len(tablePrefix):]
+	key, _, _ = DecodeInt(key)
 	if bytes.HasPrefix(key, indexPrefixSep) {
 		return true
 	}

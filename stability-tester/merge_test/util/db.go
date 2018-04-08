@@ -61,7 +61,8 @@ var (
 		reserved27 text,
 		reserved28 text,
 		reserved29 text,
-		reserved30 text
+		reserved30 text,
+		INDEX idx (reserved1(255))
 	);`
 )
 
@@ -125,7 +126,7 @@ func (db *DB) InsertUntilSplitToRegions(tableID int64, n int) error {
 	return nil
 }
 
-func (db *DB) WaitUntilMerge(tableRegions []*RegionInfo) error {
+func (db *DB) WaitUntilMerge(tableRegions []*RegionInfo, checkIndex bool) error {
 	tableID := GetTableID(tableRegions[0])
 	for _, region := range tableRegions {
 		if GetTableID(region) != tableID {
@@ -164,7 +165,7 @@ func (db *DB) WaitUntilMerge(tableRegions []*RegionInfo) error {
 		}
 
 		var err error
-		tableRegions, err = CheckRegionsTableID(tableID, tableRegions)
+		tableRegions, err = CheckRegionsTableID(tableID, tableRegions, checkIndex)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -312,13 +313,6 @@ func (db *DB) CreateTable() (int64, error) {
 		return 0, errors.Trace(err)
 	}
 	return GetTableIDByName(fmt.Sprintf("merge_test%d", db.id-1))
-}
-
-func (db *DB) AddIndex() error {
-	sql := fmt.Sprintf(`ALTER TABLE merge_test%d ADD INDEX idx (reserved1(255));`, db.id-1)
-	_, err := db.Exec(sql)
-
-	return errors.Trace(err)
 }
 
 func (db *DB) AddDeleteIndex() error {

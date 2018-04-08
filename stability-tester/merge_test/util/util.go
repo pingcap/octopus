@@ -107,7 +107,7 @@ func IsRegionIDExist(regions []*RegionInfo, id uint64) bool {
 	return false
 }
 
-func CheckRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionInfo, error) {
+func CheckRegionsTableID(tableID int64, tableRegions []*RegionInfo, checkIndex bool) ([]*RegionInfo, error) {
 	regions, err := GetRegions()
 	if err != nil {
 		return tableRegions, errors.Trace(err)
@@ -122,7 +122,7 @@ func CheckRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionIn
 		if _, ok := set[region.ID]; ok {
 			continue
 		}
-		if GetTableID(region) == tableID {
+		if GetTableID(region) == tableID && (!checkIndex || IsIndex(region)) {
 			tableRegions = append(tableRegions, region)
 			log.Infof("insert new region %d for table %v", region.ID, tableID)
 		}
@@ -134,6 +134,12 @@ func CheckRegionsTableID(tableID int64, tableRegions []*RegionInfo) ([]*RegionIn
 func GetTableID(region *RegionInfo) int64 {
 	key := Key{}
 	fmt.Sscanf("\""+region.StartKey+"\"", "%q", &key)
+	return key.TableID()
+}
+
+func GetTableID1(region *RegionInfo) int64 {
+	key := Key{}
+	fmt.Sscanf("\""+region.EndKey+"\"", "%q", &key)
 	return key.TableID()
 }
 

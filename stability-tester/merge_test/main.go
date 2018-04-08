@@ -94,6 +94,11 @@ func checkSplitTableRegion(db *util.DB) error {
 		return errors.Trace(err)
 	}
 
+	// make sure the table region's end key created above not to be empty.
+	_, err = db.CreateTable()
+
+	time.Sleep(60 * time.Second)
+
 	tableRegions, err := util.FindTableRegions(tableID)
 	if err != nil {
 		return errors.Trace(err)
@@ -104,8 +109,15 @@ func checkSplitTableRegion(db *util.DB) error {
 	}
 
 	origin := tableRegions[0]
+	log.Infof("origin region %d, start key %v -> %d, end key %v -> %d", origin.ID, origin.StartKey, util.GetTableID(origin), origin.EndKey, util.GetTableID1(origin))
 
-	err = util.SplitRegion(tableRegions[0].ID)
+	// insert a few items
+	ctx, cancel := context.WithCancel(context.Background())
+	db.InsertIntoNewTable(ctx, 1)
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err = util.SplitRegion(origin.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -124,6 +136,8 @@ func checkSplitTableRegion(db *util.DB) error {
 				return errors.Trace(err)
 			}
 			if len(tableRegions) != 2 {
+				log.Infof("new region %d, start key %v-> %d, end key %v-> %d", tableRegions[0].ID, tableRegions[0].StartKey, util.GetTableID(tableRegions[0]), tableRegions[0].EndKey, util.GetTableID1(tableRegions[0]))
+				log.Infof("now region %d, start key %v-> %d, end key %v-> %d", now.ID, now.StartKey, util.GetTableID(now), now.EndKey, util.GetTableID1(now))
 				return fmt.Errorf("unexpected the number(%d) of regions after split", len(tableRegions))
 			}
 		}
@@ -203,7 +217,7 @@ func checkDropTable(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.WaitUntilMerge(regions)
+		err = db.WaitUntilMerge(regions, false)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -240,7 +254,7 @@ func checkTruncateTable(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.WaitUntilMerge(regions)
+		err = db.WaitUntilMerge(regions, false)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -260,15 +274,6 @@ func checkDropIndex(db *util.DB) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	time.Sleep(time.Second * 60)
-
-	log.Infof("add index...")
-	err = db.AddIndex()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Infof("add index finish...")
 
 	time.Sleep(time.Second * 60)
 
@@ -306,7 +311,7 @@ func checkDropIndex(db *util.DB) error {
 	log.Info("------------------------------------------------")
 
 	// wait to merge
-	err = db.WaitUntilMerge(indexRegions)
+	err = db.WaitUntilMerge(indexRegions, true)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -341,7 +346,7 @@ func checkInsertAndDeleteAll(db *util.DB) error {
 		log.Info("------------------------------------------------")
 
 		// wait to merge
-		err = db.WaitUntilMerge(regions)
+		err = db.WaitUntilMerge(regions, false)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -440,7 +445,7 @@ func checkShuffle(db *util.DB) error {
 	}
 
 	// wait to merge
-	err = db.WaitUntilMerge(tableRegions)
+	err = db.WaitUntilMerge(tableRegions, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -507,7 +512,7 @@ func checkSpeed(db *util.DB) error {
 				}
 
 				var err error
-				tableRegions, err = util.CheckRegionsTableID(tableID, tableRegions)
+				tableRegions, err = util.CheckRegionsTableID(tableID, tableRegions, false)
 				if err != nil {
 					log.Fatal(err)
 				}
