@@ -27,7 +27,7 @@ type Database interface {
 // setupDatabase performs initial setup for the example, creating a database
 // with a single table. If the desired table already exists on the cluster, the
 // existing table will be dropped if the -drop flag was specified.
-func SetupDatabase(dbURL string) (Database, error) {
+func SetupDatabase(dbURL string, deleteAsInsert bool) (Database, error) {
 	seps := strings.SplitN(dbURL, "://", 2)
 	if len(seps) != 2 {
 		return nil, fmt.Errorf("invalid url %s, must be scheme://path", dbURL)
@@ -39,7 +39,7 @@ func SetupDatabase(dbURL string) (Database, error) {
 		return setupTiDB(seps[1])
 	case "tikv", "txn":
 		// url is tikv://pd_addr
-		return setupTxnKV(seps[1])
+		return setupTxnKV(seps[1], deleteAsInsert)
 	case "raw":
 		// url is raw://pd_addr
 		return setupRawKV(seps[1])

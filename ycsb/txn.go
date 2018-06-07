@@ -27,7 +27,8 @@ import (
 var colIDs = []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 type txnKV struct {
-	db kv.Storage
+	db             kv.Storage
+	deleteAsInsert bool
 }
 
 func (c *txnKV) ReadRow(key uint64) (bool, error) {
@@ -54,35 +55,47 @@ func (c *txnKV) ReadRow(key uint64) (bool, error) {
 func (c *txnKV) InsertRow(key uint64, fields []string) error {
 	// Simulate TiDB data
 	rowKey := tablecodec.EncodeRowKeyWithHandle(1, int64(key))
-	cols := make([]types.Datum, len(fields))
-	for i, v := range fields {
-		cols[i].SetString(v)
+	if c.deleteAsInsert {
+		tx, err := c.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := tx.Delete(rowKey); err != nil {
+			return err
+		}
+		return tx.Commit(goctx.Background())
+	} else {
+		cols := make([]types.Datum, len(fields))
+		for i, v := range fields {
+			cols[i].SetString(v)
+		}
+
+		rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
+		if err != nil {
+			return err
+		}
+
+		tx, err := c.db.Begin()
+		if err != nil {
+			return err
+		}
+
+		defer tx.Rollback()
+
+		if err = tx.Set(rowKey, rowData); err != nil {
+			return err
+		}
+
+		return tx.Commit(goctx.Background())
 	}
-
-	rowData, err := tablecodec.EncodeRow(&stmtctx.StatementContext{}, cols, colIDs, nil, nil)
-	if err != nil {
-		return err
-	}
-
-	tx, err := c.db.Begin()
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
-	if err = tx.Set(rowKey, rowData); err != nil {
-		return err
-	}
-
-	return tx.Commit(goctx.Background())
 }
 
 func (c *txnKV) Clone() Database {
 	return c
 }
 
-func setupTxnKV(pdAddr string) (Database, error) {
+func setupTxnKV(pdAddr string, deleteAsInsert bool) (Database, error) {
 	// Open connection to server and create a database.
 	tikv.MaxConnectionCount = 128
 	driver := tikv.Driver{}
@@ -91,5 +104,5 @@ func setupTxnKV(pdAddr string) (Database, error) {
 		return nil, err
 	}
 
-	return &txnKV{db: db}, nil
+	return &txnKV{db: db, deleteAsInsert: deleteAsInsert}, nil
 }

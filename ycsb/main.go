@@ -83,6 +83,7 @@ var rateLimit = flag.Uint64("rate-limit", 0,
 	"Maximum number of operations per second per worker. Set to zero for no rate limit")
 var initialLoad = flag.Uint64("initial-load", 10000,
 	"Initial number of rows to sequentially insert before beginning Zipfian workload generation")
+var deleteAsInsert = flag.Bool("delete-as-insert", false, "Invoke delete instead of insert. (default false)")
 
 // 7 days at 5% writes and 30k ops/s
 var maxWrites = flag.Uint64("max-writes", 7*24*3600*1500,
@@ -361,7 +362,7 @@ func main() {
 			concurrency)
 	}
 
-	db, err := SetupDatabase(dbURL)
+	db, err := SetupDatabase(dbURL, *deleteAsInsert)
 
 	if err != nil {
 		log.Fatalf("Setting up database failed: %s", err)
